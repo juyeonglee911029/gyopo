@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { createDocument, getSessionToken, listDocuments } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type Job = { id: string; title: string; company: string; location: string; salary: string; tag: string; country: string; createdAt: string };
+type Job = { id: string; title: string; company: string; location: string; salary: string; tag: string; country: string; authorId: string; createdAt: string };
 
 export default function JobsPage() {
   const { selectedCountry, user } = useGlobalStore();
@@ -17,7 +17,7 @@ export default function JobsPage() {
   const loadJobs = async () => {
     try {
       const data = await listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken());
-      setJobs(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setJobs(data.filter((job) => job.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch {
       setJobs([]);
     }
