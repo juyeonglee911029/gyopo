@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getSessionToken, saveProfile, type PortalUser } from '@/lib/firebase';
 
 export type Transaction = {
   id: string;
@@ -13,14 +14,7 @@ interface GlobalState {
   selectedCountry: string;
   setSelectedCountry: (country: string) => void;
   
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    image: string;
-    usdtBalance: number;
-    isSubscribed: boolean;
-  } | null;
+  user: PortalUser | null;
   setUser: (user: GlobalState['user']) => void;
   updateUsdt: (amount: number, txDetails?: Omit<Transaction, 'id' | 'date'>) => void;
   subscribe: () => void;
@@ -35,7 +29,15 @@ export const useGlobalStore = create<GlobalState>((set) => ({
   
   user: null,
   setUser: (user) => set({ user }),
-  subscribe: () => set((state) => ({ user: state.user ? { ...state.user, isSubscribed: true } : null })),
+  subscribe: () => {
+    let nextUser: PortalUser | null = null;
+    set((state) => {
+      if (!state.user) return state;
+      nextUser = { ...state.user, isSubscribed: true };
+      return { user: nextUser };
+    });
+    if (nextUser) void saveProfile(nextUser, getSessionToken());
+  },
   
   transactions: [],
   
@@ -50,22 +52,26 @@ export const useGlobalStore = create<GlobalState>((set) => ({
     ]
   })),
 
-  updateUsdt: (amount, txDetails) => set((state) => {
-    if (!state.user) return state;
-    
-    // Add transaction history if details provided
-    const newTransactions = txDetails ? [
-      {
-        ...txDetails,
-        id: Math.random().toString(36).substr(2, 9),
-        date: new Date().toLocaleString(),
-      },
-      ...state.transactions
-    ] : state.transactions;
+  updateUsdt: (amount, txDetails) => {
+    let nextUser: PortalUser | null = null;
+    set((state) => {
+      if (!state.user) return state;
 
-    return {
-      user: { ...state.user, usdtBalance: state.user.usdtBalance + amount },
-      transactions: newTransactions
-    };
-  }),
+      const newTransactions = txDetails ? [
+        {
+          ...txDetails,
+          id: Math.random().toString(36).substr(2, 9),
+          date: new Date().toLocaleString(),
+        },
+        ...state.transactions
+      ] : state.transactions;
+
+      nextUser = { ...state.user, usdtBalance: state.user.usdtBalance + amount };
+      return {
+        user: nextUser,
+        transactions: newTransactions,
+      };
+    });
+    if (nextUser) void saveProfile(nextUser, getSessionToken());
+  },
 }));
