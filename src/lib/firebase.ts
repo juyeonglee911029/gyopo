@@ -17,6 +17,21 @@ export type PortalUser = {
   image: string;
   usdtBalance: number;
   isSubscribed: boolean;
+  gender?: string;
+  age?: number;
+  country?: string;
+};
+
+export type OnlineUser = {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  image: string;
+  gender?: string;
+  age?: number;
+  country?: string;
+  lastSeenAt: string;
 };
 
 type StoredSession = {
@@ -211,13 +226,17 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     idToken: string;
     refreshToken?: string;
   };
+  const savedProfile = await getDocument<Partial<PortalUser>>('profiles', result.localId, result.idToken).catch(() => null);
   const user: PortalUser = {
     id: result.localId,
-    name: result.displayName || result.email?.split('@')[0] || '교민 회원',
-    email: result.email || '',
-    image: result.photoUrl || 'https://www.gravatar.com/avatar/?d=mp',
-    usdtBalance: 0,
-    isSubscribed: false,
+    name: savedProfile?.name || result.displayName || result.email?.split('@')[0] || '교민 회원',
+    email: savedProfile?.email || result.email || '',
+    image: savedProfile?.image || result.photoUrl || 'https://www.gravatar.com/avatar/?d=mp',
+    usdtBalance: Number(savedProfile?.usdtBalance || 0),
+    isSubscribed: Boolean(savedProfile?.isSubscribed),
+    gender: savedProfile?.gender,
+    age: savedProfile?.age,
+    country: savedProfile?.country,
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
   await upsertDocument('profiles', user.id, {
@@ -229,6 +248,26 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     updatedAt: new Date(),
   }, result.idToken);
   return user;
+}
+
+export async function saveProfile(user: PortalUser, token = getSessionToken()): Promise<void> {
+  await upsertDocument('profiles', user.id, {
+    name: user.name,
+    email: user.email,
+    image: user.image,
+    usdtBalance: Number(user.usdtBalance || 0),
+    isSubscribed: Boolean(user.isSubscribed),
+    ...(user.gender ? { gender: user.gender } : {}),
+    ...(user.age ? { age: user.age } : {}),
+    ...(user.country ? { country: user.country } : {}),
+    updatedAt: new Date(),
+  }, token);
+  if (typeof window !== 'undefined') {
+    const session = getStoredSession();
+    if (session?.user.id === user.id) {
+      window.localStorage.setItem(sessionKey, JSON.stringify({ ...session, user }));
+    }
+  }
 }
 
 export function loadGoogleIdentityScript(): Promise<void> {
@@ -259,7 +298,7 @@ export type SiteStats = {
   updatedAt?: string;
 };
 
-export async function recordVisit(): Promise<void> {
+export async function recordVisit(user?: PortalUser | null, country = 'Global'): Promise<void> {
   if (typeof window === 'undefined') return;
   const visitorKey = window.localStorage.getItem('gyopo-visitor-id') || crypto.randomUUID();
   window.localStorage.setItem('gyopo-visitor-id', visitorKey);
@@ -268,7 +307,21 @@ export async function recordVisit(): Promise<void> {
   const month = day.slice(0, 7);
   const visitMarker = `gyopo-visited-${day}`;
   try {
-    await upsertDocument('presence', visitorKey, { lastSeenAt: now, updatedAt: now });
+    await upsertDocument('presence', visitorKey, {
+      lastSeenAt: now,
+      updatedAt: now,
+      ...(user
+        ? {
+            userId: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+            gender: user.gender || '',
+            age: user.age || 0,
+            country: user.country || country,
+          }
+        : {}),
+    });
     if (window.localStorage.getItem(visitMarker)) return;
     await createDocument('visits', `${visitorKey}-${day}`, { visitorKey, day, month, createdAt: now });
     const current = await getDocument<SiteStats>('stats', 'summary');
@@ -290,9 +343,54 @@ export async function getSiteStats(): Promise<SiteStats> {
 }
 
 export async function getOnlineCount(): Promise<number> {
-  const presence = await listDocuments<{ lastSeenAt?: string }>('presence');
+  const presence = await listDocuments<{ lastSeenAt?: string; userId?: string }>('presence');
   const threshold = Date.now() - 90_000;
-  return presence.filter((item) => item.lastSeenAt && new Date(item.lastSeenAt).getTime() > threshold).length;
+  return presence.filter((item) => item.userId && item.lastSeenAt && new Date(item.lastSeenAt).getTime() > threshold).length;
+}
+
+export async function listOnlineUsers(): Promise<OnlineUser[]> {
+  const presence = await listDocuments<Omit<OnlineUser, 'id'>>('presence');
+  const threshold = Date.now() - 90_000;
+  return presence
+    .filter((item) => item.userId && item.lastSeenAt && new Date(item.lastSeenAt).getTime() > threshold)
+    .map((item) => ({ ...item, id: item.userId as string, userId: item.userId as string }))
+    .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
+}
+
+export async function deleteDocument(collection: string, id: string, token?: string): Promise<void> {
+  const response = await fetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok && response.status !== 404) throw new Error(await response.text());
+}
+
+export async function deleteExpiredChatMessages(token?: string): Promise<number> {
+  if (!token) return 0;
+  const rows = await firestoreRequest<Array<{ document?: { name?: string; fields?: Record<string, FirestoreValue> } }>>(
+    `${firestoreBase}:runQuery`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'chatMessages' }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: 'expiresAt' },
+              op: 'LESS_THAN_OR_EQUAL',
+              value: toFirestoreValue(new Date()),
+            },
+          },
+        },
+      }),
+    },
+    token,
+  );
+  const expired = rows
+    .filter((row) => row.document)
+    .map((row) => decodeDocument<Record<string, unknown>>(row.document as { name: string; fields?: Record<string, FirestoreValue> }));
+  await Promise.all(expired.map((message) => deleteDocument('chatMessages', message.id, token)));
+  return expired.length;
 }
 
 declare global {
