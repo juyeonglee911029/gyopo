@@ -5,7 +5,7 @@ import BannerAd from '@/components/ads/BannerAd';
 import { createDocument, getSessionToken, listDocuments } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type Directory = { id: string; name: string; category: string; desc: string; tel: string; country: string; image?: string; createdAt: string };
+type Directory = { id: string; name: string; category: string; desc: string; tel: string; country: string; image?: string; authorId: string; createdAt: string };
 
 export default function DirectoryPage() {
   const { selectedCountry, user } = useGlobalStore();
@@ -17,7 +17,7 @@ export default function DirectoryPage() {
   const loadDirectories = async () => {
     try {
       const data = await listDocuments<Omit<Directory, 'id'>>('directories', getSessionToken());
-      setDirectories(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setDirectories(data.filter((directory) => directory.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch { setDirectories([]); }
   };
 
