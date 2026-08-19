@@ -120,7 +120,8 @@ export default function CommunityPage() {
                 </div>
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center"><span className="bg-gray-100 px-2 py-1 rounded text-gray-600">{post.country}</span></div>
                 <div className="col-span-1 md:col-span-5">
-                  <h3 className="text-base md:text-lg truncate font-bold text-gray-800">{post.title}</h3>
+                   <h3 className="text-base md:text-lg truncate font-bold text-gray-800">{post.title}</h3>
+                   {post.sourceName && <div className="text-xs text-blue-500">출처: {post.sourceName}</div>}
                   {!!post.comments && <span className="text-blue-500 text-sm font-bold">[{post.comments}]</span>}
                 </div>
                    <div className="col-span-2 text-sm text-gray-500 flex items-center md:justify-center"><span className="md:hidden mr-1">작성자: </span>{post.author}</div>
