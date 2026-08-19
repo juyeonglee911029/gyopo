@@ -6,17 +6,18 @@ import { useGlobalStore } from '@/store/useGlobalStore';
 import { PlayCircle, Users, Briefcase, ShoppingCart, Store, Megaphone } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { listDocuments } from '@/lib/firebase';
+import { seedPosts } from '@/lib/seedData';
 
-type HomePost = { id: string; title: string; type: string; authorId: string; views?: number; createdAt: string; country: string };
+type HomePost = { id: string; title: string; type: string; authorId: string; views?: number; createdAt: string; country: string; sourceUrl?: string };
 
 export default function Home() {
   const { selectedCountry } = useGlobalStore();
   const [posts, setPosts] = useState<HomePost[]>([]);
 
   useEffect(() => {
-    void listDocuments<Omit<HomePost, 'id'>>('posts')
-       .then((data) => setPosts(data.filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)))
-      .catch(() => setPosts([]));
+     void listDocuments<Omit<HomePost, 'id'>>('posts')
+       .then((data) => setPosts([...data, ...seedPosts].filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)))
+       .catch(() => setPosts(seedPosts));
   }, []);
   
   return (
@@ -88,7 +89,7 @@ export default function Home() {
              <div className="space-y-5">
                {posts.length === 0 && <p className="text-sm text-gray-400 py-4">아직 등록된 게시글이 없습니다.</p>}
                {posts.filter((post) => selectedCountry === 'Global' || post.country === selectedCountry || post.country === 'Global').map((post) => (
-                 <Link href={`/community/${post.id}`} key={post.id} className="group block">
+                  <Link href={post.sourceUrl || `/community/${post.id}`} key={post.id} className="group block">
                    <div className="flex items-center gap-3">
                      <span className="text-xs font-bold px-2 py-1 rounded shrink-0 text-blue-600 bg-blue-50">{post.type === 'notice' ? '공지' : post.type === 'news' ? '뉴스' : '자유'}</span>
                      <h3 className="text-gray-800 font-medium truncate group-hover:text-blue-600 transition-colors">
