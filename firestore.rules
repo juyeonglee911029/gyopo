@@ -34,10 +34,16 @@ service cloud.firestore {
     match /chatMessages/{messageId} {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.expiresAt != null && request.time >= resource.data.expiresAt;
+    }
+    match /depositRequests/{requestId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
     match /profiles/{userId} {
-      allow read: if true;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow create, update, delete: if request.auth != null && request.auth.uid == userId;
     }
     match /stats/{statId} {
@@ -51,6 +57,15 @@ service cloud.firestore {
     match /presence/{visitorId} {
       allow read, create, update: if true;
       allow delete: if false;
+    }
+    match /webrtcQueue/{userId} {
+      allow read, create, update, delete: if request.auth != null;
+    }
+    match /webrtcCalls/{callId} {
+      allow read, create, update, delete: if request.auth != null;
+    }
+    match /webrtcCandidates/{candidateId} {
+      allow read, create, update, delete: if request.auth != null;
     }
   }
 }
