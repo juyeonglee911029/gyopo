@@ -34,7 +34,7 @@ export default function CommunityPage() {
   const loadPosts = async () => {
     try {
       const data = await listDocuments<Omit<Post, 'id'>>('posts', getSessionToken());
-      setPosts(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setPosts(data.filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch {
       setPosts([]);
     } finally {
