@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { Send, Users } from 'lucide-react';
-import { getOnlineCount, getSessionToken, listDocuments, createDocument } from '@/lib/firebase';
+import { deleteExpiredChatMessages, getOnlineCount, getSessionToken, listDocuments, upsertDocument } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { usePathname } from 'next/navigation';
 
 type ChatMessage = {
   id: string;
   authorId: string;
   user: string;
-  country: string;
+  country?: string;
   text: string;
   createdAt: string;
+  expiresAt?: string | Date;
 };
 
 function formatTime(value: string) {
@@ -20,22 +22,31 @@ function formatTime(value: string) {
 
 export default function GlobalChat() {
   const { user, selectedCountry } = useGlobalStore();
+  const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [onlineCount, setOnlineCount] = useState(0);
 
   useEffect(() => {
     let active = true;
+    let lastCleanupAt = 0;
     const load = async () => {
       try {
+        const token = getSessionToken();
+        if (token && Date.now() - lastCleanupAt > 30_000) {
+          lastCleanupAt = Date.now();
+          await deleteExpiredChatMessages(token);
+        }
         const [nextMessages, nextOnlineCount] = await Promise.all([
-          listDocuments<Omit<ChatMessage, 'id'>>('chatMessages', getSessionToken()),
+          listDocuments<Omit<ChatMessage, 'id'>>('chatMessages', token),
           getOnlineCount(),
         ]);
         if (!active) return;
         setMessages(
           nextMessages
-            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+             .filter((message) => message.authorId)
+             .filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now())
+             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
             .slice(-100),
         );
         setOnlineCount(nextOnlineCount);
@@ -44,12 +55,12 @@ export default function GlobalChat() {
       }
     };
     void load();
-    const interval = window.setInterval(load, 4000);
+    const interval = window.setInterval(load, 1500);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [user]);
+  }, [user?.id]);
 
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -62,15 +73,19 @@ export default function GlobalChat() {
       country: selectedCountry === 'Global' ? 'Global' : selectedCountry,
       text: input.trim(),
       createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3 * 60 * 1000),
     };
     try {
-      await createDocument('chatMessages', crypto.randomUUID(), message, token);
-      setMessages((current) => [...current, { ...message, id: crypto.randomUUID() }].slice(-100));
+      const id = crypto.randomUUID();
+      await upsertDocument('chatMessages', id, message, token);
+      setMessages((current) => [...current, { ...message, id }].slice(-100));
       setInput('');
     } catch {
       window.alert('메시지를 보내지 못했습니다. 다시 시도해주세요.');
     }
   };
+
+  if (pathname === '/games') return null;
 
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-80 bg-white border-r border-gray-200 flex-col z-40 hidden lg:flex shadow-lg pt-16">
@@ -88,7 +103,7 @@ export default function GlobalChat() {
           <div key={message.id} className="text-sm">
             <div className="flex items-baseline gap-1.5 mb-1">
               <span className="font-bold text-gray-700">{message.user}</span>
-              <span className="text-[10px] font-bold px-1.5 rounded bg-blue-100 text-blue-700">{message.country}</span>
+               <span className="text-[10px] font-bold px-1.5 rounded bg-blue-100 text-blue-700">{message.country || 'Global'}</span>
               <span className="text-xs text-gray-400">{formatTime(message.createdAt)}</span>
             </div>
             <div className="bg-white p-2.5 rounded-xl rounded-tl-none shadow-sm border border-gray-100 text-gray-800 break-words">
