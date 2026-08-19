@@ -7,7 +7,7 @@ import { PlayCircle, Users, Briefcase, ShoppingCart, Store, Megaphone } from 'lu
 import { useEffect, useState } from 'react';
 import { listDocuments } from '@/lib/firebase';
 
-type HomePost = { id: string; title: string; type: string; views?: number; createdAt: string; country: string };
+type HomePost = { id: string; title: string; type: string; authorId: string; views?: number; createdAt: string; country: string };
 
 export default function Home() {
   const { selectedCountry } = useGlobalStore();
@@ -15,7 +15,7 @@ export default function Home() {
 
   useEffect(() => {
     void listDocuments<Omit<HomePost, 'id'>>('posts')
-      .then((data) => setPosts(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)))
+       .then((data) => setPosts(data.filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)))
       .catch(() => setPosts([]));
   }, []);
   
