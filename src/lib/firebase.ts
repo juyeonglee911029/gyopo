@@ -40,6 +40,11 @@ type StoredSession = {
   user: PortalUser;
 };
 
+type RefreshResponse = {
+  id_token: string;
+  refresh_token?: string;
+};
+
 type FirestoreValue = {
   nullValue?: null;
   booleanValue?: boolean;
@@ -53,6 +58,7 @@ type FirestoreValue = {
 
 const sessionKey = 'gyopo-auth-session';
 const firestoreBase = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+let refreshPromise: Promise<string | undefined> | null = null;
 
 function toFirestoreValue(value: unknown): FirestoreValue {
   if (value === null || value === undefined) return { nullValue: null };
@@ -110,15 +116,59 @@ function decodeDocument<T>(document: { name?: string; fields?: Record<string, Fi
   return { id, ...(data as T) };
 }
 
+async function refreshSessionToken(): Promise<string | undefined> {
+  if (refreshPromise) return refreshPromise;
+  const session = getStoredSession();
+  if (!session?.refreshToken) return undefined;
+  refreshPromise = fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(session.refreshToken)}`,
+  })
+    .then(async (response) => {
+      if (!response.ok) return undefined;
+      const data = (await response.json()) as RefreshResponse;
+      if (!data.id_token) return undefined;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(sessionKey, JSON.stringify({
+          ...session,
+          idToken: data.id_token,
+          refreshToken: data.refresh_token || session.refreshToken,
+        }));
+      }
+      return data.id_token;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      refreshPromise = null;
+    });
+  return refreshPromise;
+}
+
+async function authenticatedFetch(url: string, options: RequestInit = {}, token?: string): Promise<Response> {
+  const send = (requestToken?: string) => fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(requestToken ? { Authorization: `Bearer ${requestToken}` } : {}),
+    },
+  });
+  let response = await send(token);
+  if (response.status === 401 && token) {
+    const refreshed = await refreshSessionToken();
+    if (refreshed) response = await send(refreshed);
+  }
+  return response;
+}
+
 async function firestoreRequest<T>(url: string, options: RequestInit = {}, token?: string): Promise<T> {
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
-  });
+  }, token);
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || `Firestore request failed (${response.status})`);
@@ -127,9 +177,7 @@ async function firestoreRequest<T>(url: string, options: RequestInit = {}, token
 }
 
 export async function listDocuments<T>(collection: string, token?: string): Promise<Array<T & { id: string }>> {
-  const response = await fetch(`${firestoreBase}/${collection}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}`, {}, token);
   if (response.status === 404) return [];
   if (!response.ok) throw new Error(await response.text());
   const data = (await response.json()) as { documents?: Array<{ name?: string; fields?: Record<string, FirestoreValue> }> };
@@ -137,9 +185,7 @@ export async function listDocuments<T>(collection: string, token?: string): Prom
 }
 
 export async function getDocument<T>(collection: string, id: string, token?: string): Promise<(T & { id: string }) | null> {
-  const response = await fetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {}, token);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(await response.text());
   return decodeDocument<T>(await response.json());
@@ -172,14 +218,11 @@ export async function upsertDocument<T extends Record<string, unknown>>(
   const body = JSON.stringify({
     fields: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, toFirestoreValue(value)])),
   });
-  const response = await fetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body,
-  });
+  }, token);
   if (response.ok) return;
   if (response.status !== 404) throw new Error(await response.text());
   await createDocument(collection, id, data, token);
@@ -358,10 +401,9 @@ export async function listOnlineUsers(): Promise<OnlineUser[]> {
 }
 
 export async function deleteDocument(collection: string, id: string, token?: string): Promise<void> {
-  const response = await fetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  }, token);
   if (!response.ok && response.status !== 404) throw new Error(await response.text());
 }
 
