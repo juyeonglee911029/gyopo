@@ -1,42 +1,75 @@
 'use client';
+
 import { useEffect, useRef, useState } from 'react';
+import { Camera, CheckCircle2, LoaderCircle, PhoneCall, RefreshCcw, ShieldCheck, Users, VideoOff } from 'lucide-react';
+import {
+  deleteDocument,
+  getDocument,
+  getSessionToken,
+  listDocuments,
+  OnlineUser,
+  upsertDocument,
+} from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Camera, Wand2, RefreshCcw, VideoOff, PhoneCall, Users as UsersIcon } from 'lucide-react';
+
+type QueueEntry = OnlineUser & {
+  status?: 'waiting' | 'matched';
+  callId?: string;
+};
+
+type CallDocument = {
+  callId: string;
+  callerId: string;
+  calleeId: string;
+  status: 'offer' | 'answer' | 'connected' | 'ended';
+  offer?: RTCSessionDescriptionInit;
+  answer?: RTCSessionDescriptionInit;
+};
+
+type CandidateDocument = {
+  callId: string;
+  fromUserId: string;
+  candidate: RTCIceCandidateInit;
+};
+
+type ActiveCall = {
+  callId: string;
+  peer: QueueEntry;
+  initiator: boolean;
+};
+
+const stunServers = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 export default function WebRTCPage() {
-  const { user, updateUsdt } = useGlobalStore();
+  const user = useGlobalStore((state) => state.user);
   const [isMatching, setIsMatching] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [permissionError, setPermissionError] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  
-  // Mock Beauty Filter states
-  const [smoothing, setSmoothing] = useState(50);
-  const [lift, setLift] = useState(50); // 팔자주름 보정
+  const [status, setStatus] = useState('대기 중');
+  const [peer, setPeer] = useState<QueueEntry | null>(null);
   const [flip, setFlip] = useState(true);
-
-  useEffect(() => () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-  }, []);
+  const [active, setActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const connectionRef = useRef<RTCPeerConnection | null>(null);
+  const callRef = useRef<ActiveCall | null>(null);
+  const pollingRef = useRef(false);
+  const userRef = useRef(user);
+  const appliedCandidates = useRef(new Set<string>());
+  const offerApplied = useRef(false);
+  const answerApplied = useRef(false);
 
   useEffect(() => {
-    if (isConnected && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      void videoRef.current.play();
-    }
-  }, [isConnected]);
+    userRef.current = user;
+  }, [user]);
 
   const requestMedia = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('이 브라우저는 카메라와 마이크를 지원하지 않습니다.');
-    }
-    if (!streamRef.current) {
-      streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    }
-    if (videoRef.current) {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라와 마이크를 지원하지 않습니다.');
+    if (!streamRef.current) streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
-      await videoRef.current.play();
+      await videoRef.current.play().catch(() => undefined);
     }
   };
 
@@ -45,7 +78,11 @@ export default function WebRTCPage() {
       window.alert('로그인이 필요합니다.');
       return;
     }
-
+    const token = getSessionToken();
+    if (!token) {
+      window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+      return;
+    }
     setPermissionError('');
     try {
       await requestMedia();
@@ -53,148 +90,194 @@ export default function WebRTCPage() {
       setPermissionError('카메라와 마이크 권한이 필요합니다. 브라우저 주소창의 권한 설정을 확인해주세요.');
       return;
     }
-    
-    // Check if user needs to pay
-    const cost = user.isSubscribed ? 0 : 1;
-
-    if (cost > 0 && user.usdtBalance < cost) {
-      window.alert('USDT 잔고가 부족합니다. 충전하시거나 프리미엄을 구독하세요.');
-      return;
-    }
-    
-    // 차감
-    if (cost > 0) {
-      updateUsdt(-cost);
-    }
-    
+    appliedCandidates.current.clear();
+    offerApplied.current = false;
+    answerApplied.current = false;
+    callRef.current = null;
+    setPeer(null);
+    setIsConnected(false);
+    setStatus('다른 인증 회원을 찾는 중');
     setIsMatching(true);
-
-    setTimeout(() => {
-      setIsMatching(false);
-      setIsConnected(true);
-    }, 2000);
+    setActive(true);
+    await upsertDocument('webrtcQueue', user.id, {
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      gender: user.gender || '',
+      age: user.age || 0,
+      country: user.country || 'Global',
+      status: 'waiting',
+      lastSeenAt: new Date(),
+    }, token).catch(() => setPermissionError('매칭 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'));
   };
 
-  const endMatch = () => {
-    setIsConnected(false);
+  const endMatch = async () => {
+    const token = getSessionToken();
+    const currentCall = callRef.current;
+    setActive(false);
     setIsMatching(false);
+    setIsConnected(false);
+    setPeer(null);
+    setStatus('대기 중');
+    connectionRef.current?.close();
+    connectionRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    callRef.current = null;
+    if (token && user) {
+      await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+      if (currentCall) await upsertDocument('webrtcCalls', currentCall.callId, { status: 'ended' }, token).catch(() => undefined);
+    }
   };
 
+  useEffect(() => () => {
+    connectionRef.current?.close();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    const token = getSessionToken();
+    if (token && userRef.current) void deleteDocument('webrtcQueue', userRef.current.id, token);
+  }, []);
+
+  useEffect(() => {
+    if (!active || !user) return;
+    let cancelled = false;
+    const token = getSessionToken();
+    if (!token) return;
+
+    const ensureConnection = (call: ActiveCall) => {
+      if (connectionRef.current) return connectionRef.current;
+      const connection = new RTCPeerConnection({ iceServers: stunServers });
+      connectionRef.current = connection;
+      streamRef.current?.getTracks().forEach((track) => connection.addTrack(track, streamRef.current as MediaStream));
+      connection.onicecandidate = ({ candidate }) => {
+        if (!candidate) return;
+        void upsertDocument('webrtcCandidates', `${call.callId}-${user.id}-${crypto.randomUUID()}`, {
+          callId: call.callId,
+          fromUserId: user.id,
+          candidate: candidate.toJSON(),
+        }, token);
+      };
+      connection.ontrack = (event) => {
+        const [remoteStream] = event.streams;
+        if (remoteVideoRef.current && remoteStream) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          void remoteVideoRef.current.play().catch(() => undefined);
+        }
+        setIsConnected(true);
+        setIsMatching(false);
+        setStatus('연결 성공');
+        void upsertDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
+      };
+      connection.onconnectionstatechange = () => {
+        if (connection.connectionState === 'connecting') setStatus('보안 연결을 설정하는 중');
+        if (connection.connectionState === 'connected') {
+          setIsConnected(true);
+          setIsMatching(false);
+          setStatus('연결 성공');
+        }
+        if (['failed', 'disconnected'].includes(connection.connectionState)) setStatus('연결이 불안정합니다');
+      };
+      return connection;
+    };
+
+    const poll = async () => {
+      if (cancelled || pollingRef.current) return;
+      pollingRef.current = true;
+      try {
+        const current = callRef.current;
+        if (!current) {
+          const queue = await listDocuments<QueueEntry>('webrtcQueue', token).catch(() => []);
+          const threshold = Date.now() - 45_000;
+          const available = queue
+            .filter((entry) => entry.userId !== user.id && entry.status === 'waiting' && new Date(entry.lastSeenAt).getTime() > threshold)
+            .sort((a, b) => new Date(a.lastSeenAt).getTime() - new Date(b.lastSeenAt).getTime());
+          const candidate = available[0];
+          if (!candidate) {
+            await upsertDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
+            return;
+          }
+          const callId = [user.id, candidate.userId].sort().join('--');
+          const nextCall: ActiveCall = { callId, peer: candidate, initiator: user.id < candidate.userId };
+          callRef.current = nextCall;
+          setPeer(candidate);
+          setIsMatching(false);
+          setStatus('상대를 확인하는 중');
+          await Promise.all([
+            upsertDocument('webrtcQueue', user.id, { status: 'matched', callId, lastSeenAt: new Date() }, token),
+            upsertDocument('webrtcQueue', candidate.userId, { status: 'matched', callId, lastSeenAt: new Date() }, token),
+          ]).catch(() => undefined);
+          const connection = ensureConnection(nextCall);
+          if (nextCall.initiator) {
+            const offer = await connection.createOffer();
+            await connection.setLocalDescription(offer);
+            await upsertDocument('webrtcCalls', callId, {
+              callId,
+              callerId: user.id,
+              calleeId: candidate.userId,
+              status: 'offer',
+              offer,
+            }, token);
+          }
+          return;
+        }
+
+        await upsertDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
+        const connection = ensureConnection(current);
+        const call = await getDocument<CallDocument>('webrtcCalls', current.callId, token).catch(() => null);
+        if (!call || call.status === 'ended') return;
+        if (!current.initiator && call.offer && !offerApplied.current) {
+          await connection.setRemoteDescription(call.offer);
+          offerApplied.current = true;
+          const answer = await connection.createAnswer();
+          await connection.setLocalDescription(answer);
+          await upsertDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
+        }
+        if (current.initiator && call.answer && !answerApplied.current) {
+          await connection.setRemoteDescription(call.answer);
+          answerApplied.current = true;
+        }
+        const candidates = await listDocuments<CandidateDocument>('webrtcCandidates', token).catch(() => []);
+        for (const item of candidates.filter((candidate) => candidate.callId === current.callId && candidate.fromUserId !== user.id)) {
+          if (appliedCandidates.current.has(item.id)) continue;
+          await connection.addIceCandidate(item.candidate).catch(() => undefined);
+          appliedCandidates.current.add(item.id);
+        }
+      } finally {
+        pollingRef.current = false;
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 1800);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [active, user]);
+
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-           <h1 className="text-3xl font-black text-gray-800">랜덤 화상 채팅 (뷰티 필터)</h1>
-           <p className="text-sm text-gray-500 mt-1">1 USDT를 소모하여 글로벌 교민과 랜덤으로 매칭됩니다. (10초 내 끊김 시 전액 반환)</p>
-        </div>
-      </div>
+    <div className="min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Private room / WebRTC</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">REAL VIDEO CONNECT</h1><p className="mt-2 text-sm text-slate-400">가짜 상대 없이, 실제 접속 중인 인증 회원과 직접 연결됩니다.</p></div>
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-200"><ShieldCheck size={17} /> 브라우저 간 암호화 연결</div>
+        </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 비디오 영역 */}
-        <div className="lg:col-span-2 bg-gray-900 rounded-3xl overflow-hidden aspect-video relative flex items-center justify-center shadow-xl border border-gray-800">
-            {!isConnected ? (
-             <div className="text-center text-white space-y-4">
-                {isMatching ? (
-                  <>
-                    <div className="animate-spin text-blue-500 mx-auto">
-                       <RefreshCcw size={48} />
-                    </div>
-                    <p className="font-bold text-xl">상대방을 찾는 중입니다...</p>
-                  </>
-                ) : (
-                   <>
-                     <Camera size={64} className="text-gray-600 mx-auto mb-4" />
-                     <p className="text-gray-400">시작 버튼을 누르면 카메라와 마이크 권한을 요청합니다.</p>
-                   </>
-                 )}
-              </div>
-           ) : (
-              <div className="relative w-full h-full flex flex-col">
-                 <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-blue-900 to-slate-900 flex items-center justify-center text-center text-white p-8">
-                   <div>
-                     <UsersIcon />
-                     <p className="mt-4 font-bold text-xl">상대방 연결을 기다리는 중입니다</p>
-                     <p className="mt-2 text-sm text-blue-200">카메라와 마이크는 준비되었습니다.</p>
-                   </div>
-                 </div>
-                 
-                 {/* 내 화면 (우측 하단 PiP) */}
-                 <div className="absolute bottom-4 right-4 w-1/4 aspect-video bg-black rounded-lg border-2 border-white overflow-hidden shadow-2xl">
-                    <video ref={videoRef} muted playsInline className={`w-full h-full object-cover ${flip ? 'scale-x-[-1]' : ''}`} />
-                </div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="relative aspect-video overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-2xl">
+            {isConnected ? <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_center,#172b50,#050914_70%)] text-center"><div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 p-5">{isMatching ? <LoaderCircle size={42} className="animate-spin text-cyan-300" /> : <Camera size={42} className="text-slate-500" />}</div><div><p className="text-xl font-black">{isMatching ? '상대를 찾는 중입니다' : status}</p><p className="mt-2 text-sm text-slate-400">{isMatching ? '페이지를 닫지 말고 잠시 기다려주세요.' : '시작 버튼을 누르면 카메라와 마이크를 준비합니다.'}</p></div></div>}
+            {isConnected && <div className="absolute left-4 top-4 flex items-center gap-2 rounded-xl bg-black/60 px-3 py-2 text-xs font-bold backdrop-blur"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> {status}</div>}
+            {isConnected && peer && <div className="absolute bottom-4 left-4 rounded-2xl bg-black/60 px-4 py-3 backdrop-blur"><div className="flex items-center gap-3"><img src={peer.image} alt="" className="h-10 w-10 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="text-xs text-slate-300">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div></div>}
+            <div className="absolute bottom-4 right-4 w-1/4 min-w-[100px] overflow-hidden rounded-2xl border-2 border-white/60 bg-black shadow-2xl"><video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-cover ${flip ? 'scale-x-[-1]' : ''}`} /></div>
+          </section>
 
-                {/* 통화 컨트롤 */}
-                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex gap-4">
-                   <button onClick={endMatch} className="bg-red-600 text-white p-4 rounded-full hover:bg-red-700 shadow-lg">
-                     <VideoOff size={24} />
-                   </button>
-                </div>
-             </div>
-          )}
-        </div>
-
-        {/* 컨트롤 패널 */}
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-lg text-gray-800 mb-4 flex items-center gap-2">
-              <Wand2 size={20} className="text-purple-600" />
-              AI 뷰티 필터 설정
-            </h3>
-            
-            <div className="space-y-5">
-              <div>
-                <div className="flex justify-between text-sm font-bold text-gray-600 mb-2">
-                  <span>피부 보정 (블러)</span>
-                  <span>{smoothing}%</span>
-                </div>
-                <input type="range" min="0" max="100" value={smoothing} onChange={(e) => setSmoothing(Number(e.target.value))} className="w-full accent-purple-600" />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm font-bold text-gray-600 mb-2">
-                  <span>팔자주름/리프팅</span>
-                  <span>{lift}%</span>
-                </div>
-                <input type="range" min="0" max="100" value={lift} onChange={(e) => setLift(Number(e.target.value))} className="w-full accent-purple-600" />
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <span className="text-sm font-bold text-gray-600">좌우 반전 모드</span>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" checked={flip} onChange={(e) => setFlip(e.target.checked)} className="sr-only peer" />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-center space-y-4">
-             <div className="font-bold text-gray-700">현재 잔고</div>
-             <div className="text-3xl font-black text-blue-600">{user?.usdtBalance.toFixed(2) || '0.00'} USDT</div>
-             
-              {permissionError && <p className="text-sm text-red-600 font-bold bg-red-50 p-3 rounded-xl">{permissionError}</p>}
-
-              {!isConnected ? (
-                <button 
-                  onClick={startMatch}
-                  disabled={isMatching}
-                  className={`w-full py-4 rounded-xl font-bold text-white shadow-md flex items-center justify-center gap-2 ${isMatching ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
-                >
-                  <PhoneCall size={20} />
-                  {isMatching ? '매칭 중...' : `매칭 시작 (${user?.isSubscribed ? '프리미엄 무료' : '-1 USDT'})`}
-                </button>
-             ) : (
-                <button 
-                  onClick={endMatch}
-                  className="w-full py-4 rounded-xl font-bold text-white shadow-md bg-red-600 hover:bg-red-700"
-                >
-                  통화 종료
-                </button>
-             )}
-          </div>
+          <aside className="space-y-5">
+            <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Connection status</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-red-500/10 p-3 text-xs font-bold text-red-200">{permissionError}</p>}{!active ? <button onClick={startMatch} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> 실제 회원 찾기</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
+            <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">브라우저 기본 기능</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />영상은 서버에 저장하지 않고 상대 브라우저로 직접 전송됩니다.</div></section>
+            <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 연결 안내</div><p>두 명 이상의 인증 회원이 동시에 대기해야 연결됩니다. 아무도 없으면 실제로 연결될 때까지 대기 상태가 유지됩니다.</p></section>
+          </aside>
         </div>
       </div>
     </div>
