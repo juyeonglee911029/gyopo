@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { listDocuments } from '@/lib/firebase';
 import { seedPosts } from '@/lib/seedData';
 
-type HomePost = { id: string; title: string; type: string; authorId: string; views?: number; createdAt: string; country: string; sourceUrl?: string };
+type HomePost = { id: string; title: string; type: string; authorId: string; views?: number; createdAt: string; country: string; sourceUrl?: string; sourceName?: string };
 
 export default function Home() {
   const { selectedCountry } = useGlobalStore();
@@ -92,9 +92,10 @@ export default function Home() {
                   <Link href={post.sourceUrl || `/community/${post.id}`} key={post.id} className="group block">
                    <div className="flex items-center gap-3">
                      <span className="text-xs font-bold px-2 py-1 rounded shrink-0 text-blue-600 bg-blue-50">{post.type === 'notice' ? '공지' : post.type === 'news' ? '뉴스' : '자유'}</span>
-                     <h3 className="text-gray-800 font-medium truncate group-hover:text-blue-600 transition-colors">
-                       {post.title}
-                     </h3>
+                      <h3 className="text-gray-800 font-medium truncate group-hover:text-blue-600 transition-colors">
+                        {post.title}
+                      </h3>
+                      {post.sourceName && <span className="hidden text-[10px] text-blue-500 lg:inline">{post.sourceName}</span>}
                      <span className="text-xs text-gray-400 ml-auto shrink-0 pr-2">조회 {post.views || 0}</span>
                   </div>
                 </Link>
