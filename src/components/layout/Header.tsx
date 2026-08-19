@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Globe, Wallet, LogIn, LogOut, Users, Activity, Film } from 'lucide-react';
+import { Globe, Wallet, LogIn, LogOut, Users, Film } from 'lucide-react';
+import { signOut } from '@/lib/firebase';
 
 const countries = [
   { code: 'Global', name: '전체 (Global)' },
@@ -17,17 +18,8 @@ const countries = [
 export default function Header() {
   const { selectedCountry, setSelectedCountry, user, setUser } = useGlobalStore();
 
-  const handleLoginMock = () => {
-    setUser({
-      name: '홍길동',
-      email: 'hong@gmail.com',
-      image: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&q=80',
-      usdtBalance: 150.0,
-      isSubscribed: false,
-    });
-  };
-
-  const handleLogoutMock = () => {
+  const handleLogout = () => {
+    signOut();
     setUser(null);
   };
 
@@ -53,11 +45,6 @@ export default function Header() {
         </div>
 
         <div className="flex items-center space-x-4">
-          <div className="hidden md:flex flex-col items-end mr-2 text-[10px] font-bold text-gray-400">
-            <div className="flex items-center gap-1"><Activity size={10} className="text-green-500"/> TODAY: 1,402</div>
-            <div>MONTH: 45,901</div>
-          </div>
-
           <div className="relative group flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5 cursor-pointer border border-gray-200">
             <Globe size={16} className="text-gray-500" />
             <select 
@@ -79,19 +66,19 @@ export default function Header() {
               </Link>
               <div className="flex items-center gap-2">
                 <img src={user.image} alt="Profile" className="w-8 h-8 rounded-full border border-gray-200" />
-                <button onClick={handleLogoutMock} className="text-gray-500 hover:text-red-500 transition-colors p-1">
+                <button onClick={handleLogout} aria-label="로그아웃" className="text-gray-500 hover:text-red-500 transition-colors p-1">
                   <LogOut size={18} />
                 </button>
               </div>
             </div>
           ) : (
-            <button 
-              onClick={handleLoginMock}
+            <Link
+              href="/login"
               className="flex items-center gap-2 bg-gray-900 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-md hover:bg-gray-800 transition-colors"
             >
               <LogIn size={16} />
               <span>로그인</span>
-            </button>
+            </Link>
           )}
         </div>
       </div>

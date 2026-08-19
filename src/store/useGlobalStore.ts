@@ -21,7 +21,7 @@ interface GlobalState {
     usdtBalance: number;
     isSubscribed: boolean;
   } | null;
-  setUser: (user: any) => void;
+  setUser: (user: GlobalState['user']) => void;
   updateUsdt: (amount: number, txDetails?: Omit<Transaction, 'id' | 'date'>) => void;
   subscribe: () => void;
   

@@ -4,6 +4,7 @@ import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import GlobalChat from '@/components/layout/GlobalChat';
+import AppRuntime from '@/components/layout/AppRuntime';
 
 const notoSansKr = Noto_Sans_KR({ 
   subsets: ['latin'],
@@ -24,16 +25,17 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${notoSansKr.variable} font-sans bg-gray-50 text-gray-900 pt-16 min-h-screen flex flex-col`}>
-        <Header />
-        <GlobalChat />
-        
-        {/* Main content wrapper shifted right to accommodate the fixed Global Chat on large screens */}
-        <div className="flex-grow flex flex-col lg:ml-80 transition-all">
-          <main className="flex-grow">
-            {children}
-          </main>
-          <Footer />
-        </div>
+        <AppRuntime>
+          <Header />
+          <GlobalChat />
+
+          <div className="flex-grow flex flex-col lg:ml-80 transition-all">
+            <main className="flex-grow">
+              {children}
+            </main>
+            <Footer />
+          </div>
+        </AppRuntime>
       </body>
     </html>
   );

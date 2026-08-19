@@ -4,9 +4,20 @@ import Link from 'next/link';
 import BannerAd from '@/components/ads/BannerAd';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { PlayCircle, Users, Briefcase, ShoppingCart, Store, Megaphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { listDocuments } from '@/lib/firebase';
+
+type HomePost = { id: string; title: string; type: string; views?: number; createdAt: string; country: string };
 
 export default function Home() {
   const { selectedCountry } = useGlobalStore();
+  const [posts, setPosts] = useState<HomePost[]>([]);
+
+  useEffect(() => {
+    void listDocuments<Omit<HomePost, 'id'>>('posts')
+      .then((data) => setPosts(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)))
+      .catch(() => setPosts([]));
+  }, []);
   
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -74,23 +85,16 @@ export default function Home() {
               <Link href="/community" className="text-sm font-bold text-blue-600 hover:underline">더보기</Link>
             </div>
             
-            <div className="space-y-5">
-              {[
-                { type: '뉴스', title: '[속보] 현지 환율 급등, 유학생 송금 비상', views: '2.5k', color: 'text-red-600 bg-red-50' },
-                { type: '정보', title: 'USDT 에스크로 장터 이용 방법 완벽 가이드', views: '1.2k', color: 'text-green-600 bg-green-50' },
-                { type: '자유', title: '이번 주말에 교민 체육대회 하네요. 다들 가시나요?', views: '850', color: 'text-gray-600 bg-gray-100' },
-                { type: '질문', title: '비자 연장 서류 준비 중인데 질문 있습니다 ㅠㅠ', views: '430', color: 'text-orange-600 bg-orange-50' },
-                { type: '자유', title: '새로 오픈한 한식당 다녀온 후기 (내돈내산)', views: '1.1k', color: 'text-gray-600 bg-gray-100' },
-              ].map((post, idx) => (
-                <Link href="/community" key={idx} className="group block">
-                  <div className="flex items-center gap-3">
-                    <span className={`text-xs font-bold px-2 py-1 rounded shrink-0 ${post.color}`}>
-                      {post.type}
-                    </span>
-                    <h3 className="text-gray-800 font-medium truncate group-hover:text-blue-600 transition-colors">
-                      {post.title}
-                    </h3>
-                    <span className="text-xs text-gray-400 ml-auto shrink-0 pr-2">조회 {post.views}</span>
+             <div className="space-y-5">
+               {posts.length === 0 && <p className="text-sm text-gray-400 py-4">아직 등록된 게시글이 없습니다.</p>}
+               {posts.filter((post) => selectedCountry === 'Global' || post.country === selectedCountry || post.country === 'Global').map((post) => (
+                 <Link href={`/community/${post.id}`} key={post.id} className="group block">
+                   <div className="flex items-center gap-3">
+                     <span className="text-xs font-bold px-2 py-1 rounded shrink-0 text-blue-600 bg-blue-50">{post.type === 'notice' ? '공지' : post.type === 'news' ? '뉴스' : '자유'}</span>
+                     <h3 className="text-gray-800 font-medium truncate group-hover:text-blue-600 transition-colors">
+                       {post.title}
+                     </h3>
+                     <span className="text-xs text-gray-400 ml-auto shrink-0 pr-2">조회 {post.views || 0}</span>
                   </div>
                 </Link>
               ))}
