@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { createDocument, getSessionToken, listDocuments } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type Product = { id: string; title: string; price: string; location: string; image?: string; country: string; createdAt: string };
+type Product = { id: string; title: string; price: string; location: string; image?: string; country: string; authorId: string; createdAt: string };
 
 export default function MarketPage() {
   const { selectedCountry, user } = useGlobalStore();
@@ -17,7 +17,7 @@ export default function MarketPage() {
   const loadProducts = async () => {
     try {
       const data = await listDocuments<Omit<Product, 'id'>>('marketItems', getSessionToken());
-      setProducts(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setProducts(data.filter((item) => item.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch { setProducts([]); }
   };
 
