@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, Send, History, AlertCircle } from 'lucide-react';
+import { createDocument, getSessionToken } from '@/lib/firebase';
+import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
+
+const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || '';
 
 export default function WalletPage() {
   const { user, updateUsdt, addTransaction, transactions } = useGlobalStore();
@@ -11,6 +14,14 @@ export default function WalletPage() {
   // Forms state
   const [amount, setAmount] = useState('');
   const [targetId, setTargetId] = useState('');
+  const [depositAddress, setDepositAddress] = useState(() => {
+    if (typeof window === 'undefined') return configuredDepositAddress;
+    return window.localStorage.getItem('gyopo-usdt-deposit-address') || configuredDepositAddress;
+  });
+
+  useEffect(() => {
+    if (depositAddress) window.localStorage.setItem('gyopo-usdt-deposit-address', depositAddress);
+  }, [depositAddress]);
 
   if (!user) {
     return (
@@ -21,19 +32,28 @@ export default function WalletPage() {
     );
   }
 
-  const handleDeposit = () => {
+  const handleDeposit = async () => {
     const val = Number(amount);
     if (isNaN(val) || val <= 0) return alert("올바른 금액을 입력하세요.");
-    
-    // Mock Admin Approval Delay
-    alert(`[시스템] ${val} USDT 입금 신청이 접수되었습니다. 관리자 승인 후 잔고에 반영됩니다.`);
-    addTransaction({ type: 'DEPOSIT', amount: val, status: 'PENDING', details: '무통장/크립토 입금 대기' });
+    if (!depositAddress.trim()) return alert('먼저 입금 받을 USDT 지갑 주소를 입력하세요.');
+    const token = getSessionToken();
+    if (!token) return alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+    try {
+      await createDocument('depositRequests', crypto.randomUUID(), {
+        userId: user.id,
+        amount: val,
+        network: 'USDT-TRC20',
+        depositAddress: depositAddress.trim(),
+        status: 'PENDING',
+        createdAt: new Date(),
+      }, token);
+      addTransaction({ type: 'DEPOSIT', amount: val, status: 'PENDING', details: 'USDT 입금 확인 대기' });
+      alert(`[시스템] ${val} USDT 입금 신청이 접수되었습니다. 실제 입금 확인 후 잔고에 반영됩니다.`);
+    } catch {
+      alert('입금 신청을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     setAmount('');
-
-    setTimeout(() => {
-       updateUsdt(val, { type: 'DEPOSIT', amount: val, status: 'COMPLETED', details: '입금 승인 완료' });
-       alert(`[시스템] 입금이 승인되어 ${val} USDT가 충전되었습니다.`);
-    }, 5000); // 5 sec mock delay
   };
 
   const handleWithdrawal = () => {
@@ -47,7 +67,7 @@ export default function WalletPage() {
     // Log Withdrawal Request
     addTransaction({ type: 'WITHDRAWAL', amount: val, status: 'PENDING', details: `지갑 주소: ${targetId || '미입력'}` });
     
-    // Log Fee Collection to backend (Mocked as transaction here)
+    // Record the network fee in the local transaction feed.
     addTransaction({ type: 'FEE', amount: 9, status: 'COMPLETED', details: '출금 수수료 차감 (시스템 회수)' });
     
     alert(`[시스템] ${val} USDT 출금 신청이 완료되었습니다. (수수료 9 USDT 차감 완료)`);
@@ -96,12 +116,18 @@ export default function WalletPage() {
              </div>
 
              <div className="p-6">
-                {activeTab === 'DEPOSIT' && (
-                  <div className="space-y-4">
-                    <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm mb-4">
-                      <strong>무통장 또는 크립토 입금</strong><br/>신청 후 관리자가 내역을 확인하면 잔고에 반영됩니다.
-                    </div>
-                    <label className="block text-sm font-bold text-gray-700">충전할 금액 (USDT)</label>
+                 {activeTab === 'DEPOSIT' && (
+                   <div className="space-y-4">
+                     <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm mb-4">
+                       <strong>USDT-TRC20 입금</strong><br/>아래 주소로 실제 입금한 뒤 신청하면 확인 후 잔고에 반영됩니다.
+                     </div>
+                     <label className="block text-sm font-bold text-gray-700">입금 받을 USDT 지갑 주소</label>
+                     <div className="flex gap-2">
+                       <input type="text" value={depositAddress} onChange={(event) => setDepositAddress(event.target.value)} className="min-w-0 flex-1 bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="TRC20 지갑 주소를 입력하세요" />
+                       <button type="button" onClick={() => void navigator.clipboard?.writeText(depositAddress)} className="rounded-xl bg-gray-200 px-3 text-gray-700 hover:bg-gray-300" aria-label="지갑 주소 복사"><Copy size={17} /></button>
+                     </div>
+                     {depositAddress ? <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(depositAddress)}`} alt="USDT 입금 지갑 QR 코드" className="h-44 w-44 rounded-lg" /><p className="break-all text-center text-[11px] text-gray-500">{depositAddress}</p></div> : <div className="rounded-2xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">지갑 주소를 입력하면 QR 코드가 표시됩니다.</div>}
+                     <label className="block text-sm font-bold text-gray-700">충전할 금액 (USDT)</label>
                     <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="100" />
                     <button onClick={handleDeposit} className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition">입금 신청하기</button>
                   </div>
