@@ -1,69 +1,128 @@
-import Image from "next/image";
+'use client';
+
+import Link from 'next/link';
+import BannerAd from '@/components/ads/BannerAd';
+import { useGlobalStore } from '@/store/useGlobalStore';
+import { PlayCircle, Users, Briefcase, ShoppingCart, Store, Megaphone } from 'lucide-react';
 
 export default function Home() {
+  const { selectedCountry } = useGlobalStore();
+  
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      {/* Banner / Hero */}
+      <div className="bg-gradient-to-r from-blue-700 to-indigo-900 rounded-3xl p-8 md:p-12 text-white mb-8 shadow-xl relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between">
+          <div className="mb-6 md:mb-0">
+            <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold backdrop-blur-sm mb-4 inline-block shadow-inner">
+              {selectedCountry === 'Global' ? '🌍 글로벌 (전체)' : `📍 ${selectedCountry} 지역 접속 중`}
+            </span>
+            <h1 className="text-4xl md:text-5xl font-black mb-4 tracking-tighter">
+              전 세계 교민의 중심,<br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-cyan-200">GLOBAL 교포</span>
+            </h1>
+            <p className="text-blue-100 max-w-xl text-lg font-light leading-relaxed">
+              USDT 에스크로 중고장터, 프리미엄 구인구직, 실시간 화상채팅까지.<br/>전 세계 한인 네트워크를 지금 바로 경험하세요.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <Link href="/games" className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 px-6 py-4 rounded-2xl font-black text-white shadow-lg transition-transform hover:scale-105 flex flex-col items-center">
+              <span className="text-2xl mb-1">🕹️</span>
+              <span>테트리스 대전</span>
+            </Link>
+            <Link href="/webrtc" className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 px-6 py-4 rounded-2xl font-black text-white shadow-lg transition-transform hover:scale-105 flex flex-col items-center">
+              <span className="text-2xl mb-1">📸</span>
+              <span>랜덤 화상채팅</span>
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* Left Column: Quick Links & Ads */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <h3 className="font-bold text-gray-800 mb-4 px-2">바로가기</h3>
+            <div className="space-y-2">
+              <Link href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-blue-50 text-gray-700 hover:text-blue-700 font-bold transition">
+                <Briefcase size={20} className="text-blue-500" /> 프리미엄 구인/구직
+              </Link>
+              <Link href="/market" className="flex items-center gap-3 p-3 rounded-xl hover:bg-orange-50 text-gray-700 hover:text-orange-700 font-bold transition">
+                <ShoppingCart size={20} className="text-orange-500" /> 에스크로 중고장터
+              </Link>
+              <Link href="/directory" className="flex items-center gap-3 p-3 rounded-xl hover:bg-green-50 text-gray-700 hover:text-green-700 font-bold transition">
+                <Store size={20} className="text-green-500" /> 한인 업소록
+              </Link>
+              <Link href="/community" className="flex items-center gap-3 p-3 rounded-xl hover:bg-purple-50 text-gray-700 hover:text-purple-700 font-bold transition">
+                <Megaphone size={20} className="text-purple-500" /> 뉴스 / 아쥬게시판
+              </Link>
+              <Link href="/theater" className="flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 text-gray-700 hover:text-red-700 font-bold transition">
+                <PlayCircle size={20} className="text-red-500" /> 글로벌 극장 (VOD)
+              </Link>
+            </div>
+          </div>
+          
+          <BannerAd type="square" />
         </div>
-      </main>
+
+        {/* Middle Column: News & Popular Posts */}
+        <div className="lg:col-span-6 space-y-8">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex justify-between items-end mb-6 border-b border-gray-100 pb-4">
+              <h2 className="text-2xl font-black text-gray-900 tracking-tight">🔥 실시간 핫이슈</h2>
+              <Link href="/community" className="text-sm font-bold text-blue-600 hover:underline">더보기</Link>
+            </div>
+            
+            <div className="space-y-5">
+              {[
+                { type: '뉴스', title: '[속보] 현지 환율 급등, 유학생 송금 비상', views: '2.5k', color: 'text-red-600 bg-red-50' },
+                { type: '정보', title: 'USDT 에스크로 장터 이용 방법 완벽 가이드', views: '1.2k', color: 'text-green-600 bg-green-50' },
+                { type: '자유', title: '이번 주말에 교민 체육대회 하네요. 다들 가시나요?', views: '850', color: 'text-gray-600 bg-gray-100' },
+                { type: '질문', title: '비자 연장 서류 준비 중인데 질문 있습니다 ㅠㅠ', views: '430', color: 'text-orange-600 bg-orange-50' },
+                { type: '자유', title: '새로 오픈한 한식당 다녀온 후기 (내돈내산)', views: '1.1k', color: 'text-gray-600 bg-gray-100' },
+              ].map((post, idx) => (
+                <Link href="/community" key={idx} className="group block">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-bold px-2 py-1 rounded shrink-0 ${post.color}`}>
+                      {post.type}
+                    </span>
+                    <h3 className="text-gray-800 font-medium truncate group-hover:text-blue-600 transition-colors">
+                      {post.title}
+                    </h3>
+                    <span className="text-xs text-gray-400 ml-auto shrink-0 pr-2">조회 {post.views}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <BannerAd type="horizontal" />
+        </div>
+
+        {/* Right Column: Reels & Entertainment */}
+        <div className="lg:col-span-3 space-y-6">
+           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 h-[600px] flex flex-col">
+            <h3 className="font-bold text-gray-800 mb-4 px-2 flex items-center gap-2">
+              <span>📱 숏폼 릴스</span>
+              <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black">HOT</span>
+            </h3>
+            
+            {/* Embedded Instagram Reels Container */}
+            <div className="flex-1 rounded-xl overflow-hidden relative bg-black">
+              <iframe 
+                src="https://www.instagram.com/reels/embed/" 
+                className="w-full h-full border-none"
+                scrolling="yes"
+                allowTransparency={true}
+                allow="encrypted-media"
+                title="Instagram Reels"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
