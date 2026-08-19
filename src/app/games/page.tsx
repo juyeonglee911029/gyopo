@@ -1,260 +1,209 @@
 'use client';
-import { useState } from 'react';
-import { useGlobalStore } from '@/store/useGlobalStore';
-import { Users, Gamepad2, Play, Coins } from 'lucide-react';
 
-const onlineUsers = [
-  { id: 1, name: '도쿄토끼', country: 'JP', rank: '골드' },
-  { id: 2, name: '워킹홀리', country: 'AU', rank: '실버' },
-  { id: 3, name: '뉴욕김사장', country: 'US', rank: '브론즈' },
-  { id: 4, name: '하노이별', country: 'VN', rank: '플래티넘' },
+import { useEffect, useReducer, useRef, useState, type FormEvent, type CSSProperties } from 'react';
+import { Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Users } from 'lucide-react';
+import { deleteExpiredChatMessages, getSessionToken, listDocuments, listOnlineUsers, OnlineUser, upsertDocument } from '@/lib/firebase';
+import { useGlobalStore } from '@/store/useGlobalStore';
+
+const WIDTH = 10;
+const HEIGHT = 20;
+const SHAPES = [
+  [[1, 1, 1, 1]],
+  [[1, 1], [1, 1]],
+  [[0, 1, 0], [1, 1, 1]],
+  [[1, 0, 0], [1, 1, 1]],
+  [[0, 0, 1], [1, 1, 1]],
+  [[0, 1, 1], [1, 1, 0]],
+  [[1, 1, 0], [0, 1, 1]],
 ];
+const COLORS = ['#2dd4bf', '#facc15', '#c084fc', '#60a5fa', '#fb923c', '#f472b6', '#4ade80'];
+type Piece = { type: number; shape: number[][]; x: number; y: number };
+type ChatMessage = { id: string; authorId: string; user: string; country?: string; text: string; createdAt: string; expiresAt?: string | Date };
+type GameState = { board: number[][]; piece: Piece; nextPiece: Piece; running: boolean; paused: boolean; score: number; lines: number; notice: string; noticeId: number };
+type GameAction =
+  | { type: 'START' }
+  | { type: 'TOGGLE_PAUSE' }
+  | { type: 'MOVE'; dx: number; dy: number }
+  | { type: 'ROTATE' }
+  | { type: 'DROP' };
+
+const emptyBoard = () => Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(0));
+const cloneShape = (shape: number[][]) => shape.map((row) => [...row]);
+const clonePiece = (piece: Piece): Piece => ({ ...piece, shape: cloneShape(piece.shape) });
+const randomPiece = (): Piece => {
+  const type = Math.floor(Math.random() * SHAPES.length);
+  return { type, shape: cloneShape(SHAPES[type]), x: 3, y: 0 };
+};
+const rotate = (shape: number[][]) => shape[0].map((_, index) => shape.map((row) => row[index]).reverse());
+const collides = (board: number[][], piece: Piece, dx = 0, dy = 0, shape = piece.shape) => shape.some((row, y) => row.some((cell, x) => {
+  if (!cell) return false;
+  const nextX = piece.x + x + dx;
+  const nextY = piece.y + y + dy;
+  return nextX < 0 || nextX >= WIDTH || nextY >= HEIGHT || (nextY >= 0 && Boolean(board[nextY]?.[nextX]));
+}));
+
+const createGame = (): GameState => ({ board: emptyBoard(), piece: randomPiece(), nextPiece: randomPiece(), running: false, paused: false, score: 0, lines: 0, notice: '', noticeId: 0 });
+
+function lockPiece(state: GameState, landed: Piece): GameState {
+  const merged = state.board.map((row) => [...row]);
+  landed.shape.forEach((row, y) => row.forEach((cell, x) => {
+    if (cell && landed.y + y >= 0 && landed.y + y < HEIGHT) merged[landed.y + y][landed.x + x] = landed.type + 1;
+  }));
+  const kept = merged.filter((row) => row.some((cell) => !cell));
+  const cleared = HEIGHT - kept.length;
+  const nextBoard = [...Array.from({ length: cleared }, () => Array(WIDTH).fill(0)), ...kept];
+  const spawned = { ...clonePiece(state.nextPiece), x: 3, y: 0 };
+  const gameOver = collides(nextBoard, spawned);
+  const points = [0, 100, 300, 500, 800][cleared];
+  return {
+    ...state,
+    board: nextBoard,
+    piece: spawned,
+    nextPiece: randomPiece(),
+    running: !gameOver,
+    score: state.score + points,
+    lines: state.lines + cleared,
+    notice: gameOver ? '게임 오버 · 새 게임을 시작하세요' : cleared ? `${cleared}줄 클리어 · +${points}` : '',
+    noticeId: Date.now(),
+  };
+}
+
+function gameReducer(state: GameState, action: GameAction): GameState {
+  if (action.type === 'START') return { ...createGame(), running: true, notice: '게임 시작 · 방향키로 조작하세요', noticeId: Date.now() };
+  if (action.type === 'TOGGLE_PAUSE') return state.running ? { ...state, paused: !state.paused } : state;
+  if (!state.running || state.paused) return state;
+  if (action.type === 'ROTATE') {
+    const rotated = rotate(state.piece.shape);
+    return collides(state.board, state.piece, 0, 0, rotated) ? state : { ...state, piece: { ...state.piece, shape: rotated } };
+  }
+  if (action.type === 'DROP') {
+    let distance = 0;
+    while (!collides(state.board, state.piece, 0, distance + 1)) distance += 1;
+    return lockPiece(state, { ...state.piece, y: state.piece.y + distance });
+  }
+  if (!collides(state.board, state.piece, action.dx, action.dy)) return { ...state, piece: { ...state.piece, x: state.piece.x + action.dx, y: state.piece.y + action.dy } };
+  return action.dy === 1 ? lockPiece(state, state.piece) : state;
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
 
 export default function GamesPage() {
-  const { user, updateUsdt } = useGlobalStore();
-  const [inGame, setInGame] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  
-  // Betting states
-  const [challengeTarget, setChallengeTarget] = useState<string | null>(null);
-  const [betAmount, setBetAmount] = useState<string>('5');
-  const [activeBet, setActiveBet] = useState<number>(0);
-  const [opponentName, setOpponentName] = useState<string>('');
+  const user = useGlobalStore((state) => state.user);
+  const [game, dispatch] = useReducer(gameReducer, undefined, createGame);
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const toastTimer = useRef<number | null>(null);
+  const firstChatLoad = useRef(true);
+  const lastMessageId = useRef<string | null>(null);
+  const lastChatCleanup = useRef(0);
 
-  const handleOpenChallenge = (opponent: string) => {
-    if (!user) {
-      alert("로그인이 필요합니다.");
-      return;
-    }
-    setChallengeTarget(opponent);
-    setBetAmount('5'); // 기본값
+  const showToast = (text: string) => {
+    setToast({ id: Date.now(), text });
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4200);
   };
 
-  const submitChallenge = () => {
-    const amount = Number(betAmount);
-    if (isNaN(amount) || amount <= 0) {
-      alert("올바른 판돈을 입력해주세요.");
-      return;
-    }
-    if (user!.usdtBalance < amount) {
-      alert("USDT 잔고가 부족합니다.");
-      return;
-    }
+  useEffect(() => {
+    if (game.notice) showToast(game.notice);
+  }, [game.noticeId]);
 
-    setOpponentName(challengeTarget!);
-    setChallengeTarget(null);
-    setActiveBet(amount);
+  useEffect(() => {
+    const load = async () => setOnlineUsers(await listOnlineUsers().catch(() => []));
+    void load();
+    const timer = window.setInterval(load, 3000);
+    return () => window.clearInterval(timer);
+  }, []);
 
-    // Mock: 대전 신청 후 서버에서 상대방 승락 대기
-    alert(`[시스템] '${challengeTarget}' 님에게 ${amount} USDT 빵 대전을 신청했습니다. 수락을 대기합니다...`);
-    
-    // Mock: 상대방이 수락했다고 가정
-    setTimeout(() => {
-      alert(`[시스템] '${challengeTarget}' 님이 대전을 수락했습니다! 게임 방으로 이동합니다.`);
-      startCountdown();
-    }, 1500);
-  };
-
-  const startCountdown = () => {
-    setInGame(true);
-    let count = 5;
-    setCountdown(count);
-    
-    const timer = setInterval(() => {
-      count -= 1;
-      setCountdown(count);
-      if (count <= 0) {
-        clearInterval(timer);
-        setCountdown(null);
+  useEffect(() => {
+    const load = async () => {
+      const token = getSessionToken();
+      if (token && Date.now() - lastChatCleanup.current > 30_000) {
+        lastChatCleanup.current = Date.now();
+        await deleteExpiredChatMessages(token).catch(() => undefined);
       }
-    }, 1000);
+      const next = (await listDocuments<Omit<ChatMessage, 'id'>>('chatMessages', token).catch(() => []))
+        .filter((message) => message.authorId)
+        .filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now())
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .slice(-24);
+      const latest = next[next.length - 1];
+      if (!firstChatLoad.current && latest && latest.id !== lastMessageId.current) showToast(`${latest.user}: ${latest.text}`);
+      firstChatLoad.current = false;
+      lastMessageId.current = latest?.id || null;
+      setMessages(next);
+    };
+    void load();
+    const timer = window.setInterval(load, 1500);
+    return () => window.clearInterval(timer);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!game.running) return;
+      if (event.key === 'ArrowLeft') { event.preventDefault(); dispatch({ type: 'MOVE', dx: -1, dy: 0 }); }
+      if (event.key === 'ArrowRight') { event.preventDefault(); dispatch({ type: 'MOVE', dx: 1, dy: 0 }); }
+      if (event.key === 'ArrowDown') { event.preventDefault(); dispatch({ type: 'MOVE', dx: 0, dy: 1 }); }
+      if (event.key === 'ArrowUp') { event.preventDefault(); dispatch({ type: 'ROTATE' }); }
+      if (event.key === ' ') { event.preventDefault(); dispatch({ type: 'DROP' }); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [game.running]);
+
+  useEffect(() => {
+    if (!game.running || game.paused) return;
+    const timer = window.setInterval(() => dispatch({ type: 'MOVE', dx: 0, dy: 1 }), Math.max(180, 850 - Math.floor(game.lines / 5) * 45));
+    return () => window.clearInterval(timer);
+  }, [game.running, game.paused, game.lines]);
+
+  const start = () => {
+    if (!user) return window.alert('로그인 후 게임을 시작할 수 있습니다.');
+    dispatch({ type: 'START' });
   };
 
-  // 게임 종료 로직 (Mock)
-  const handleGameEnd = (isWinner: boolean) => {
-    if (isWinner) {
-      alert(`🎉 승리하셨습니다! 판돈 ${activeBet} USDT를 획득합니다.`);
-      updateUsdt(activeBet); // 승리 시 획득 (상대방 돈을 가져오는 개념)
-    } else {
-      alert(`💀 패배하셨습니다. 판돈 ${activeBet} USDT를 잃었습니다.`);
-      updateUsdt(-activeBet); // 패배 시 차감
+  const sendMessage = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user || !chatInput.trim()) return;
+    const token = getSessionToken();
+    if (!token) return;
+    const message = { authorId: user.id, user: user.name, country: user.country || 'Global', text: chatInput.trim(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3 * 60 * 1000) };
+    try {
+      await upsertDocument('chatMessages', crypto.randomUUID(), message, token);
+      setChatInput('');
+      showToast(`${user.name}: ${message.text}`);
+    } catch {
+      window.alert('메시지를 보내지 못했습니다. 다시 시도해주세요.');
     }
-    setInGame(false);
-    setActiveBet(0);
-    setOpponentName('');
   };
 
-  if (inGame) {
-    return (
-      <div className="container mx-auto px-4 py-8 h-[80vh] flex flex-col">
-        {/* 게임 화면 상단 정보 */}
-        <div className="bg-gray-800 text-white p-4 rounded-t-3xl flex justify-between items-center px-8 border-b border-gray-700">
-           <div className="font-bold text-xl">{user?.name}</div>
-           <div className="flex flex-col items-center">
-              <span className="text-yellow-400 font-black text-2xl flex items-center gap-2">
-                 <Coins size={24} /> {activeBet * 2} USDT 판돈
-              </span>
-              <span className="text-xs text-gray-400">(승자 독식)</span>
-           </div>
-           <div className="font-bold text-xl">{opponentName}</div>
-        </div>
-
-        {/* 게임 화면 Mock */}
-        <div className="flex-1 bg-gray-900 rounded-b-3xl relative overflow-hidden flex items-center justify-center border-4 border-t-0 border-gray-800">
-          
-          {countdown !== null ? (
-            <div className="text-9xl font-black text-white animate-bounce drop-shadow-2xl">
-              {countdown}
-            </div>
-          ) : (
-            <div className="w-full h-full flex justify-around items-center p-8 relative">
-              
-              {/* 승/패 시뮬레이션 버튼 (개발용 목업) */}
-              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 flex gap-4 z-50">
-                <button onClick={() => handleGameEnd(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.5)]">
-                  [테스트] 내가 승리
-                </button>
-                <button onClick={() => handleGameEnd(false)} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]">
-                  [테스트] 내가 패배
-                </button>
-              </div>
-
-              {/* 내 보드 */}
-              <div className="w-64 h-full max-h-[600px] border-2 border-blue-500 bg-black flex flex-col justify-end p-1 relative shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-                {/* Mock Tetris Blocks */}
-                <div className="w-full h-1/4 bg-blue-600/80 border-t-2 border-white"></div>
-              </div>
-
-              <div className="text-white text-center flex flex-col items-center">
-                 <div className="text-6xl font-black text-orange-500 mb-4 drop-shadow-[0_0_10px_rgba(249,115,22,0.8)]">VS</div>
-                 <div className="text-sm bg-red-600 px-4 py-2 rounded-full animate-pulse font-bold shadow-lg">상대방에게 방해 줄 전송 중! 💥</div>
-              </div>
-
-              {/* 상대 보드 */}
-              <div className="w-64 h-full max-h-[600px] border-2 border-red-500 bg-black flex flex-col justify-end p-1 relative opacity-70 shadow-[0_0_30px_rgba(239,68,68,0.3)]">
-                {/* Mock Tetris Blocks */}
-                <div className="w-full h-1/2 bg-red-600/80 border-t-2 border-white"></div>
-              </div>
-            </div>
-          )}
-
-          <button onClick={() => { setInGame(false); setActiveBet(0); }} className="absolute bottom-6 right-6 text-white bg-white/10 px-6 py-3 rounded-xl backdrop-blur-md hover:bg-red-500/80 hover:text-white transition font-bold border border-white/20">
-             항복하고 나가기 (-{activeBet} USDT)
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const visual = game.board.map((row) => [...row]);
+  let ghostDistance = 0;
+  while (!collides(game.board, game.piece, 0, ghostDistance + 1)) ghostDistance += 1;
+  const ghostY = game.piece.y + ghostDistance;
+  game.piece.shape.forEach((row, y) => row.forEach((cell, x) => {
+    if (!cell) return;
+    if (ghostY + y >= 0 && ghostY + y < HEIGHT && !visual[ghostY + y][game.piece.x + x]) visual[ghostY + y][game.piece.x + x] = -1;
+    if (game.piece.y + y >= 0 && game.piece.y + y < HEIGHT) visual[game.piece.y + y][game.piece.x + x] = game.piece.type + 1;
+  }));
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl relative">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-           <h1 className="text-3xl font-black text-gray-800 flex items-center gap-3">
-             <Gamepad2 size={32} className="text-blue-600" />
-             멀티플레이어 테트리스 대전 (에스크로)
-           </h1>
-           <p className="text-sm text-gray-500 mt-2">
-             원하는 판돈(USDT)을 걸고 실시간 대전을 즐겨보세요! 승자가 판돈을 모두 가져갑니다.
-           </p>
+    <div className="min-h-[calc(100vh-64px)] bg-[#070b17] px-4 py-8 text-white">
+      <div className="mx-auto max-w-7xl">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300"><Gamepad2 size={16} /> Arcade live</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">GLOBAL TETRIS</h1><p className="mt-2 text-sm text-slate-400">실제 접속 회원과 채팅하며 즐기는 싱글 테트리스</p></div><div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm"><Users size={16} className="text-emerald-300" /><b>{onlineUsers.length}</b><span className="text-slate-400">실시간 인증 회원</span></div></header>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="rounded-[2rem] border border-white/10 bg-[#10182b] p-4 shadow-2xl md:p-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><span className="text-xs font-bold uppercase tracking-widest text-slate-500">Current run</span><div className="mt-1 text-lg font-black">{user?.name || '로그인 필요'}</div></div><div className="flex gap-6 text-right"><div><div className="text-[10px] font-bold text-slate-500">SCORE</div><b className="text-xl text-cyan-300">{game.score.toLocaleString()}</b></div><div><div className="text-[10px] font-bold text-slate-500">LINES</div><b className="text-xl text-emerald-300">{game.lines}</b></div></div></div>
+            <div className="relative mx-auto max-w-[360px] rounded-3xl border border-cyan-300/30 bg-[#050914] p-3 shadow-[0_0_60px_rgba(34,211,238,0.14)]"><div className="grid grid-cols-10 gap-1 rounded-2xl bg-[#0b1221] p-2">{visual.flatMap((row, y) => row.map((cell, x) => <div key={`${x}-${y}`} className={`aspect-square rounded-[4px] border ${cell === 0 ? 'border-white/[0.05] bg-white/[0.025]' : cell === -1 ? 'border-2 border-dashed border-cyan-100/60 bg-cyan-200/10' : 'border-white/50 shadow-[inset_0_2px_0_rgba(255,255,255,.55),0_0_12px_var(--cell)]'}`} style={cell > 0 ? ({ '--cell': COLORS[cell - 1], backgroundColor: COLORS[cell - 1] } as CSSProperties) : undefined} />))}</div>{toast && <div key={toast.id} className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-2xl border border-cyan-200/30 bg-slate-950/90 px-5 py-3 text-sm font-black text-cyan-100 shadow-2xl animate-[portal-toast_4.2s_ease-out_forwards]">{toast.text}</div>}</div>
+            <div className="mx-auto mt-4 flex max-w-[360px] items-center justify-between gap-2"><button onClick={start} className="rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300"><Play size={15} className="mr-1 inline" />{game.running ? '새 게임' : '게임 시작'}</button><button onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-30">{game.paused ? <Play size={15} className="mr-1 inline" /> : <Pause size={15} className="mr-1 inline" />}{game.paused ? '계속' : '일시정지'}</button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold disabled:opacity-30"><RotateCw size={15} className="mr-1 inline" />회전</button></div><div className="mt-3 text-center text-[11px] text-slate-500">← → 이동 · ↓ 내리기 · ↑ 회전 · Space 즉시 내리기</div>
+          </section>
+          <aside className="space-y-5"><section className="rounded-[2rem] border border-white/10 bg-[#10182b] p-5"><div className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-slate-500">Next block</div><div className="grid w-24 grid-cols-4 gap-1 rounded-xl bg-black/20 p-2">{Array.from({ length: 16 }, (_, i) => { const x = i % 4; const y = Math.floor(i / 4); return <div key={i} className="aspect-square rounded" style={game.nextPiece.shape[y]?.[x] ? { backgroundColor: COLORS[game.nextPiece.type] } : undefined} />; })}</div><p className="mt-4 text-sm text-slate-400">실제 인증 회원과 보이는 메시지만 표시합니다.</p></section>
+            <section className="flex min-h-[360px] flex-col rounded-[2rem] border border-white/10 bg-[#10182b] p-5"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 font-black"><MessageCircle size={17} className="text-cyan-300" /> 실시간 메시지</div><span className="text-[10px] font-bold text-emerald-300">LIVE</span></div><div className="flex-1 space-y-3 overflow-y-auto pr-1">{messages.length === 0 ? <p className="py-10 text-center text-sm text-slate-500">아직 메시지가 없습니다.</p> : messages.map((message) => <div key={message.id} className="rounded-2xl bg-white/[0.045] p-3"><div className="mb-1 flex justify-between gap-2 text-[10px]"><b className="text-cyan-200">{message.user}</b><span className="text-slate-600">{formatTime(message.createdAt)}</span></div><p className="break-words text-sm text-slate-200">{message.text}</p></div>)}</div>{user ? <form onSubmit={sendMessage} className="mt-4 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="게임 중 메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-300" /><button aria-label="메시지 보내기" className="rounded-xl bg-cyan-400 px-3 text-slate-950"><Send size={16} /></button></form> : <p className="mt-4 text-center text-xs text-slate-500">로그인 후 참여할 수 있습니다.</p>}</section>
+            <section className="rounded-[2rem] border border-white/10 bg-[#10182b] p-5"><div className="mb-3 flex items-center gap-2 font-black"><Users size={17} className="text-emerald-300" /> 실제 접속 회원</div>{onlineUsers.length === 0 ? <p className="text-sm text-slate-500">현재 접속 중인 인증 회원이 없습니다.</p> : <div className="space-y-2">{onlineUsers.map((online) => <div key={online.id} className="flex items-center gap-2 rounded-xl bg-white/[0.04] p-2.5"><img src={online.image} alt="" className="h-8 w-8 rounded-full object-cover" /><div className="min-w-0"><div className="truncate text-sm font-bold">{online.name}</div><div className="text-[10px] text-emerald-300">● {online.country || '국가 미설정'}</div></div></div>)}</div>}</section></aside>
         </div>
       </div>
-
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-          <h2 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-            <Users size={24} className="text-blue-600" />
-            대기실 (온라인 유저)
-          </h2>
-          {user && (
-            <div className="text-sm font-bold bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-200 flex items-center gap-2">
-              <Coins size={16} /> 내 잔고: {user.usdtBalance.toFixed(2)} USDT
-            </div>
-          )}
-        </div>
-        
-        <div className="divide-y divide-gray-100">
-          {onlineUsers.map((u) => (
-            <div key={u.id} className="p-5 flex items-center justify-between hover:bg-blue-50/30 transition-colors">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500 text-lg shadow-inner">
-                   {u.name.charAt(0)}
-                 </div>
-                 <div>
-                   <div className="font-bold text-gray-900 text-lg">{u.name}</div>
-                   <div className="text-sm text-gray-500 flex gap-2 mt-1">
-                     <span className="bg-gray-100 px-2 py-0.5 rounded font-medium">{u.country}</span>
-                     <span className="text-orange-500 font-bold">{u.rank}</span>
-                   </div>
-                 </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => {
-                    alert(`'${u.name}' 님에게 송금하시겠습니까? 지갑 페이지로 이동합니다.`);
-                    window.location.href = '/wallet';
-                  }}
-                  className="flex items-center gap-1.5 bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm font-bold hover:bg-green-100 transition shadow-sm hover:-translate-y-0.5"
-                >
-                  <Coins size={16} />
-                  송금
-                </button>
-                <button 
-                  onClick={() => handleOpenChallenge(u.name)}
-                  className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-gray-800 transition shadow-md hover:shadow-lg hover:-translate-y-0.5"
-                >
-                  <Play size={16} />
-                  대전 신청
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 대전 신청 모달 (Betting Modal) */}
-      {challengeTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl transform scale-100 transition-transform">
-            <h3 className="text-2xl font-black text-gray-900 mb-2">대전 신청</h3>
-            <p className="text-gray-500 mb-6">
-              <span className="font-bold text-blue-600">{challengeTarget}</span> 님과 대전할 판돈을 입력하세요.
-            </p>
-            
-            <div className="relative mb-6">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Coins size={20} className="text-yellow-500" />
-              </div>
-              <input 
-                type="number" 
-                value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                min="1"
-                className="w-full bg-gray-50 border-2 border-gray-200 rounded-xl py-3 pl-12 pr-12 text-xl font-bold text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
-              />
-              <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                <span className="text-gray-500 font-bold">USDT</span>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setChallengeTarget(null)}
-                className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition"
-              >
-                취소
-              </button>
-              <button 
-                onClick={submitChallenge}
-                className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-md transition"
-              >
-                신청하기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
