@@ -6,7 +6,6 @@ import { useGlobalStore } from '@/store/useGlobalStore';
 
 export default function AppRuntime({ children }: { children: React.ReactNode }) {
   const setUser = useGlobalStore((state) => state.setUser);
-  const user = useGlobalStore((state) => state.user);
   const selectedCountry = useGlobalStore((state) => state.selectedCountry);
 
   useEffect(() => {
@@ -14,10 +13,10 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     setUser(sessionUser);
     void recordVisit(sessionUser, selectedCountry);
     const heartbeat = window.setInterval(() => {
-      void recordVisit(getStoredSession()?.user || user, selectedCountry);
+      void recordVisit(getStoredSession()?.user || null, selectedCountry);
     }, 20_000);
     return () => window.clearInterval(heartbeat);
-  }, [selectedCountry, setUser, user]);
+  }, [selectedCountry, setUser]);
 
   return children;
 }
