@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getSessionToken, listDocuments, createDocument } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { seedPosts } from '@/lib/seedData';
 
 type Post = {
   id: string;
@@ -17,6 +18,8 @@ type Post = {
   views?: number;
   likes?: number;
   comments?: number;
+  sourceUrl?: string;
+  sourceName?: string;
 };
 
 function formatDate(value: string) {
@@ -34,9 +37,9 @@ export default function CommunityPage() {
   const loadPosts = async () => {
     try {
       const data = await listDocuments<Omit<Post, 'id'>>('posts', getSessionToken());
-      setPosts(data.filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    } catch {
-      setPosts([]);
+       setPosts([...data, ...seedPosts].filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+     } catch {
+       setPosts(seedPosts);
     } finally {
       setLoading(false);
     }
@@ -108,7 +111,7 @@ export default function CommunityPage() {
           {loading && <div className="text-center py-20 text-gray-400">게시글을 불러오는 중입니다...</div>}
           {!loading && filteredPosts.length === 0 && <div className="text-center py-20 text-gray-500">아직 게시글이 없습니다. 첫 글을 남겨보세요.</div>}
           {filteredPosts.map((post) => (
-            <Link href={`/community/${post.id}`} key={post.id} className="block hover:bg-blue-50/50 transition-colors">
+             <Link href={post.sourceUrl || `/community/${post.id}`} target={post.sourceUrl ? '_blank' : undefined} key={post.id} className="block hover:bg-blue-50/50 transition-colors">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center">
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center">
                   <span className={post.type === 'notice' ? 'text-red-500' : post.type === 'news' ? 'text-blue-500' : 'text-gray-400'}>
@@ -120,7 +123,7 @@ export default function CommunityPage() {
                   <h3 className="text-base md:text-lg truncate font-bold text-gray-800">{post.title}</h3>
                   {!!post.comments && <span className="text-blue-500 text-sm font-bold">[{post.comments}]</span>}
                 </div>
-                <div className="col-span-2 text-sm text-gray-500 flex items-center md:justify-center"><span className="md:hidden mr-1">작성자: </span>{post.author}</div>
+                   <div className="col-span-2 text-sm text-gray-500 flex items-center md:justify-center"><span className="md:hidden mr-1">작성자: </span>{post.author}</div>
                 <div className="col-span-2 text-xs md:text-sm text-gray-400 text-center">{formatDate(post.createdAt)}</div>
                 <div className="col-span-1 text-xs md:text-sm text-gray-400 text-center hidden md:block">{post.views || 0}</div>
               </div>
