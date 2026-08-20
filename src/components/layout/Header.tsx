@@ -5,15 +5,6 @@ import { useGlobalStore } from '@/store/useGlobalStore';
 import { Gamepad2, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen, Video } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
 
-const countries = [
-  { code: 'Global', name: '전체 (Global)' },
-  { code: 'KR', name: '한국 (Korea)' },
-  { code: 'US', name: '미국 (USA)' },
-  { code: 'JP', name: '일본 (Japan)' },
-  { code: 'CN', name: '중국 (China)' },
-  { code: 'VN', name: '베트남 (Vietnam)' },
-  { code: 'AU', name: '호주 (Australia)' },
-];
 
 export default function Header() {
   const { user, setUser, darkMode, setDarkMode } = useGlobalStore();
