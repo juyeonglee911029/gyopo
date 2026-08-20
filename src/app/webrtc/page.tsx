@@ -4,17 +4,23 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, CheckCircle2, LoaderCircle, PhoneCall, RefreshCcw, ShieldCheck, Users, VideoOff } from 'lucide-react';
 import {
   deleteDocument,
+  claimWebrtcMatch,
+  createDocument,
+  deleteExpiredChatMessages,
   getDocument,
   getSessionToken,
-  listDocuments,
+  mergeDocument,
   OnlineUser,
+  queryDocumentsWhere,
   upsertDocument,
+  type TetrisQueueProfile,
 } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type QueueEntry = OnlineUser & {
   status?: 'waiting' | 'matched';
   callId?: string;
+  opponent?: TetrisQueueProfile;
 };
 
 type CallDocument = {
@@ -31,6 +37,7 @@ type CandidateDocument = {
   fromUserId: string;
   candidate: RTCIceCandidateInit;
 };
+type VideoChatMessage = { id: string; callId: string; authorId: string; user: string; text: string; createdAt: string; expiresAt: string };
 
 type ActiveCall = {
   callId: string;
@@ -38,7 +45,13 @@ type ActiveCall = {
   initiator: boolean;
 };
 
-const stunServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+const stunServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+];
 
 export default function WebRTCPage() {
   const user = useGlobalStore((state) => state.user);
@@ -50,6 +63,10 @@ export default function WebRTCPage() {
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [flip, setFlip] = useState(true);
   const [active, setActive] = useState(false);
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<VideoChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatError, setChatError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -68,7 +85,17 @@ export default function WebRTCPage() {
 
   const requestMedia = async () => {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라와 마이크를 지원하지 않습니다.');
-    if (!streamRef.current) streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    if (!streamRef.current) {
+      try {
+        streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'NotFoundError') {
+          streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } else {
+          throw error;
+        }
+      }
+    }
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
       await videoRef.current.play().catch(() => undefined);
@@ -109,7 +136,7 @@ export default function WebRTCPage() {
     setStatus('다른 인증 회원을 찾는 중');
     setIsMatching(true);
     setActive(true);
-    const queued = await upsertDocument('webrtcQueue', user.id, {
+    const queued = await mergeDocument('webrtcQueue', user.id, {
       userId: user.id,
       name: user.name,
       email: user.email,
@@ -138,6 +165,8 @@ export default function WebRTCPage() {
     setIsConnected(false);
     setHasRemoteVideo(false);
     setPeer(null);
+    setActiveCallId(null);
+    setChatMessages([]);
     setStatus('대기 중');
     connectionRef.current?.close();
     connectionRef.current = null;
@@ -221,65 +250,53 @@ export default function WebRTCPage() {
       try {
         const current = callRef.current;
         if (!current) {
-          let queue: Array<QueueEntry & { id: string }>;
-          try {
-            queue = await listDocuments<QueueEntry>('webrtcQueue', token);
-          } catch (error) {
-            const detail = error instanceof Error ? error.message.slice(0, 180) : '알 수 없는 오류';
-            setPermissionError(`매칭 목록을 불러오지 못했습니다: ${detail}`);
-            setStatus('매칭 서버 확인 실패');
-            return;
+          const ownQueue = await getDocument<QueueEntry>('webrtcQueue', user.id, token).catch(() => null);
+          const makePeer = (profile: TetrisQueueProfile): QueueEntry => ({
+            id: profile.id,
+            userId: profile.id,
+            name: profile.name,
+            email: '',
+            image: profile.image,
+            country: profile.country,
+            lastSeenAt: new Date().toISOString(),
+          });
+          let nextCall: ActiveCall | null = null;
+          if (ownQueue?.status === 'matched' && ownQueue.callId && ownQueue.opponent) {
+            const matchedPeer = makePeer(ownQueue.opponent);
+            nextCall = { callId: ownQueue.callId, peer: matchedPeer, initiator: user.id < matchedPeer.userId };
+          } else {
+            await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
+            const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global' }, token).catch(() => null);
+            if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
-          const threshold = Date.now() - 45_000;
-          const pendingInvite = queue
-            .filter((entry) => entry.userId !== user.id && entry.status === 'matched' && entry.callId?.startsWith(`webrtc-${entry.userId}-${user.id}-`) && new Date(entry.lastSeenAt).getTime() > threshold)
-            .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())[0];
-          const available = queue
-            .filter((entry) => entry.userId !== user.id && entry.status === 'waiting' && new Date(entry.lastSeenAt).getTime() > threshold)
-            .sort((a, b) => new Date(a.lastSeenAt).getTime() - new Date(b.lastSeenAt).getTime());
-          if (pendingInvite) {
-            const nextCall: ActiveCall = { callId: pendingInvite.callId as string, peer: pendingInvite, initiator: false };
-            callRef.current = nextCall;
-            setPeer(pendingInvite);
-            setIsMatching(false);
-            setStatus('상대 연결 요청을 받았습니다');
-            ensureConnection(nextCall);
-            return;
-          }
-          const candidate = available.find((entry) => user.id < entry.userId);
-          if (!candidate) {
-            await upsertDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
+          if (!nextCall) {
             setStatus('다른 인증 회원을 찾는 중');
             return;
           }
-          const callId = `webrtc-${user.id}-${candidate.userId}-${crypto.randomUUID()}`;
-          const nextCall: ActiveCall = { callId, peer: candidate, initiator: user.id < candidate.userId };
           callRef.current = nextCall;
-          setPeer(candidate);
+          setActiveCallId(nextCall.callId);
+          setPeer(nextCall.peer);
           setIsMatching(false);
           setStatus('상대에게 연결을 요청하는 중');
-          await Promise.all([
-            upsertDocument('webrtcQueue', user.id, { status: 'matched', callId, lastSeenAt: new Date() }, token),
-            upsertDocument('webrtcQueue', candidate.userId, { status: 'matched', callId, lastSeenAt: new Date() }, token),
-          ]).catch(() => undefined);
           const connection = ensureConnection(nextCall);
-          const offer = await connection.createOffer();
-          await connection.setLocalDescription(offer);
-          await upsertDocument('webrtcCalls', callId, {
-            callId,
-            callerId: user.id,
-            calleeId: candidate.userId,
-            status: 'offer',
-            offer,
-          }, token);
-          setStatus('상대 응답을 기다리는 중');
+          if (nextCall.initiator) {
+            const offer = await connection.createOffer();
+            await connection.setLocalDescription(offer);
+            await upsertDocument('webrtcCalls', nextCall.callId, { callId: nextCall.callId, callerId: user.id, calleeId: nextCall.peer.userId, status: 'offer', offer }, token);
+            setStatus('상대 응답을 기다리는 중');
+          }
           return;
         }
 
-        await upsertDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
+        await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
         const connection = ensureConnection(current);
         const call = await getDocument<CallDocument>('webrtcCalls', current.callId, token).catch(() => null);
         if (!call) {
+          if (current.initiator) {
+            const offer = await connection.createOffer();
+            await connection.setLocalDescription(offer);
+            await upsertDocument('webrtcCalls', current.callId, { callId: current.callId, callerId: user.id, calleeId: current.peer.userId, status: 'offer', offer }, token);
+          }
           setStatus(current.initiator ? '상대 응답을 기다리는 중' : '연결 정보를 기다리는 중');
           return;
         }
@@ -304,7 +321,7 @@ export default function WebRTCPage() {
           await connection.setRemoteDescription(call.answer);
           answerApplied.current = true;
         }
-        const candidates = await listDocuments<CandidateDocument>('webrtcCandidates', token).catch(() => []);
+        const candidates = await queryDocumentsWhere<CandidateDocument>('webrtcCandidates', [{ field: 'callId', op: 'EQUAL', value: current.callId }], token).catch(() => []);
         if (!connection.remoteDescription) return;
         for (const item of candidates.filter((candidate) => candidate.callId === current.callId && candidate.fromUserId !== user.id)) {
           if (appliedCandidates.current.has(item.id)) continue;
@@ -323,6 +340,38 @@ export default function WebRTCPage() {
       window.clearInterval(timer);
     };
   }, [active, user]);
+
+  useEffect(() => {
+    if (!activeCallId || !user) return;
+    let live = true;
+    const loadChat = async () => {
+      const token = getSessionToken();
+      if (!token) return;
+      await deleteExpiredChatMessages(token, 'webrtcChatMessages').catch(() => undefined);
+      const rows = await queryDocumentsWhere<Omit<VideoChatMessage, 'id'>>('webrtcChatMessages', [
+        { field: 'callId', op: 'EQUAL', value: activeCallId },
+      ], token, 60).catch(() => []);
+      if (live) setChatMessages(rows.filter((row) => new Date(row.expiresAt).getTime() > Date.now()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    };
+    void loadChat();
+    const timer = window.setInterval(() => void loadChat(), 1500);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [activeCallId, user?.id]);
+
+  const sendVideoChat = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!activeCallId || !user || !chatInput.trim()) return;
+    const token = getSessionToken();
+    if (!token) return;
+    setChatError('');
+    const message = { callId: activeCallId, authorId: user.id, user: user.name, text: chatInput.trim(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000) };
+    try {
+      await createDocument('webrtcChatMessages', crypto.randomUUID(), message, token);
+      setChatInput('');
+    } catch {
+      setChatError('화상 채팅을 보내지 못했습니다.');
+    }
+  };
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
@@ -346,8 +395,9 @@ export default function WebRTCPage() {
             <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">브라우저 기본 기능</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />영상은 서버에 저장하지 않고 상대 브라우저로 직접 전송됩니다.</div></section>
             <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 연결 안내</div><p>두 명 이상의 인증 회원이 동시에 대기해야 연결됩니다. 아무도 없으면 실제로 연결될 때까지 대기 상태가 유지됩니다.</p></section>
           </aside>
-        </div>
-      </div>
+         </div>
+         <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-black">화상 채팅</h2><span className="text-[10px] font-bold text-emerald-300">1분 후 자동 삭제</span></div><div className="max-h-48 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">상대와 연결되면 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={message.id} className="rounded-xl bg-white/[0.05] p-3 text-sm"><div className="mb-1 text-[10px] font-bold text-cyan-300">{message.user}</div><div className="break-words text-slate-200">{message.text}</div></div>)}</div>{chatError && <p className="mt-2 text-xs font-bold text-rose-300">{chatError}</p>}{user && activeCallId && <form onSubmit={sendVideoChat} className="mt-3 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="화상 채팅 메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none" /><button className="rounded-xl bg-cyan-400 px-4 text-sm font-black text-slate-950">전송</button></form>}</section>
+       </div>
     </div>
   );
 }
