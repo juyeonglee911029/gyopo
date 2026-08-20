@@ -1,6 +1,13 @@
 import Link from 'next/link';
+import AdSenseSlot from './AdSense';
 
 export default function BannerAd({ type = 'horizontal' }: { type?: 'horizontal' | 'vertical' | 'square' }) {
+  const slot = type === 'horizontal'
+    ? process.env.NEXT_PUBLIC_ADSENSE_SLOT_HORIZONTAL
+    : type === 'vertical'
+      ? process.env.NEXT_PUBLIC_ADSENSE_SLOT_VERTICAL
+      : process.env.NEXT_PUBLIC_ADSENSE_SLOT_SQUARE;
+  if (slot && process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID) return <AdSenseSlot slot={slot} format={type === 'square' ? 'rectangle' : 'auto'} />;
   const baseClasses = "bg-gray-100 border border-gray-200 flex flex-col items-center justify-center relative overflow-hidden rounded-xl shadow-inner group transition-all hover:border-blue-300";
   const textClasses = "text-gray-400 font-bold uppercase tracking-widest text-sm z-10 mb-2";
   
