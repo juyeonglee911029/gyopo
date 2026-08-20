@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type CSSProperties } from 'react';
 import { Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Users } from 'lucide-react';
-import { deleteExpiredChatMessages, getDocument, getSessionToken, listDocuments, listOnlineUsers, OnlineUser, upsertDocument } from '@/lib/firebase';
+import { deleteExpiredChatMessages, getDocument, getSessionToken, listDocuments, listOnlineUsers, OnlineUser, queryDocuments, upsertDocument } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 const WIDTH = 10;
@@ -334,7 +334,11 @@ export default function GamesPage() {
     const token = getSessionToken();
     if (!token) return;
     const pollInvites = async () => {
-      const invites = await listDocuments<TetrisInvite>('tetrisInvites', token).catch(() => []);
+      const [received, sent] = await Promise.all([
+        queryDocuments<TetrisInvite>('tetrisInvites', 'recipientId', user.id, token),
+        queryDocuments<TetrisInvite>('tetrisInvites', 'senderId', user.id, token),
+      ]).catch(() => [[], []] as [TetrisInvite[], TetrisInvite[]]);
+      const invites = [...received, ...sent];
       const pending = invites
         .filter((invite) => invite.recipientId === user.id && invite.status === 'pending' && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
