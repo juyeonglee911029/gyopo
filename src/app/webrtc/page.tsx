@@ -46,6 +46,7 @@ type ActiveCall = {
 };
 
 const stunServers = [
+  { urls: 'stun:stun.cloudflare.com:3478' },
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
@@ -80,6 +81,12 @@ export default function WebRTCPage() {
   const appliedCandidates = useRef(new Set<string>());
   const offerApplied = useRef(false);
   const answerApplied = useRef(false);
+
+  const resetSignalingState = () => {
+    appliedCandidates.current.clear();
+    offerApplied.current = false;
+    answerApplied.current = false;
+  };
 
   useEffect(() => {
     userRef.current = user;
@@ -128,9 +135,7 @@ export default function WebRTCPage() {
       }
       return;
     }
-    appliedCandidates.current.clear();
-    offerApplied.current = false;
-    answerApplied.current = false;
+    resetSignalingState();
     callRef.current = null;
     setPeer(null);
     setIsConnected(false);
@@ -178,6 +183,7 @@ export default function WebRTCPage() {
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     remoteStreamRef.current = null;
     callRef.current = null;
+    resetSignalingState();
     connectionStartedAt.current = null;
     connectedRef.current = false;
     if (token && user) {
@@ -204,7 +210,7 @@ export default function WebRTCPage() {
 
     const ensureConnection = (call: ActiveCall) => {
       if (connectionRef.current) return connectionRef.current;
-      const connection = new RTCPeerConnection({ iceServers: stunServers });
+      const connection = new RTCPeerConnection({ iceServers: stunServers, iceCandidatePoolSize: 10 });
       connectionRef.current = connection;
       streamRef.current?.getTracks().forEach((track) => connection.addTrack(track, streamRef.current as MediaStream));
       connection.onicecandidate = ({ candidate }) => {
@@ -242,6 +248,8 @@ export default function WebRTCPage() {
         }
         if (connection.connectionState === 'failed') {
           connectedRef.current = false;
+          connectionStartedAt.current = Date.now() - 20_001;
+          setIsMatching(true);
           setStatus('연결 실패, 다른 상대를 다시 찾는 중');
         }
         if (connection.connectionState === 'closed') setStatus('연결 종료');
@@ -251,7 +259,11 @@ export default function WebRTCPage() {
         if (connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed') {
           setStatus('상대 영상 연결 중');
         }
-        if (connection.iceConnectionState === 'failed') setStatus('네트워크 연결 실패');
+        if (connection.iceConnectionState === 'failed') {
+          connectionStartedAt.current = Date.now() - 20_001;
+          setIsMatching(true);
+          setStatus('네트워크 연결 실패, 다른 상대를 다시 찾는 중');
+        }
       };
       return connection;
     };
@@ -285,8 +297,9 @@ export default function WebRTCPage() {
             setStatus('다른 인증 회원을 찾는 중');
             return;
           }
-          callRef.current = nextCall;
-          connectionStartedAt.current = Date.now();
+           callRef.current = nextCall;
+           resetSignalingState();
+           connectionStartedAt.current = Date.now();
           connectedRef.current = false;
           setActiveCallId(nextCall.callId);
           setPeer(nextCall.peer);
@@ -308,9 +321,10 @@ export default function WebRTCPage() {
           await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
           await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
           connection.close();
-          connectionRef.current = null;
-          callRef.current = null;
-          connectionStartedAt.current = null;
+           connectionRef.current = null;
+           callRef.current = null;
+           resetSignalingState();
+           connectionStartedAt.current = null;
           connectedRef.current = false;
           setIsConnected(false);
           setActiveCallId(null);
