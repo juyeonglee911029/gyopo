@@ -13,6 +13,9 @@ export const MASTER_EMAIL = 'juyeonglee911029@gmail.com';
 export const MASTER_DEPOSIT_ADDRESS = 'TNg65wc1DnQdyVfUXbRj4rmtfxwdKXGKtX';
 export const MASTER_NETWORK = 'TRX';
 
+export type Gender = 'male' | 'female';
+export type GenderPreference = 'any' | Gender;
+
 export type PortalUser = {
   id: string;
   name: string;
@@ -21,6 +24,8 @@ export type PortalUser = {
   usdtBalance: number;
   isSubscribed: boolean;
   gender?: string;
+  genderPreference?: GenderPreference;
+  premiumExpiresAt?: string;
   age?: number;
   country?: string;
 };
@@ -36,6 +41,8 @@ export type OnlineUser = {
   email: string;
   image: string;
   gender?: string;
+  genderPreference?: GenderPreference;
+  isSubscribed?: boolean;
   age?: number;
   country?: string;
   lastSeenAt: string;
@@ -386,7 +393,15 @@ export async function reviewDepositRequest(requestId: string, status: 'REJECTED'
   if (!response.ok) throw new Error('거절 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
 }
 
-export type TetrisQueueProfile = { id: string; name: string; image: string; country?: string };
+export type TetrisQueueProfile = {
+  id: string;
+  name: string;
+  image: string;
+  country?: string;
+  gender?: string;
+  genderPreference?: GenderPreference;
+  isSubscribed?: boolean;
+};
 export type TetrisMatchClaim = { matchId: string; role: 'A' | 'B'; opponent: TetrisQueueProfile };
 export type WebrtcMatchClaim = { callId: string; opponent: TetrisQueueProfile; initiator: boolean };
 
@@ -411,9 +426,13 @@ function isFreshQueueDocument(row: FirestoreDocument, maxAgeMs: number): boolean
 export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: string): Promise<TetrisMatchClaim | null> {
   const waiting = await getWaitingQueueDocuments('tetrisQueue', token);
   const candidateRow = waiting.find((row) => {
-    const candidate = decodeDocument<{ userId?: string }>(row);
+    const candidate = decodeDocument<TetrisQueueProfile & { userId?: string }>(row);
     const candidateId = candidate.userId || candidate.id;
-    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000);
+    const requesterPreference = profile.genderPreference || 'any';
+    const candidatePreference = candidate.genderPreference || 'any';
+    const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
+    const candidateMatches = candidatePreference === 'any' || profile.gender === candidatePreference;
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
 
@@ -470,7 +489,15 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
   candidate.userId = candidate.userId || candidate.id;
   const callId = `webrtc-${profile.id}-${candidate.userId}-${crypto.randomUUID()}`;
-  const opponent: TetrisQueueProfile = { id: candidate.userId, name: candidate.name, image: candidate.image, country: candidate.country };
+  const opponent: TetrisQueueProfile = {
+    id: candidate.userId,
+    name: candidate.name,
+    image: candidate.image,
+    country: candidate.country,
+    gender: candidate.gender,
+    genderPreference: candidate.genderPreference,
+    isSubscribed: candidate.isSubscribed,
+  };
   const candidateFields = {
     ...(candidateRow.fields || {}),
     ...encodeFields({ status: 'matched', matchedBy: profile.id, callId, opponent: profile, lastSeenAt: new Date(), updatedAt: new Date() }),
@@ -521,6 +548,64 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   }
 }
 
+export async function reserveGenderMatchStake(userId: string, callId: string, amount: number, token?: string): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const stakeId = `gender-${callId}-${userId}`;
+  if (await getRawDocument('genderMatchStakes', stakeId, token)) return;
+  const profileDocument = await getRawDocument('profiles', userId, token);
+  if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
+  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
+  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USDT가 부족합니다.`);
+  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
+  const stakeName = `${firestoreBase}/genderMatchStakes/${encodeURIComponent(stakeId)}`;
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: profileName, fields: { ...(profileDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) } }, currentDocument: { updateTime: profileDocument.updateTime } },
+        { update: { name: stakeName, fields: encodeFields({ userId, callId, amount, createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) {
+    if (await getRawDocument('genderMatchStakes', stakeId, token)) return;
+    throw new Error('성별 매칭 이용료 예약에 실패했습니다. 다시 시도해주세요.');
+  }
+}
+
+export async function purchasePremiumSubscription(userId: string, token?: string): Promise<PortalUser> {
+  const cost = 30;
+  const profileDocument = await getRawDocument('profiles', userId, token);
+  if (!profileDocument?.name || !profileDocument.updateTime) throw new Error('프로필을 찾을 수 없습니다.');
+  const profile = decodeDocument<PortalUser>(profileDocument);
+  const currentExpiry = profile.premiumExpiresAt ? new Date(profile.premiumExpiresAt) : null;
+  if (profile.isSubscribed && (!currentExpiry || currentExpiry.getTime() > Date.now())) return (await refreshStoredUser()) || profile;
+  const currentBalance = Number(profile.usdtBalance || 0);
+  if (currentBalance < cost) throw new Error(`USDT 잔고가 부족합니다. (월정액 ${cost} USDT 필요)`);
+  const nextExpiry = currentExpiry && currentExpiry.getTime() > Date.now() ? new Date(currentExpiry) : new Date();
+  nextExpiry.setUTCMonth(nextExpiry.getUTCMonth() + 1);
+  const subscriptionId = `premium-${userId}-${nextExpiry.toISOString().slice(0, 7)}`;
+  if (await getRawDocument('premiumSubscriptions', subscriptionId, token)) return (await refreshStoredUser()) || profile;
+  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
+  const subscriptionName = `${firestoreBase}/premiumSubscriptions/${encodeURIComponent(subscriptionId)}`;
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: profileName, fields: { ...(profileDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - cost), isSubscribed: toFirestoreValue(true), premiumExpiresAt: toFirestoreValue(nextExpiry), updatedAt: toFirestoreValue(new Date()) } }, currentDocument: { updateTime: profileDocument.updateTime } },
+        { update: { name: subscriptionName, fields: encodeFields({ userId, amount: cost, startedAt: new Date(), expiresAt: nextExpiry, status: 'ACTIVE' }) }, currentDocument: { exists: false } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) {
+    if (await getRawDocument('premiumSubscriptions', subscriptionId, token)) return (await refreshStoredUser()) || profile;
+    throw new Error('프리미엄 결제 처리 중 서버 원장 충돌이 발생했습니다. 잔고를 확인해주세요.');
+  }
+  return (await refreshStoredUser()) || { ...profile, usdtBalance: currentBalance - cost, isSubscribed: true, premiumExpiresAt: nextExpiry.toISOString() };
+}
+
 export async function reserveEscrowPurchase(
   buyerId: string,
   productId: string,
@@ -567,7 +652,9 @@ export async function refreshStoredUser(): Promise<PortalUser | null> {
   if (!session) return null;
   const profile = await getDocument<PortalUser>('profiles', session.user.id, session.idToken).catch(() => null);
   if (!profile) return session.user;
-  const user = { ...session.user, ...profile, id: session.user.id };
+  const premiumExpiresAt = profile.premiumExpiresAt || session.user.premiumExpiresAt;
+  const isSubscribed = Boolean(profile.isSubscribed && (!premiumExpiresAt || new Date(premiumExpiresAt).getTime() > Date.now()));
+  const user = { ...session.user, ...profile, id: session.user.id, isSubscribed, premiumExpiresAt };
   if (typeof window !== 'undefined') window.localStorage.setItem(sessionKey, JSON.stringify({ ...session, user }));
   return user;
 }
@@ -612,6 +699,8 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     usdtBalance: Number(savedProfile?.usdtBalance || 0),
     isSubscribed: Boolean(savedProfile?.isSubscribed),
     gender: savedProfile?.gender,
+    genderPreference: savedProfile?.genderPreference,
+    premiumExpiresAt: savedProfile?.premiumExpiresAt,
     age: savedProfile?.age,
     country: savedProfile?.country,
   };
@@ -622,6 +711,9 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     image: user.image,
     usdtBalance: user.usdtBalance,
     isSubscribed: user.isSubscribed,
+    ...(user.gender ? { gender: user.gender } : {}),
+    ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
+    ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
     updatedAt: new Date(),
   }, result.idToken);
   await upsertDocument('publicProfiles', user.id, {
@@ -629,6 +721,9 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     email: user.email,
     image: user.image,
     country: user.country || 'Global',
+    gender: user.gender || '',
+    genderPreference: user.genderPreference || 'any',
+    isSubscribed: Boolean(user.isSubscribed),
     updatedAt: new Date(),
   }, result.idToken);
   return user;
@@ -642,6 +737,8 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     usdtBalance: Number(user.usdtBalance || 0),
     isSubscribed: Boolean(user.isSubscribed),
     ...(user.gender ? { gender: user.gender } : {}),
+    ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
+    ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
     ...(user.age ? { age: user.age } : {}),
     ...(user.country ? { country: user.country } : {}),
     updatedAt: new Date(),
