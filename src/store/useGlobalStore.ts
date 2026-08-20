@@ -13,6 +13,8 @@ export type Transaction = {
 interface GlobalState {
   selectedCountry: string;
   setSelectedCountry: (country: string) => void;
+  darkMode: boolean;
+  setDarkMode: (enabled: boolean) => void;
   
   user: PortalUser | null;
   setUser: (user: GlobalState['user']) => void;
@@ -26,6 +28,8 @@ interface GlobalState {
 export const useGlobalStore = create<GlobalState>((set) => ({
   selectedCountry: 'Global',
   setSelectedCountry: (country) => set({ selectedCountry: country }),
+  darkMode: false,
+  setDarkMode: (enabled) => set({ darkMode: enabled }),
   
   user: null,
   setUser: (user) => set({ user }),
