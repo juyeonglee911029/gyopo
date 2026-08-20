@@ -15,7 +15,7 @@ const services = [
   { href: '/market', label: '에스크로 장터', detail: '안전한 거래를 시작하세요', icon: ShoppingBag, color: 'text-amber-300', bg: 'bg-amber-300/10' },
   { href: '/directory', label: '한인 업소록', detail: '검증된 로컬 비즈니스', icon: Store, color: 'text-emerald-300', bg: 'bg-emerald-300/10' },
   { href: '/community', label: '커뮤니티', detail: '지금 필요한 이야기를 나눠요', icon: Megaphone, color: 'text-violet-300', bg: 'bg-violet-300/10' },
-  { href: '/webrtc', label: '랜덤 화상채팅', detail: '실제 접속 회원과 바로 연결', icon: Video, color: 'text-rose-300', bg: 'bg-rose-300/10' },
+  { href: '/webrtc', label: '랜덤 화상채팅', detail: '접속 회원과 바로 연결', icon: Video, color: 'text-rose-300', bg: 'bg-rose-300/10' },
 ];
 
 const typeLabels: Record<string, string> = { notice: '공지', news: '뉴스', free: '자유' };
