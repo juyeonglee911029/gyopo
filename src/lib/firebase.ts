@@ -561,6 +561,16 @@ export function getStoredSession(): StoredSession | null {
   }
 }
 
+export async function refreshStoredUser(): Promise<PortalUser | null> {
+  const session = getStoredSession();
+  if (!session) return null;
+  const profile = await getDocument<PortalUser>('profiles', session.user.id, session.idToken).catch(() => null);
+  if (!profile) return session.user;
+  const user = { ...session.user, ...profile, id: session.user.id };
+  if (typeof window !== 'undefined') window.localStorage.setItem(sessionKey, JSON.stringify({ ...session, user }));
+  return user;
+}
+
 export function getSessionToken(): string | undefined {
   return getStoredSession()?.idToken;
 }
