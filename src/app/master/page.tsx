@@ -28,7 +28,7 @@ export default function MasterPage() {
       listDocuments<RequestRow>('withdrawalRequests', token).catch(() => []),
       listDocuments<WalletSettings>('adminSettings', token).catch(() => []),
     ]);
-    const wallet = nextSettings.find((item) => item.id === 'wallet') || { network: 'USDT-TRC20' };
+    const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { network: 'USDT-TRC20' };
     setProfiles(nextProfiles);
     setDeposits(nextDeposits.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setWithdrawals(nextWithdrawals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
