@@ -214,7 +214,6 @@ export default function GamesPage() {
       if (event.key === 'ArrowDown') { event.preventDefault(); dispatch({ type: 'MOVE', dx: 0, dy: 1 }); }
       if (event.key === 'ArrowUp') { event.preventDefault(); dispatch({ type: 'ROTATE' }); }
       if (event.key.toLowerCase() === 'c') { event.preventDefault(); dispatch({ type: 'ROTATE' }); }
-      if (event.key === 'Tab') { event.preventDefault(); dispatch({ type: 'SWAP_NEXT' }); }
       if (event.key === ' ') { event.preventDefault(); dispatch({ type: 'DROP' }); }
     };
     window.addEventListener('keydown', onKey);
