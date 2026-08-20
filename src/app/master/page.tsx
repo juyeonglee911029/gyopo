@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { CheckCircle2, LockKeyhole, RefreshCcw, Save, ShieldAlert, WalletCards } from 'lucide-react';
-import { approveDepositRequest, getSessionToken, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, type PortalUser } from '@/lib/firebase';
+import { approveDepositRequest, approveTransferRequest, getSessionToken, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, reviewTransferRequest, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string };
+type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number };
 type WalletSettings = { depositAddress?: string; network?: string; updatedAt?: string };
 
 export default function MasterPage() {
@@ -13,6 +13,7 @@ export default function MasterPage() {
   const [profiles, setProfiles] = useState<Array<PortalUser & { id: string }>>([]);
   const [deposits, setDeposits] = useState<RequestRow[]>([]);
   const [withdrawals, setWithdrawals] = useState<RequestRow[]>([]);
+  const [transfers, setTransfers] = useState<RequestRow[]>([]);
   const [settings, setSettings] = useState<WalletSettings>({ depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK });
   const [address, setAddress] = useState(MASTER_DEPOSIT_ADDRESS);
   const [loading, setLoading] = useState(true);
@@ -23,16 +24,18 @@ export default function MasterPage() {
     const token = getSessionToken();
     if (!token || !isMasterUser(user)) return;
     setLoading(true);
-    const [nextProfiles, nextDeposits, nextWithdrawals, nextSettings] = await Promise.all([
+    const [nextProfiles, nextDeposits, nextWithdrawals, nextTransfers, nextSettings] = await Promise.all([
       listDocuments<PortalUser>('profiles', token).catch(() => []),
       listDocuments<RequestRow>('depositRequests', token).catch(() => []),
       listDocuments<RequestRow>('withdrawalRequests', token).catch(() => []),
+      listDocuments<RequestRow>('transferRequests', token).catch(() => []),
       listDocuments<WalletSettings>('adminSettings', token).catch(() => []),
     ]);
     const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK };
     setProfiles(nextProfiles);
     setDeposits(nextDeposits.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setWithdrawals(nextWithdrawals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
+    setTransfers(nextTransfers.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setSettings({ ...wallet, network: MASTER_NETWORK });
     setAddress(wallet.depositAddress || MASTER_DEPOSIT_ADDRESS);
     setLoading(false);
@@ -91,6 +94,32 @@ export default function MasterPage() {
       await load();
     }
   };
+  const approveTransfer = async (request: RequestRow) => {
+    if (!token || request.status !== 'PENDING') return;
+    setSavingAction(request.id);
+    try {
+      await approveTransferRequest(request.id, user?.email || MASTER_EMAIL, token);
+      setMessage('송금 승인 및 양쪽 회원 잔고 반영이 완료되었습니다.');
+    } catch (error) {
+      setMessage(error instanceof Error ? `송금 승인 실패: ${error.message.slice(0, 120)}` : '송금 승인에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+      await load();
+    }
+  };
+  const rejectTransfer = async (request: RequestRow) => {
+    if (!token || request.status !== 'PENDING') return;
+    setSavingAction(request.id);
+    try {
+      await reviewTransferRequest(request.id, 'REJECTED', user?.email || MASTER_EMAIL, token);
+      setMessage('송금 신청을 거절했습니다.');
+    } catch (error) {
+      setMessage(error instanceof Error ? `송금 거절 실패: ${error.message.slice(0, 120)}` : '송금 거절에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+      await load();
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 text-slate-900 dark:text-white">
@@ -99,7 +128,8 @@ export default function MasterPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><div className="mb-4 flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-black"><WalletCards size={19} className="text-cyan-400" /> 회원 잔고 순위</h2><span className="text-xs text-slate-500">{loading ? '동기화 중...' : '서버 기준'}</span></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-slate-200 text-xs text-slate-500 dark:border-white/10"><tr><th className="p-3">순위</th><th className="p-3">회원</th><th className="p-3">이메일</th><th className="p-3">가입 정보</th><th className="p-3 text-right">USDT</th></tr></thead><tbody>{[...profiles].sort((a, b) => Number(b.usdtBalance || 0) - Number(a.usdtBalance || 0)).map((profile, index) => <tr key={profile.id} className="border-b border-slate-100 dark:border-white/5"><td className="p-3 font-black text-amber-500">#{index + 1}</td><td className="p-3"><div className="flex items-center gap-2"><img src={profile.image} alt="" className="h-8 w-8 rounded-full" /><span className="font-bold">{profile.name}</span></div></td><td className="p-3 text-slate-500">{profile.email}</td><td className="p-3 text-slate-500">{profile.country || 'Global'} · {profile.gender || '미설정'}</td><td className="p-3 text-right font-black text-emerald-500">{Number(profile.usdtBalance || 0).toFixed(2)}</td></tr>)}</tbody></table></div></section>
         <aside className="space-y-6"><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 flex items-center gap-2 font-black"><LockKeyhole size={17} className="text-amber-400" /> TRON 입금 지갑</h2><p className="mb-3 text-xs leading-5 text-slate-500">회원은 이 서버 주소를 읽기만 합니다. 브라우저 localStorage 주소는 사용하지 않습니다.</p><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="T... 마스터 지갑 주소" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20" /><button onClick={() => void saveSettings()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950"><Save size={16} /> 설정 저장</button>{message && <p className="mt-3 text-xs font-bold text-emerald-500">{message}</p>}</section><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 flex items-center gap-2 font-black"><CheckCircle2 size={17} className="text-emerald-400" /> 입금 신청</h2><div className="space-y-2">{deposits.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5"><div className="flex justify-between font-bold"><span>{request.userId.slice(0, 10)}...</span><span>{request.amount} USDT</span></div><p className="mt-1 break-all text-[10px] text-slate-500">{request.network || 'USDT-TRC20'} · {request.depositAddress || '서버 주소'}</p><div className="mt-2 flex gap-2"><button onClick={() => void approveDeposit(request)} className="flex-1 rounded-lg bg-emerald-500 py-2 text-xs font-black text-white">승인</button><button onClick={() => void updateRequest('depositRequests', request, 'REJECTED')} className="flex-1 rounded-lg border border-red-200 py-2 text-xs font-black text-red-500">거절</button></div></div>)}{deposits.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 입금 신청이 없습니다.</p>}</div></section><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 font-black">출금 승인</h2><div className="space-y-2">{withdrawals.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5"><div className="flex justify-between font-bold"><span>{request.userId.slice(0, 10)}...</span><span>{request.amount} USDT</span></div><p className="mt-1 break-all text-[10px] text-slate-500">{request.targetAddress || '주소 없음'}</p><button onClick={() => void updateRequest('withdrawalRequests', request, 'APPROVED')} className="mt-2 w-full rounded-lg bg-cyan-500 py-2 text-xs font-black text-white">승인 처리</button></div>)}{withdrawals.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 출금 신청이 없습니다.</p>}</div></section></aside>
-      </div>
-    </div>
+       </div>
+       <section className="mt-6 rounded-3xl border border-orange-200 bg-white p-5 shadow-sm dark:border-orange-300/20 dark:bg-[#10182b]"><div className="mb-4 flex items-center justify-between"><h2 className="font-black">회원 송금 신청</h2><span className="text-xs text-slate-500">{transfers.filter((item) => item.status === 'PENDING').length}건 대기</span></div><div className="grid gap-3 md:grid-cols-2">{transfers.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-orange-50 p-4 text-sm dark:bg-orange-300/10"><div className="flex items-center justify-between font-black"><span>{request.amount} USDT</span><span className="text-xs text-orange-600">수수료 {request.fee || 0} USDT</span></div><p className="mt-2 break-all text-xs text-slate-500">보내는 회원: {request.senderId}</p><p className="break-all text-xs text-slate-500">받는 회원: {request.recipientId}</p><div className="mt-3 flex gap-2"><button disabled={savingAction === request.id} onClick={() => void approveTransfer(request)} className="flex-1 rounded-xl bg-emerald-500 py-2 text-xs font-black text-white disabled:opacity-50">승인</button><button disabled={savingAction === request.id} onClick={() => void rejectTransfer(request)} className="flex-1 rounded-xl border border-rose-200 py-2 text-xs font-black text-rose-600 disabled:opacity-50">거절</button></div></div>)}{transfers.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 송금 신청이 없습니다.</p>}</div></section>
+     </div>
   );
 }
