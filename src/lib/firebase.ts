@@ -417,7 +417,8 @@ async function getWaitingQueueDocuments(collection: string, token?: string): Pro
     // The collection read below keeps matching alive when a REST query briefly fails.
   }
   const response = await authenticatedFetch(`${firestoreBase}/${collection}`, {}, token);
-  if (!response.ok) return [];
+  if (response.status === 404) return [];
+  if (!response.ok) throw new Error('화상 매칭 대기열에 연결하지 못했습니다.');
   const data = (await response.json()) as { documents?: FirestoreDocument[] };
   return (data.documents || []).filter((row) => fromFirestoreValue(row.fields?.status) === 'waiting');
 }
