@@ -34,7 +34,7 @@ export default function Header() {
             <span className="leading-none"><span className="font-display block text-[15px] font-extrabold tracking-[.18em] text-white">GYOPO</span><span className="mt-1 block text-[8px] font-bold tracking-[.22em] text-slate-500">GLOBAL NETWORK</span></span>
           </Link>
           
-          <nav className="hidden xl:flex space-x-5 text-sm font-semibold text-slate-400">
+          <nav className="hidden 2xl:flex space-x-4 whitespace-nowrap text-sm font-semibold text-slate-400">
             <Link href="/jobs" className="hover:text-teal-300 transition-colors">구인구직</Link>
             <Link href="/directory" className="hover:text-teal-300 transition-colors">업소록</Link>
             <Link href="/market" className="hover:text-teal-300 transition-colors">에스크로장터</Link>
