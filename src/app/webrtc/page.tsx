@@ -74,6 +74,8 @@ export default function WebRTCPage() {
   const connectionRef = useRef<RTCPeerConnection | null>(null);
   const callRef = useRef<ActiveCall | null>(null);
   const pollingRef = useRef(false);
+  const connectionStartedAt = useRef<number | null>(null);
+  const connectedRef = useRef(false);
   const userRef = useRef(user);
   const appliedCandidates = useRef(new Set<string>());
   const offerApplied = useRef(false);
@@ -176,9 +178,11 @@ export default function WebRTCPage() {
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     remoteStreamRef.current = null;
     callRef.current = null;
+    connectionStartedAt.current = null;
+    connectedRef.current = false;
     if (token && user) {
       await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
-      if (currentCall) await upsertDocument('webrtcCalls', currentCall.callId, { status: 'ended' }, token).catch(() => undefined);
+      if (currentCall) await mergeDocument('webrtcCalls', currentCall.callId, { status: 'ended' }, token).catch(() => undefined);
     }
   };
 
@@ -226,12 +230,20 @@ export default function WebRTCPage() {
         if (connection.connectionState === 'connecting') setStatus('보안 연결을 설정하는 중');
         if (connection.connectionState === 'connected') {
           setIsConnected(true);
+          connectedRef.current = true;
           setIsMatching(false);
+          connectionStartedAt.current = null;
           setStatus('연결 성공');
-          void upsertDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
+          void mergeDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
         }
-        if (connection.connectionState === 'disconnected') setStatus('연결이 불안정합니다');
-        if (connection.connectionState === 'failed') setStatus('연결 실패, 다시 시도해주세요');
+        if (connection.connectionState === 'disconnected') {
+          connectedRef.current = false;
+          setStatus('연결이 불안정합니다');
+        }
+        if (connection.connectionState === 'failed') {
+          connectedRef.current = false;
+          setStatus('연결 실패, 다른 상대를 다시 찾는 중');
+        }
         if (connection.connectionState === 'closed') setStatus('연결 종료');
       };
       connection.oniceconnectionstatechange = () => {
@@ -274,6 +286,8 @@ export default function WebRTCPage() {
             return;
           }
           callRef.current = nextCall;
+          connectionStartedAt.current = Date.now();
+          connectedRef.current = false;
           setActiveCallId(nextCall.callId);
           setPeer(nextCall.peer);
           setIsMatching(false);
@@ -282,7 +296,7 @@ export default function WebRTCPage() {
           if (nextCall.initiator) {
             const offer = await connection.createOffer();
             await connection.setLocalDescription(offer);
-            await upsertDocument('webrtcCalls', nextCall.callId, { callId: nextCall.callId, callerId: user.id, calleeId: nextCall.peer.userId, status: 'offer', offer }, token);
+            await mergeDocument('webrtcCalls', nextCall.callId, { callId: nextCall.callId, callerId: user.id, calleeId: nextCall.peer.userId, status: 'offer', offer }, token);
             setStatus('상대 응답을 기다리는 중');
           }
           return;
@@ -290,12 +304,27 @@ export default function WebRTCPage() {
 
         await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
         const connection = ensureConnection(current);
+        if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 20_000) {
+          await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
+          await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+          connection.close();
+          connectionRef.current = null;
+          callRef.current = null;
+          connectionStartedAt.current = null;
+          connectedRef.current = false;
+          setIsConnected(false);
+          setActiveCallId(null);
+          setPeer(null);
+          setIsMatching(true);
+          setStatus('연결 시간이 초과되어 다른 상대를 다시 찾는 중');
+          return;
+        }
         const call = await getDocument<CallDocument>('webrtcCalls', current.callId, token).catch(() => null);
         if (!call) {
           if (current.initiator) {
             const offer = await connection.createOffer();
             await connection.setLocalDescription(offer);
-            await upsertDocument('webrtcCalls', current.callId, { callId: current.callId, callerId: user.id, calleeId: current.peer.userId, status: 'offer', offer }, token);
+            await mergeDocument('webrtcCalls', current.callId, { callId: current.callId, callerId: user.id, calleeId: current.peer.userId, status: 'offer', offer }, token);
           }
           setStatus(current.initiator ? '상대 응답을 기다리는 중' : '연결 정보를 기다리는 중');
           return;
@@ -315,7 +344,7 @@ export default function WebRTCPage() {
           offerApplied.current = true;
           const answer = await connection.createAnswer();
           await connection.setLocalDescription(answer);
-          await upsertDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
+          await mergeDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
         }
         if (current.initiator && call.answer && !answerApplied.current) {
           await connection.setRemoteDescription(call.answer);
@@ -334,7 +363,7 @@ export default function WebRTCPage() {
     };
 
     void poll();
-    const timer = window.setInterval(() => void poll(), 1800);
+    const timer = window.setInterval(() => void poll(), 700);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
