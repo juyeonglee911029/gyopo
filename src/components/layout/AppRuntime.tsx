@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { getStoredSession, recordVisit } from '@/lib/firebase';
+import { getStoredSession, recordVisit, refreshStoredUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 export default function AppRuntime({ children }: { children: React.ReactNode }) {
@@ -28,6 +28,16 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     }, 20_000);
     return () => window.clearInterval(heartbeat);
   }, [selectedCountry, setUser]);
+
+  useEffect(() => {
+    const refresh = async () => {
+      const user = await refreshStoredUser();
+      if (user) setUser(user);
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [setUser]);
 
   return children;
 }
