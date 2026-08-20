@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Send, Users } from 'lucide-react';
-import { deleteExpiredChatMessages, getOnlineCount, getSessionToken, listDocuments, upsertDocument } from '@/lib/firebase';
+import { createDocument, deleteExpiredChatMessages, getOnlineCount, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { usePathname } from 'next/navigation';
 
@@ -38,7 +38,7 @@ export default function GlobalChat() {
           await deleteExpiredChatMessages(token);
         }
         const [nextMessages, nextOnlineCount] = await Promise.all([
-          listDocuments<Omit<ChatMessage, 'id'>>('chatMessages', token),
+          queryDocumentsWhere<Omit<ChatMessage, 'id'>>('chatMessages', [{ field: 'expiresAt', op: 'GREATER_THAN', value: new Date() }], token, 100),
           getOnlineCount(),
         ]);
         if (!active) return;
@@ -73,11 +73,11 @@ export default function GlobalChat() {
       country: selectedCountry === 'Global' ? 'Global' : selectedCountry,
       text: input.trim(),
       createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 3 * 60 * 1000),
+       expiresAt: new Date(Date.now() + 60 * 1000),
     };
     try {
       const id = crypto.randomUUID();
-      await upsertDocument('chatMessages', id, message, token);
+      await createDocument('chatMessages', id, message, token);
       setMessages((current) => [...current, { ...message, id }].slice(-100));
       setInput('');
     } catch {
