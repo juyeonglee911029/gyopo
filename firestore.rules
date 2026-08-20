@@ -1,10 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isMaster() {
+      return request.auth != null && request.auth.token.email == 'juyeonglee911029@gmail.com';
+    }
     match /posts/{postId} {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+      allow update: if request.auth != null && (
+        resource.data.authorId == request.auth.uid ||
+        (request.resource.data.authorId == resource.data.authorId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']))
+      );
+      allow delete: if request.auth != null && resource.data.authorId == request.auth.uid;
     }
     match /comments/{commentId} {
       allow read: if true;
@@ -37,14 +44,53 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if request.auth != null && resource.data.expiresAt != null && request.time >= resource.data.expiresAt;
     }
+    match /tetrisChatMessages/{messageId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.expiresAt != null && request.time >= resource.data.expiresAt;
+    }
+    match /webrtcChatMessages/{messageId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.expiresAt != null && request.time >= resource.data.expiresAt;
+    }
     match /depositRequests/{requestId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if isMaster();
+      allow delete: if false;
     }
     match /profiles/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
+      allow create, update, delete: if request.auth != null && (request.auth.uid == userId || isMaster());
+    }
+    match /publicProfiles/{userId} {
+      allow read: if request.auth != null;
       allow create, update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+    match /withdrawalRequests/{requestId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if isMaster();
+      allow delete: if false;
+    }
+    match /transferRequests/{requestId} {
+      allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
+      allow update: if isMaster();
+      allow delete: if false;
+    }
+    match /escrowOrders/{orderId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.buyerId == request.auth.uid;
+      allow update: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
+      allow delete: if false;
+    }
+    match /adminSettings/{settingId} {
+      allow read: if true;
+      allow write: if isMaster();
     }
     match /stats/{statId} {
       allow read, create, update: if true;
@@ -70,6 +116,20 @@ service cloud.firestore {
     match /tetrisLobby/{lobbyId} {
       allow read, create, update: if request.auth != null;
       allow delete: if false;
+    }
+    match /tetrisQueue/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId ||
+        (resource.data.status == 'waiting' && request.resource.data.status == 'matched' && request.resource.data.matchedBy == request.auth.uid)
+      );
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    match /gameStakes/{stakeId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount == 1;
+      allow update, delete: if false;
     }
     match /tetrisInvites/{inviteId} {
       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
