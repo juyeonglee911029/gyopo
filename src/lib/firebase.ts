@@ -34,10 +34,6 @@ export function isMasterUser(user?: Pick<PortalUser, 'email'> | null): boolean {
   return user?.email?.toLowerCase() === MASTER_EMAIL;
 }
 
-export function formatUsdtAmount(value: number): string {
-  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 export type OnlineUser = {
   id: string;
   userId: string;
@@ -397,6 +393,59 @@ export async function reviewDepositRequest(requestId: string, status: 'REJECTED'
   if (!response.ok) throw new Error('거절 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
 }
 
+export async function approveTransferRequest(requestId: string, reviewedBy: string, token?: string): Promise<void> {
+  const requestDocument = await getRawDocument('transferRequests', requestId, token);
+  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('송금 신청을 찾을 수 없습니다.');
+  const request = decodeDocument<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string }>(requestDocument);
+  if (request.status !== 'PENDING') throw new Error('이미 처리된 송금 신청입니다.');
+  if (!request.senderId || !request.recipientId || request.senderId === request.recipientId) throw new Error('송금 회원 정보가 올바르지 않습니다.');
+  const amount = Number(request.amount || 0);
+  const fee = Number(request.fee || 0);
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(fee) || fee < 0) throw new Error('송금 금액이 올바르지 않습니다.');
+  const [senderDocument, recipientDocument] = await Promise.all([
+    getRawDocument('profiles', request.senderId, token),
+    getRawDocument('profiles', request.recipientId, token),
+  ]);
+  if (!senderDocument?.name || !senderDocument.updateTime) throw new Error('보내는 회원 지갑을 찾을 수 없습니다.');
+  if (!recipientDocument?.name || !recipientDocument.updateTime) throw new Error('받는 회원 지갑을 찾을 수 없습니다.');
+  const senderBalance = Number(fromFirestoreValue(senderDocument.fields?.usdtBalance) || 0);
+  if (senderBalance < amount + fee) throw new Error(`보내는 회원 잔고가 부족합니다. ${amount + fee} USDT가 필요합니다.`);
+  const recipientBalance = Number(fromFirestoreValue(recipientDocument.fields?.usdtBalance) || 0);
+  const requestFields = { ...(requestDocument.fields || {}), ...encodeFields({ status: 'APPROVED', reviewedAt: new Date(), reviewedBy }) };
+  const senderFields = { ...(senderDocument.fields || {}), ...encodeFields({ usdtBalance: senderBalance - amount - fee, updatedAt: new Date() }) };
+  const recipientFields = { ...(recipientDocument.fields || {}), ...encodeFields({ usdtBalance: recipientBalance + amount, updatedAt: new Date() }) };
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: senderDocument.name, fields: senderFields }, currentDocument: { updateTime: senderDocument.updateTime } },
+        { update: { name: recipientDocument.name, fields: recipientFields }, currentDocument: { updateTime: recipientDocument.updateTime } },
+        { update: { name: requestDocument.name, fields: requestFields }, currentDocument: { updateTime: requestDocument.updateTime } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('송금 원장 충돌이 발생했습니다. 목록을 새로고침하고 다시 승인해주세요.');
+}
+
+export async function reviewTransferRequest(requestId: string, status: 'REJECTED', reviewedBy: string, token?: string): Promise<void> {
+  const requestDocument = await getRawDocument('transferRequests', requestId, token);
+  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('송금 신청을 찾을 수 없습니다.');
+  const request = decodeDocument<{ status?: string }>(requestDocument);
+  if (request.status !== 'PENDING') throw new Error('이미 처리된 송금 신청입니다.');
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [{
+        update: { name: requestDocument.name, fields: { ...(requestDocument.fields || {}), ...encodeFields({ status, reviewedAt: new Date(), reviewedBy }) } },
+        currentDocument: { updateTime: requestDocument.updateTime },
+      }],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('송금 거절 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
+}
+
 export type TetrisQueueProfile = {
   id: string;
   name: string;
@@ -417,8 +466,7 @@ async function getWaitingQueueDocuments(collection: string, token?: string): Pro
     // The collection read below keeps matching alive when a REST query briefly fails.
   }
   const response = await authenticatedFetch(`${firestoreBase}/${collection}`, {}, token);
-  if (response.status === 404) return [];
-  if (!response.ok) throw new Error('화상 매칭 대기열에 연결하지 못했습니다.');
+  if (!response.ok) return [];
   const data = (await response.json()) as { documents?: FirestoreDocument[] };
   return (data.documents || []).filter((row) => fromFirestoreValue(row.fields?.status) === 'waiting');
 }
@@ -431,13 +479,9 @@ function isFreshQueueDocument(row: FirestoreDocument, maxAgeMs: number): boolean
 export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: string): Promise<TetrisMatchClaim | null> {
   const waiting = await getWaitingQueueDocuments('tetrisQueue', token);
   const candidateRow = waiting.find((row) => {
-    const candidate = decodeDocument<TetrisQueueProfile & { userId?: string }>(row);
+    const candidate = decodeDocument<{ userId?: string }>(row);
     const candidateId = candidate.userId || candidate.id;
-    const requesterPreference = profile.genderPreference || 'any';
-    const candidatePreference = candidate.genderPreference || 'any';
-    const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
-    const candidateMatches = candidatePreference === 'any' || profile.gender === candidatePreference;
-    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches;
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000);
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
 
@@ -486,9 +530,13 @@ export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: stri
 export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: string): Promise<WebrtcMatchClaim | null> {
   const waiting = await getWaitingQueueDocuments('webrtcQueue', token);
   const candidateRow = waiting.find((row) => {
-    const candidate = decodeDocument<{ userId?: string }>(row);
+    const candidate = decodeDocument<TetrisQueueProfile & { userId?: string }>(row);
     const candidateId = candidate.userId || candidate.id;
-    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000);
+    const requesterPreference = profile.genderPreference || 'any';
+    const candidatePreference = candidate.genderPreference || 'any';
+    const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
+    const candidateMatches = candidatePreference === 'any' || profile.gender === candidatePreference;
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
@@ -518,10 +566,7 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
       ],
     }),
   }, token);
-  if (!response.ok) {
-    if (response.status === 409 || response.status === 412) return null;
-    throw new Error('화상 매칭 서버에 연결하지 못했습니다.');
-  }
+  if (!response.ok) return null;
   return { callId, opponent, initiator: profile.id < candidate.userId };
 }
 
@@ -532,7 +577,7 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   const profileDocument = await getRawDocument('profiles', userId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`게임 참가비 ${formatUsdtAmount(amount)} USDT가 부족합니다.`);
+  if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USDT가 부족합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
   const stakeName = `${firestoreBase}/gameStakes/${encodeURIComponent(stakeId)}`;
   const profileFields = {
@@ -563,7 +608,7 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
   const profileDocument = await getRawDocument('profiles', userId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${formatUsdtAmount(amount)} USDT가 부족합니다.`);
+  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USDT가 부족합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
   const stakeName = `${firestoreBase}/genderMatchStakes/${encodeURIComponent(stakeId)}`;
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
@@ -571,8 +616,20 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       writes: [
-        { update: { name: profileName, fields: { ...(profileDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) } }, currentDocument: { updateTime: profileDocument.updateTime } },
-        { update: { name: stakeName, fields: encodeFields({ userId, callId, amount, createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
+        {
+          update: {
+            name: profileName,
+            fields: { ...(profileDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) },
+          },
+          currentDocument: { updateTime: profileDocument.updateTime },
+        },
+        {
+          update: {
+            name: stakeName,
+            fields: encodeFields({ userId, callId, amount, createdAt: new Date(), status: 'RESERVED' }),
+          },
+          currentDocument: { exists: false },
+        },
       ],
     }),
   }, token);
@@ -588,7 +645,9 @@ export async function purchasePremiumSubscription(userId: string, token?: string
   if (!profileDocument?.name || !profileDocument.updateTime) throw new Error('프로필을 찾을 수 없습니다.');
   const profile = decodeDocument<PortalUser>(profileDocument);
   const currentExpiry = profile.premiumExpiresAt ? new Date(profile.premiumExpiresAt) : null;
-  if (profile.isSubscribed && (!currentExpiry || currentExpiry.getTime() > Date.now())) return (await refreshStoredUser()) || profile;
+  if (profile.isSubscribed && (!currentExpiry || currentExpiry.getTime() > Date.now())) {
+    return (await refreshStoredUser()) || profile;
+  }
   const currentBalance = Number(profile.usdtBalance || 0);
   if (currentBalance < cost) throw new Error(`USDT 잔고가 부족합니다. (월정액 ${cost} USDT 필요)`);
   const nextExpiry = currentExpiry && currentExpiry.getTime() > Date.now() ? new Date(currentExpiry) : new Date();
@@ -602,8 +661,26 @@ export async function purchasePremiumSubscription(userId: string, token?: string
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       writes: [
-        { update: { name: profileName, fields: { ...(profileDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - cost), isSubscribed: toFirestoreValue(true), premiumExpiresAt: toFirestoreValue(nextExpiry), updatedAt: toFirestoreValue(new Date()) } }, currentDocument: { updateTime: profileDocument.updateTime } },
-        { update: { name: subscriptionName, fields: encodeFields({ userId, amount: cost, startedAt: new Date(), expiresAt: nextExpiry, status: 'ACTIVE' }) }, currentDocument: { exists: false } },
+        {
+          update: {
+            name: profileName,
+            fields: {
+              ...(profileDocument.fields || {}),
+              usdtBalance: toFirestoreValue(currentBalance - cost),
+              isSubscribed: toFirestoreValue(true),
+              premiumExpiresAt: toFirestoreValue(nextExpiry),
+              updatedAt: toFirestoreValue(new Date()),
+            },
+          },
+          currentDocument: { updateTime: profileDocument.updateTime },
+        },
+        {
+          update: {
+            name: subscriptionName,
+            fields: encodeFields({ userId, amount: cost, startedAt: new Date(), expiresAt: nextExpiry, status: 'ACTIVE' }),
+          },
+          currentDocument: { exists: false },
+        },
       ],
     }),
   }, token);
@@ -611,7 +688,12 @@ export async function purchasePremiumSubscription(userId: string, token?: string
     if (await getRawDocument('premiumSubscriptions', subscriptionId, token)) return (await refreshStoredUser()) || profile;
     throw new Error('프리미엄 결제 처리 중 서버 원장 충돌이 발생했습니다. 잔고를 확인해주세요.');
   }
-  return (await refreshStoredUser()) || { ...profile, usdtBalance: currentBalance - cost, isSubscribed: true, premiumExpiresAt: nextExpiry.toISOString() };
+  return (await refreshStoredUser()) || {
+    ...profile,
+    usdtBalance: currentBalance - cost,
+    isSubscribed: true,
+    premiumExpiresAt: nextExpiry.toISOString(),
+  };
 }
 
 export async function reserveEscrowPurchase(
@@ -626,7 +708,7 @@ export async function reserveEscrowPurchase(
   const buyerDocument = await getRawDocument('profiles', buyerId, token);
   if (!buyerDocument?.name) throw new Error('구매자 프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(buyerDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${formatUsdtAmount(amount)} USDT가 필요합니다.`);
+  if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${amount} USDT가 필요합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(buyerId)}`;
   const orderName = `${firestoreBase}/escrowOrders/${encodeURIComponent(orderId)}`;
   const profileFields = { ...(buyerDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) };
@@ -756,6 +838,9 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     email: user.email,
     image: user.image,
     country: user.country || 'Global',
+    gender: user.gender || '',
+    genderPreference: user.genderPreference || 'any',
+    isSubscribed: Boolean(user.isSubscribed),
     updatedAt: new Date(),
   }, token);
   if (typeof window !== 'undefined') {
@@ -813,6 +898,8 @@ export async function recordVisit(user?: PortalUser | null, country = 'Global'):
             email: user.email,
             image: user.image,
             gender: user.gender || '',
+            genderPreference: user.genderPreference || 'any',
+            isSubscribed: Boolean(user.isSubscribed),
             age: user.age || 0,
             country: user.country || country,
           }
