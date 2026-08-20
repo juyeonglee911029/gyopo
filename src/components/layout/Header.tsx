@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Globe, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen, Video } from 'lucide-react';
+import { Gamepad2, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen, Video } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
 
 const countries = [
@@ -16,7 +16,7 @@ const countries = [
 ];
 
 export default function Header() {
-  const { selectedCountry, setSelectedCountry, user, setUser, darkMode, setDarkMode } = useGlobalStore();
+  const { user, setUser, darkMode, setDarkMode } = useGlobalStore();
 
   const handleLogout = () => {
     signOut();
@@ -25,13 +25,13 @@ export default function Header() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[#070b17]/90 backdrop-blur-xl border-b border-white/10 ml-0 lg:ml-80 transition-all">
-      <div className="px-4 h-16 flex items-center justify-between">
+      <div className="flex h-16 items-center justify-between gap-3 px-3 sm:px-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 flex-shrink-0 group">
-            <span className="brand-mark flex h-8 w-8 items-center justify-center rounded-[10px] text-slate-950 transition-transform group-hover:rotate-6">
+            <span className="brand-mark flex h-8 w-8 items-center justify-center rounded-[10px] text-slate-950 transition-transform group-hover:rotate-6 sm:h-9 sm:w-9">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true"><path d="M5 5.5h14M5 12h14M5 18.5h14M5 5.5v13M19 5.5v13" /></svg>
             </span>
-            <span className="leading-none"><span className="font-display block text-[15px] font-extrabold tracking-[.18em] text-white">GYOPO</span><span className="mt-1 block text-[8px] font-bold tracking-[.22em] text-slate-500">GLOBAL NETWORK</span></span>
+            <span className="hidden leading-none sm:block"><span className="font-display block text-[15px] font-extrabold tracking-[.18em] text-white">GYOPO</span><span className="mt-1 block text-[8px] font-bold tracking-[.22em] text-slate-500">GLOBAL NETWORK</span></span>
           </Link>
           
           <nav className="hidden 2xl:flex space-x-4 whitespace-nowrap text-sm font-semibold text-slate-400">
@@ -47,28 +47,24 @@ export default function Header() {
           </nav>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <div className="relative group flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 cursor-pointer">
-            <Globe size={16} className="text-teal-300" />
-            <select 
-              className="bg-transparent text-sm font-bold text-slate-200 focus:outline-none appearance-none pr-4 cursor-pointer"
-              value={selectedCountry}
-              onChange={(e) => setSelectedCountry(e.target.value)}
-            >
-              {countries.map(c => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+          <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
+            <Gamepad2 size={16} />
+            <span>테트리스</span>
+          </Link>
+          <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
+            <Video size={17} />
+            <span>화상채팅</span>
+          </Link>
           <button onClick={() => setDarkMode(!darkMode)} aria-label="다크모드 전환" className="rounded-lg border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:text-teal-300">
             {darkMode ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
           {user ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/wallet" className="flex items-center gap-1.5 rounded-lg border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-sm font-bold text-teal-200 transition hover:bg-teal-300/20">
                 <Wallet size={16} />
-                <span>{user.usdtBalance.toFixed(2)}</span>
+                <span className="hidden sm:inline">{user.usdtBalance.toFixed(2)}</span>
               </Link>
               {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
               <div className="flex items-center gap-2">
