@@ -146,6 +146,7 @@ export default function GamesPage() {
   const firstChatLoad = useRef(true);
   const lastMessageId = useRef<string | null>(null);
   const lastChatCleanup = useRef(0);
+  const queuePollingRef = useRef(false);
   const gameRef = useRef(game);
   const resultSent = useRef(false);
 
@@ -372,14 +373,20 @@ export default function GamesPage() {
       setInviteStatus('상대가 방에 입장했습니다. 양쪽 모두 배팅금액을 확정하면 자동으로 시작합니다.');
     };
     const poll = async () => {
-      const own = await getDocument<TetrisQueueRecord>('tetrisQueue', user.id, token).catch(() => null);
-      if (own?.status === 'matched') {
-        applyMatch(own);
-        return;
+      if (stopped || queuePollingRef.current) return;
+      queuePollingRef.current = true;
+      try {
+        const own = await getDocument<TetrisQueueRecord>('tetrisQueue', user.id, token).catch(() => null);
+        if (own?.status === 'matched') {
+          applyMatch(own);
+          return;
+        }
+        await mergeDocument('tetrisQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token).catch(() => undefined);
+        const claimed = await claimTetrisMatch(profile, token).catch(() => null);
+        if (claimed) applyMatch({ ...profile, userId: user.id, status: 'matched', ...claimed, lastSeenAt: new Date() });
+      } finally {
+        queuePollingRef.current = false;
       }
-      await mergeDocument('tetrisQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token).catch(() => undefined);
-      const claimed = await claimTetrisMatch(profile, token).catch(() => null);
-      if (claimed) applyMatch({ ...profile, userId: user.id, status: 'matched', ...claimed, lastSeenAt: new Date() });
     };
     void poll();
     const timer = window.setInterval(() => void poll(), 800);
