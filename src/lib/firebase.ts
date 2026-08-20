@@ -490,18 +490,19 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
   return { callId, opponent, initiator: profile.id < candidate.userId };
 }
 
-export async function reserveGameStake(userId: string, matchId: string, token?: string): Promise<void> {
+export async function reserveGameStake(userId: string, matchId: string, amount: number, token?: string): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) return;
   const stakeId = `game-${matchId}-${userId}`;
   if (await getRawDocument('gameStakes', stakeId, token)) return;
   const profileDocument = await getRawDocument('profiles', userId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < 1) throw new Error('게임 참가비 1 USDT가 부족합니다.');
+  if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USDT가 부족합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
   const stakeName = `${firestoreBase}/gameStakes/${encodeURIComponent(stakeId)}`;
   const profileFields = {
     ...(profileDocument.fields || {}),
-    usdtBalance: toFirestoreValue(currentBalance - 1),
+    usdtBalance: toFirestoreValue(currentBalance - amount),
     updatedAt: toFirestoreValue(new Date()),
   };
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
@@ -510,7 +511,7 @@ export async function reserveGameStake(userId: string, matchId: string, token?: 
     body: JSON.stringify({
       writes: [
         { update: { name: profileName, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
-        { update: { name: stakeName, fields: encodeFields({ userId, matchId, amount: 1, createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
+        { update: { name: stakeName, fields: encodeFields({ userId, matchId, amount, createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
       ],
     }),
   }, token);
