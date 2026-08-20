@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, MASTER_DEPOSIT_ADDRESS, MASTER_NETWORK, queryDocumentsWhere } from '@/lib/firebase';
 import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
 
-const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || '';
+const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || MASTER_DEPOSIT_ADDRESS;
 
 export default function WalletPage() {
   const { user, addTransaction, transactions } = useGlobalStore();
@@ -21,9 +21,9 @@ export default function WalletPage() {
   useEffect(() => {
     const token = getSessionToken();
     if (!token) return;
-    void getDocument<{ depositAddress?: string }>('adminSettings', 'wallet', token).then((settings) => {
-      if (settings?.depositAddress) setDepositAddress(settings.depositAddress);
-    });
+      void getDocument<{ depositAddress?: string; network?: string }>('adminSettings', 'wallet', token).then((settings) => {
+        if (settings?.depositAddress) setDepositAddress(settings.depositAddress);
+      });
   }, []);
 
   if (!user) {
@@ -45,7 +45,7 @@ export default function WalletPage() {
       await createDocument('depositRequests', crypto.randomUUID(), {
         userId: user.id,
         amount: val,
-        network: 'USDT-TRC20',
+         network: MASTER_NETWORK,
         depositAddress: depositAddress.trim(),
         status: 'PENDING',
         createdAt: new Date(),
@@ -65,7 +65,7 @@ export default function WalletPage() {
     if (user.usdtBalance < val + 9) return alert(`잔고가 부족합니다. (수수료 9 USDT 포함 ${val + 9} USDT 필요)`);
     const token = getSessionToken();
     if (!token || !targetId.trim()) return alert('출금 주소를 입력하세요.');
-    await createDocument('withdrawalRequests', crypto.randomUUID(), { userId: user.id, amount: val, fee: 9, targetAddress: targetId.trim(), network: 'USDT-TRC20', status: 'PENDING', createdAt: new Date() }, token);
+     await createDocument('withdrawalRequests', crypto.randomUUID(), { userId: user.id, amount: val, fee: 9, targetAddress: targetId.trim(), network: MASTER_NETWORK, status: 'PENDING', createdAt: new Date() }, token);
     addTransaction({ type: 'WITHDRAWAL', amount: val, status: 'PENDING', details: `승인 대기 · ${targetId.trim()}` });
     alert(`[시스템] ${val} USDT 출금 신청이 접수되었습니다. 운영자 승인 후 처리됩니다.`);
     setAmount('');
@@ -127,7 +127,7 @@ export default function WalletPage() {
                  {activeTab === 'DEPOSIT' && (
                    <div className="space-y-4">
                      <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm mb-4">
-                       <strong>USDT-TRC20 입금</strong><br/>아래 주소로 실제 입금한 뒤 신청하면 확인 후 잔고에 반영됩니다.
+                        <strong>USDT · TRX 네트워크 입금</strong><br/>아래 주소로 실제 입금한 뒤 신청하면 확인 후 잔고에 반영됩니다.
                      </div>
                       <label className="block text-sm font-bold text-gray-700">마스터 입금 지갑 주소 (서버 고정)</label>
                       <div className="flex gap-2">
@@ -147,7 +147,7 @@ export default function WalletPage() {
                       <AlertCircle size={16} className="mt-0.5 shrink-0"/> 
                       <span>출금 시 <strong>9 USDT</strong>의 시스템 수수료가 발생합니다. (보유 잔고에서 차감)</span>
                     </div>
-                    <label className="block text-sm font-bold text-gray-700">출금할 주소 (USDT-TRC20)</label>
+                     <label className="block text-sm font-bold text-gray-700">출금할 주소 (TRX 네트워크)</label>
                     <input type="text" value={targetId} onChange={e=>setTargetId(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="T..." />
                     
                     <label className="block text-sm font-bold text-gray-700 mt-4">출금할 금액 (USDT)</label>
