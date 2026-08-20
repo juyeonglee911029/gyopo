@@ -59,6 +59,11 @@ const stunServers = [
   { urls: 'stun:stun4.l.google.com:19302' },
 ];
 
+const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise.race([
+  navigator.mediaDevices.getUserMedia(constraints),
+  new Promise<MediaStream>((_, reject) => window.setTimeout(() => reject(new Error('카메라와 마이크 권한 응답이 지연되고 있습니다. 브라우저 권한을 확인해주세요.')), 12000)),
+]);
+
 export default function WebRTCPage() {
   const user = useGlobalStore((state) => state.user);
   const setUser = useGlobalStore((state) => state.setUser);
@@ -89,6 +94,7 @@ export default function WebRTCPage() {
   const appliedCandidates = useRef(new Set<string>());
   const offerApplied = useRef(false);
   const answerApplied = useRef(false);
+  const matchingStartedAt = useRef<number | null>(null);
   const chargedMatchIds = useRef(new Set<string>());
 
   const resetSignalingState = () => {
@@ -110,10 +116,10 @@ export default function WebRTCPage() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라와 마이크를 지원하지 않습니다.');
     if (!streamRef.current) {
       try {
-        streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        streamRef.current = await requestMediaWithTimeout({ video: true, audio: true });
       } catch (error) {
         if (error instanceof DOMException && error.name === 'NotFoundError') {
-          streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          streamRef.current = await requestMediaWithTimeout({ video: true, audio: false });
         } else {
           throw error;
         }
@@ -169,6 +175,7 @@ export default function WebRTCPage() {
     setStatus('다른 인증 회원을 찾는 중');
     setIsMatching(true);
     setActive(true);
+    matchingStartedAt.current = Date.now();
     const queued = await mergeDocument('webrtcQueue', user.id, {
       userId: user.id,
       name: user.name,
@@ -213,6 +220,7 @@ export default function WebRTCPage() {
     callRef.current = null;
     resetSignalingState();
     connectionStartedAt.current = null;
+    matchingStartedAt.current = null;
     connectedRef.current = false;
     if (token && user) {
       await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
@@ -276,6 +284,7 @@ export default function WebRTCPage() {
         }
         if (connection.connectionState === 'failed') {
           connectedRef.current = false;
+          matchingStartedAt.current = Date.now();
           connectionStartedAt.current = Date.now() - 20_001;
           setIsMatching(true);
           setStatus('연결 실패, 다른 상대를 다시 찾는 중');
@@ -288,6 +297,7 @@ export default function WebRTCPage() {
           setStatus('상대 영상 연결 중');
         }
         if (connection.iceConnectionState === 'failed') {
+          matchingStartedAt.current = Date.now();
           connectionStartedAt.current = Date.now() - 20_001;
           setIsMatching(true);
           setStatus('네트워크 연결 실패, 다른 상대를 다시 찾는 중');
@@ -325,10 +335,20 @@ export default function WebRTCPage() {
             if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
           if (!nextCall) {
+            if (matchingStartedAt.current && Date.now() - matchingStartedAt.current > 30_000) {
+              await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+              matchingStartedAt.current = null;
+              setIsMatching(false);
+              setActive(false);
+              setStatus('매칭 시간이 초과되었습니다');
+              setPermissionError('현재 연결 가능한 상대를 찾지 못했습니다. 잠시 후 다시 시도해주세요.');
+              return;
+            }
             setStatus('다른 인증 회원을 찾는 중');
             return;
           }
-                      const currentUser = userRef.current;
+                      matchingStartedAt.current = null;
+          const currentUser = userRef.current;
            const premiumActive = Boolean(currentUser?.isSubscribed && (!currentUser.premiumExpiresAt || new Date(currentUser.premiumExpiresAt).getTime() > Date.now()));
            if (currentUser && (currentUser.genderPreference || 'any') !== 'any' && !premiumActive && !chargedMatchIds.current.has(nextCall.callId)) {
              try {
@@ -418,6 +438,16 @@ callRef.current = nextCall;
           if (appliedCandidates.current.has(item.id)) continue;
           const added = await connection.addIceCandidate(item.candidate).then(() => true).catch(() => false);
           if (added) appliedCandidates.current.add(item.id);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('WebRTC polling failed', error);
+          await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+          matchingStartedAt.current = null;
+          setIsMatching(false);
+          setActive(false);
+          setStatus('매칭 연결 실패');
+          setPermissionError(error instanceof Error ? error.message : '화상 매칭 서버에 연결하지 못했습니다. 다시 시도해주세요.');
         }
       } finally {
         pollingRef.current = false;
