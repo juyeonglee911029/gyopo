@@ -10,6 +10,8 @@ const firebaseConfig = {
 export const googleClientId =
   '376649492363-lgc1jrll9434im7ehi7o3o86ctrklr5u.apps.googleusercontent.com';
 export const MASTER_EMAIL = 'juyeonglee911029@gmail.com';
+export const MASTER_DEPOSIT_ADDRESS = 'TNg65wc1DnQdyVfUXbRj4rmtfxwdKXGKtX';
+export const MASTER_NETWORK = 'TRX';
 
 export type PortalUser = {
   id: string;
@@ -325,6 +327,63 @@ export async function incrementDocument(collection: string, id: string, field: s
       }],
     }),
   }, token);
+}
+
+export async function approveDepositRequest(requestId: string, userId: string, reviewedBy: string, token?: string): Promise<void> {
+  const [requestDocument, profileDocument] = await Promise.all([
+    getRawDocument('depositRequests', requestId, token),
+    getRawDocument('profiles', userId, token),
+  ]);
+  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('입금 신청을 찾을 수 없습니다.');
+  if (!profileDocument?.name || !profileDocument.updateTime) throw new Error('회원 지갑을 찾을 수 없습니다.');
+
+  const request = decodeDocument<{ userId?: string; amount?: number; status?: string }>(requestDocument);
+  if (request.status !== 'PENDING') throw new Error('이미 처리된 입금 신청입니다.');
+  if (request.userId !== userId) throw new Error('입금 신청 회원 정보가 일치하지 않습니다.');
+  const amount = Number(request.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('입금 금액이 올바르지 않습니다.');
+
+  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
+  const requestFields = {
+    ...(requestDocument.fields || {}),
+    ...encodeFields({ status: 'APPROVED', reviewedAt: new Date(), reviewedBy }),
+  };
+  const profileFields = {
+    ...(profileDocument.fields || {}),
+    ...encodeFields({ usdtBalance: currentBalance + amount, updatedAt: new Date() }),
+  };
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: profileDocument.name, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
+        { update: { name: requestDocument.name, fields: requestFields }, currentDocument: { updateTime: requestDocument.updateTime } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('승인 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
+}
+
+export async function reviewDepositRequest(requestId: string, status: 'REJECTED', reviewedBy: string, token?: string): Promise<void> {
+  const requestDocument = await getRawDocument('depositRequests', requestId, token);
+  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('입금 신청을 찾을 수 없습니다.');
+  const request = decodeDocument<{ status?: string }>(requestDocument);
+  if (request.status !== 'PENDING') throw new Error('이미 처리된 입금 신청입니다.');
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [{
+        update: {
+          name: requestDocument.name,
+          fields: { ...(requestDocument.fields || {}), ...encodeFields({ status, reviewedAt: new Date(), reviewedBy }) },
+        },
+        currentDocument: { updateTime: requestDocument.updateTime },
+      }],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('거절 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
 }
 
 export type TetrisQueueProfile = { id: string; name: string; image: string; country?: string };
