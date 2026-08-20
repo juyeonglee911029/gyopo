@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Globe, Wallet, LogIn, LogOut, Users, Film } from 'lucide-react';
-import { signOut } from '@/lib/firebase';
+import { Globe, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen } from 'lucide-react';
+import { isMasterUser, signOut } from '@/lib/firebase';
 
 const countries = [
   { code: 'Global', name: '전체 (Global)' },
@@ -16,7 +16,7 @@ const countries = [
 ];
 
 export default function Header() {
-  const { selectedCountry, setSelectedCountry, user, setUser } = useGlobalStore();
+  const { selectedCountry, setSelectedCountry, user, setUser, darkMode, setDarkMode } = useGlobalStore();
 
   const handleLogout = () => {
     signOut();
@@ -38,6 +38,7 @@ export default function Header() {
             <Link href="/directory" className="hover:text-blue-600 transition-colors">업소록</Link>
             <Link href="/market" className="hover:text-blue-600 transition-colors">에스크로장터</Link>
             <Link href="/community" className="hover:text-blue-600 transition-colors">커뮤니티</Link>
+            <Link href="/blog" className="hover:text-blue-600 transition-colors flex items-center gap-1"><BookOpen size={14}/> 블로그</Link>
             <Link href="/games" className="hover:text-blue-600 transition-colors">테트리스</Link>
             <Link href="/theater" className="hover:text-blue-600 transition-colors flex items-center gap-1"><Film size={14}/> 극장</Link>
             <Link href="/users" className="hover:text-blue-600 transition-colors flex items-center gap-1"><Users size={14}/> 유저목록</Link>
@@ -57,6 +58,9 @@ export default function Header() {
               ))}
             </select>
           </div>
+          <button onClick={() => setDarkMode(!darkMode)} aria-label="다크모드 전환" className="rounded-lg border border-gray-200 bg-gray-100 p-2 text-gray-600 transition hover:text-blue-600">
+            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
 
           {user ? (
             <div className="flex items-center gap-4">
@@ -64,6 +68,7 @@ export default function Header() {
                 <Wallet size={16} />
                 <span>{user.usdtBalance.toFixed(2)}</span>
               </Link>
+              {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
               <div className="flex items-center gap-2">
                 <img src={user.image} alt="Profile" className="w-8 h-8 rounded-full border border-gray-200" />
                 <button onClick={handleLogout} aria-label="로그아웃" className="text-gray-500 hover:text-red-500 transition-colors p-1">
