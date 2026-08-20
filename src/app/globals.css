@@ -54,3 +54,45 @@ html[data-theme="dark"] .glass { background: rgba(15, 23, 42, .72); border-color
   12%, 68% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -58%) scale(1.02); }
 }
+
+.header-action { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; border-radius: .75rem; padding: .55rem .7rem; font-size: .72rem; font-weight: 900; transition: transform .2s ease, background-color .2s ease, border-color .2s ease; }
+.header-action:hover { transform: translateY(-1px); }
+.header-action-secondary { border: 1px solid rgba(148, 163, 184, .16); background: rgba(255, 255, 255, .05); color: #cbd5e1; }
+.header-action-secondary:hover { border-color: rgba(45, 212, 191, .3); color: #99f6e4; }
+.header-action-primary { border: 1px solid rgba(45, 212, 191, .34); background: linear-gradient(135deg, #2dd4bf, #38bdf8); color: #06111d; box-shadow: 0 0 22px rgba(45, 212, 191, .18); }
+.header-action-primary:hover { background: linear-gradient(135deg, #5eead4, #7dd3fc); }
+.touch-control { border: 1px solid rgba(45, 212, 191, .24); border-radius: .75rem; background: rgba(45, 212, 191, .1); padding: .6rem .35rem; font-size: .72rem; font-weight: 900; color: #ccfbf1; }
+.touch-control:disabled { opacity: .35; }
+
+@media (max-width: 1279px) {
+  .games-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .games-layout > .game-main { grid-column: 1 / -1; }
+  .games-layout > aside { display: contents; }
+  .games-layout > aside > section { margin-top: 0 !important; min-width: 0; padding: .85rem; border-radius: 1.35rem; }
+  .games-layout > aside > section:nth-child(1),
+  .games-layout > aside > section:nth-child(2) { grid-column: span 1; }
+  .games-layout > aside > section:nth-child(n + 3) { grid-column: 1 / -1; }
+  .games-layout > aside > section.flex { min-height: 240px; }
+  .games-layout > aside > section:nth-child(1) .grid.w-24 { width: 4.5rem; }
+}
+
+@media (max-width: 639px) {
+  .header-action { padding: .55rem; }
+  .header-action-secondary span { display: none; }
+  .header-action-primary { padding-inline: .7rem; }
+  .webrtc-page { position: relative; height: calc(100svh - 64px); min-height: 0; overflow: hidden; padding: 0; }
+  .webrtc-shell { position: relative; height: 100%; max-width: none; }
+  .webrtc-shell > header { position: absolute; inset: .75rem .75rem auto; z-index: 4; margin: 0; align-items: flex-start; pointer-events: none; }
+  .webrtc-shell > header > div:first-child { max-width: 72%; }
+  .webrtc-shell > header h1 { font-size: 1.5rem; }
+  .webrtc-shell > header p,
+  .webrtc-shell > header > div:last-child { display: none; }
+  .webrtc-grid { display: block; height: 100%; }
+  .webrtc-grid > section { position: absolute; inset: 0; height: 100%; aspect-ratio: auto; border-radius: 0; }
+  .webrtc-grid > aside { display: none; }
+  .webrtc-shell > section { position: absolute; right: .65rem; bottom: .65rem; left: .65rem; z-index: 5; max-height: 30%; margin: 0; overflow: hidden; border-radius: 1.25rem; background: rgba(17, 26, 45, .88); padding: .75rem; backdrop-filter: blur(18px); }
+  .webrtc-shell > section > div:first-child { margin-bottom: .4rem; }
+  .webrtc-shell > section .max-h-48 { max-height: 5.5rem; }
+  .webrtc-shell > section form { margin-top: .45rem; }
+  .webrtc-shell > section form input { padding-block: .55rem; }
+}
