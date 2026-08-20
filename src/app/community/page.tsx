@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { getSessionToken, listDocuments, createDocument } from '@/lib/firebase';
+import { createDocument, deleteDocument, getSessionToken, listDocuments, mergeDocument } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { seedPosts } from '@/lib/seedData';
 
@@ -32,6 +32,7 @@ export default function CommunityPage() {
   const [isWriting, setIsWriting] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadPosts = async () => {
@@ -49,6 +50,13 @@ export default function CommunityPage() {
     void loadPosts();
   }, []);
 
+  const openWrite = (post?: Post) => {
+    setEditingId(post?.id || null);
+    setTitle(post?.title || '');
+    setBody(post?.body || '');
+    setIsWriting(true);
+  };
+
   const handleWrite = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user) {
@@ -58,26 +66,31 @@ export default function CommunityPage() {
     if (!title.trim() || !body.trim()) return;
     const token = getSessionToken();
     if (!token) return;
-    const post = {
-      type: 'general' as const,
-      title: title.trim(),
-      body: body.trim(),
-      authorId: user.id,
-      author: user.name,
-      country: selectedCountry,
-      createdAt: new Date().toISOString(),
-      views: 0,
-      likes: 0,
-      comments: 0,
-    };
+    const post = editingId
+      ? { title: title.trim(), body: body.trim(), updatedAt: new Date() }
+      : { type: 'general' as const, title: title.trim(), body: body.trim(), authorId: user.id, author: user.name, country: selectedCountry, createdAt: new Date().toISOString(), views: 0, likes: 0, comments: 0 };
     try {
-      await createDocument('posts', crypto.randomUUID(), post, token);
+      if (editingId) await mergeDocument('posts', editingId, post, token);
+      else await createDocument('posts', crypto.randomUUID(), post, token);
       setTitle('');
       setBody('');
+      setEditingId(null);
       setIsWriting(false);
       await loadPosts();
     } catch {
       window.alert('게시글을 저장하지 못했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const handleDelete = async (post: Post) => {
+    if (!user || user.id !== post.authorId || !window.confirm('이 게시글을 삭제할까요?')) return;
+    const token = getSessionToken();
+    if (!token || post.id.startsWith('seed-')) return;
+    try {
+      await deleteDocument('posts', post.id, token);
+      setPosts((current) => current.filter((item) => item.id !== post.id));
+    } catch {
+      window.alert('게시글을 삭제하지 못했습니다.');
     }
   };
 
@@ -92,7 +105,7 @@ export default function CommunityPage() {
           <h1 className="text-3xl font-black text-gray-800">커뮤니티 & 뉴스</h1>
           <p className="text-sm text-gray-500 mt-1">국가별 소식과 교민들의 이야기를 나눠보세요.</p>
         </div>
-        <button onClick={() => setIsWriting(true)} className="bg-blue-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">
+         <button onClick={() => openWrite()} className="bg-blue-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">
           글쓰기
         </button>
       </div>
@@ -111,7 +124,8 @@ export default function CommunityPage() {
           {loading && <div className="text-center py-20 text-gray-400">게시글을 불러오는 중입니다...</div>}
           {!loading && filteredPosts.length === 0 && <div className="text-center py-20 text-gray-500">아직 게시글이 없습니다. 첫 글을 남겨보세요.</div>}
           {filteredPosts.map((post) => (
-             <Link href={post.sourceUrl || `/community/${post.id}`} target={post.sourceUrl ? '_blank' : undefined} key={post.id} className="block hover:bg-blue-50/50 transition-colors">
+             <div key={post.id} className="relative hover:bg-blue-50/50 transition-colors">
+              <Link href={`/community/${post.id}`} className="block">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center">
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center">
                   <span className={post.type === 'notice' ? 'text-red-500' : post.type === 'news' ? 'text-blue-500' : 'text-gray-400'}>
@@ -128,18 +142,20 @@ export default function CommunityPage() {
                 <div className="col-span-2 text-xs md:text-sm text-gray-400 text-center">{formatDate(post.createdAt)}</div>
                 <div className="col-span-1 text-xs md:text-sm text-gray-400 text-center hidden md:block">{post.views || 0}</div>
               </div>
-            </Link>
+              </Link>
+              {user?.id === post.authorId && !post.id.startsWith('seed-') && <div className="absolute right-3 bottom-2 flex gap-2 text-xs"><button onClick={() => openWrite(post)} className="font-bold text-blue-600 hover:underline">수정</button><button onClick={() => void handleDelete(post)} className="font-bold text-red-500 hover:underline">삭제</button></div>}
+             </div>
           ))}
         </div>
       </div>
 
       {isWriting && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onMouseDown={(event) => event.target === event.currentTarget && setIsWriting(false)}>
-          <form onSubmit={handleWrite} className="w-full max-w-lg bg-white rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center"><h2 className="text-xl font-black">새 글 작성</h2><button type="button" onClick={() => setIsWriting(false)} className="text-gray-400 text-xl">×</button></div>
+           <form onSubmit={handleWrite} className="w-full max-w-lg bg-white rounded-2xl p-6 shadow-2xl space-y-4">
+             <div className="flex justify-between items-center"><h2 className="text-xl font-black">{editingId ? '게시글 수정' : '새 글 작성'}</h2><button type="button" onClick={() => { setIsWriting(false); setEditingId(null); }} className="text-gray-400 text-xl">×</button></div>
             <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="제목" className="w-full border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" />
             <textarea value={body} onChange={(event) => setBody(event.target.value)} required rows={7} placeholder="내용을 입력하세요" className="w-full border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-            <button type="submit" className="w-full bg-blue-600 text-white rounded-xl py-3 font-bold hover:bg-blue-700">게시하기</button>
+             <button type="submit" className="w-full bg-blue-600 text-white rounded-xl py-3 font-bold hover:bg-blue-700">{editingId ? '수정 저장' : '게시하기'}</button>
           </form>
         </div>
       )}
