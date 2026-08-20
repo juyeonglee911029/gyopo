@@ -55,7 +55,7 @@ export default function Header() {
             <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/wallet" className="flex items-center gap-1.5 rounded-lg border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-sm font-bold text-teal-200 transition hover:bg-teal-300/20">
                 <Wallet size={16} />
-                <span className="hidden sm:inline">{user.usdtBalance.toFixed(2)}</span>
+                <span className="hidden sm:inline">{user.usdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </Link>
               {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
               <div className="flex items-center gap-2">
