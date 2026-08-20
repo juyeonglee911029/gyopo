@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Globe, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen } from 'lucide-react';
+import { Globe, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen, Video } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
 
 const countries = [
@@ -41,6 +41,7 @@ export default function Header() {
             <Link href="/community" className="hover:text-teal-300 transition-colors">커뮤니티</Link>
             <Link href="/blog" className="hover:text-teal-300 transition-colors flex items-center gap-1"><BookOpen size={14}/> 블로그</Link>
             <Link href="/games" className="hover:text-teal-300 transition-colors">테트리스</Link>
+            <Link href="/webrtc" className="hover:text-teal-300 transition-colors flex items-center gap-1"><Video size={14}/> 화상채팅</Link>
             <Link href="/theater" className="hover:text-teal-300 transition-colors flex items-center gap-1"><Film size={14}/> 극장</Link>
             <Link href="/users" className="hover:text-teal-300 transition-colors flex items-center gap-1"><Users size={14}/> 유저목록</Link>
           </nav>
