@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, MASTER_DEPOSIT_ADDRESS, MASTER_NETWORK, queryDocumentsWhere } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_NETWORK } from '@/lib/firebase';
 import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
 
 const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || MASTER_DEPOSIT_ADDRESS;
@@ -17,6 +17,10 @@ export default function WalletPage() {
   const [depositAddress, setDepositAddress] = useState(configuredDepositAddress);
   const [userSearch, setUserSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; image?: string; country?: string }>>([]);
+  const [selectedRecipient, setSelectedRecipient] = useState<{ id: string; name: string; image?: string; country?: string } | null>(null);
+  const [searchMessage, setSearchMessage] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     const token = getSessionToken();
@@ -74,13 +78,30 @@ export default function WalletPage() {
 
   const searchUsers = async () => {
     const token = getSessionToken();
-    const value = userSearch.trim();
-    if (!token || value.length < 2) return setSearchResults([]);
-    const rows = await queryDocumentsWhere<{ name: string; image?: string; country?: string }>('publicProfiles', [
-      { field: 'name', op: 'GREATER_THAN_OR_EQUAL', value },
-      { field: 'name', op: 'LESS_THAN', value: `${value}\uf8ff` },
-    ], token, 12).catch(() => []);
-    setSearchResults(rows.filter((row) => row.id !== user?.id));
+    const value = userSearch.trim().toLocaleLowerCase('ko-KR');
+    if (!token) return setSearchMessage('로그인 세션이 만료되었습니다.');
+    if (!value) {
+      setSearchResults([]);
+      setSearchMessage('검색할 회원 이름을 입력해주세요.');
+      return;
+    }
+    setIsSearching(true);
+    setSearchMessage('회원 명단을 검색하는 중...');
+    try {
+      const rows = await listDocuments<{ name: string; image?: string; country?: string; email?: string }>('publicProfiles', token);
+      const results = rows
+        .filter((row) => row.id !== user.id)
+        .filter((row) => `${row.name || ''} ${row.email || ''}`.toLocaleLowerCase('ko-KR').includes(value))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'))
+        .slice(0, 20);
+      setSearchResults(results);
+      setSearchMessage(results.length ? `${results.length}명의 회원을 찾았습니다.` : '검색어와 일치하는 등록 회원이 없습니다.');
+    } catch (error) {
+      setSearchResults([]);
+      setSearchMessage(error instanceof Error ? `회원 검색 실패: ${error.message.slice(0, 120)}` : '회원 검색에 실패했습니다.');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleP2P = async () => {
@@ -91,11 +112,22 @@ export default function WalletPage() {
 
     const token = getSessionToken();
     if (!token) return alert('로그인 세션이 만료되었습니다.');
-    await createDocument('transferRequests', crypto.randomUUID(), { senderId: user.id, recipientId: targetId, amount: val, fee: 9, status: 'PENDING', createdAt: new Date() }, token);
-    addTransaction({ type: 'P2P_SEND', amount: val, status: 'PENDING', details: `송금 승인 대기 · ${targetId}` });
-    alert(`[시스템] ${val} USDT 송금 신청이 접수되었습니다. 수수료 9 USDT 포함 운영 원장에 기록되었습니다.`);
-    setAmount('');
-    setTargetId('');
+    setIsSending(true);
+    try {
+      await createDocument('transferRequests', crypto.randomUUID(), { senderId: user.id, recipientId: targetId, amount: val, fee: 9, status: 'PENDING', createdAt: new Date() }, token);
+      addTransaction({ type: 'P2P_SEND', amount: val, status: 'PENDING', details: `송금 승인 대기 · ${selectedRecipient?.name || targetId}` });
+      alert(`[시스템] ${selectedRecipient?.name || '회원'}에게 ${val} USDT 송금 신청이 접수되었습니다. 운영자 승인 후 잔고에 반영됩니다.`);
+      setAmount('');
+      setTargetId('');
+      setUserSearch('');
+      setSelectedRecipient(null);
+      setSearchResults([]);
+      setSearchMessage('');
+    } catch (error) {
+      alert(error instanceof Error ? `송금 신청 실패: ${error.message.slice(0, 160)}` : '송금 신청에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -168,11 +200,12 @@ export default function WalletPage() {
                     </div>
                      <label className="block text-sm font-bold text-gray-700">받는 사람 이름 검색</label>
                      <div className="flex gap-2">
-                       <input type="text" value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void searchUsers(); } }} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="이름 2글자 이상" />
-                       <button type="button" onClick={() => void searchUsers()} className="bg-gray-200 text-gray-700 px-4 rounded-xl font-bold hover:bg-gray-300">검색</button>
-                     </div>
-                     {searchResults.length > 0 && <div className="space-y-1 rounded-xl border border-gray-200 bg-gray-50 p-2">{searchResults.map((result) => <button type="button" key={result.id} onClick={() => { setTargetId(result.id); setUserSearch(result.name); setSearchResults([]); }} className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-white"><img src={result.image} alt="" className="h-7 w-7 rounded-full" /><span className="text-sm font-bold">{result.name}</span><span className="ml-auto text-[10px] text-gray-500">{result.country || 'Global'}</span></button>)}</div>}
-                     {targetId && <div className="rounded-xl bg-green-50 p-2 text-xs font-bold text-green-700">선택된 수신자: {userSearch}</div>}
+                        <input type="text" value={userSearch} onChange={e=>{ setUserSearch(e.target.value); setTargetId(''); setSelectedRecipient(null); setSearchMessage(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void searchUsers(); } }} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="회원 이름 또는 이메일" />
+                        <button type="button" onClick={() => void searchUsers()} disabled={isSearching} className="bg-gray-200 text-gray-700 px-4 rounded-xl font-bold hover:bg-gray-300 disabled:opacity-50">{isSearching ? '검색 중' : '검색'}</button>
+                      </div>
+                      {searchMessage && <p className="text-xs font-bold text-gray-500">{searchMessage}</p>}
+                      {searchResults.length > 0 && <div className="space-y-1 rounded-xl border border-gray-200 bg-gray-50 p-2">{searchResults.map((result) => <button type="button" key={result.id} onClick={() => { setTargetId(result.id); setSelectedRecipient(result); setUserSearch(result.name); setSearchResults([]); setSearchMessage(''); }} className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-white"><img src={result.image} alt="" className="h-7 w-7 rounded-full" /><span className="text-sm font-bold">{result.name}</span><span className="ml-auto text-[10px] text-gray-500">{result.country || 'Global'}</span></button>)}</div>}
+                      {selectedRecipient && <div className="rounded-xl bg-green-50 p-2 text-xs font-bold text-green-700">선택된 수신자: {selectedRecipient.name}</div>}
 
                     <label className="block text-sm font-bold text-gray-700 mt-4">보낼 금액 (USDT)</label>
                     <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="50" />
@@ -180,7 +213,7 @@ export default function WalletPage() {
                     <div className="text-right text-sm text-gray-500">
                       총 차감 예상액: <span className="font-bold text-red-600">{Number(amount) > 0 ? Number(amount) + 9 : 0} USDT</span>
                     </div>
-                    <button onClick={handleP2P} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition">송금하기</button>
+                    <button onClick={handleP2P} disabled={isSending} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition disabled:opacity-50">{isSending ? '송금 신청 중...' : '송금하기'}</button>
                   </div>
                 )}
              </div>
