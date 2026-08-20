@@ -417,14 +417,14 @@ export default function WebRTCPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
-      <div className="mx-auto max-w-6xl">
+    <div className="webrtc-page min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
+      <div className="webrtc-shell mx-auto max-w-6xl">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Private room / WebRTC</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">REAL VIDEO CONNECT</h1><p className="mt-2 text-sm text-slate-400">가짜 상대 없이, 실제 접속 중인 인증 회원과 직접 연결됩니다.</p></div>
           <div className="flex items-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-200"><ShieldCheck size={17} /> 브라우저 간 암호화 연결</div>
         </header>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="webrtc-grid grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <section className="relative aspect-video overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-2xl">
             <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover transition-opacity ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`} />
             {!hasRemoteVideo && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_center,#172b50,#050914_70%)] text-center"><div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 p-5">{isMatching || active ? <LoaderCircle size={42} className="animate-spin text-cyan-300" /> : <Camera size={42} className="text-slate-500" />}</div><div><p className="text-xl font-black">{active ? status : '연결 대기 중'}</p><p className="mt-2 text-sm text-slate-400">{active ? '상대방의 카메라 연결을 기다리고 있습니다.' : '시작 버튼을 누르면 카메라와 마이크를 준비합니다.'}</p></div></div>}
