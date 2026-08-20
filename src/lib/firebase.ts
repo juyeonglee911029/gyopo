@@ -34,6 +34,10 @@ export function isMasterUser(user?: Pick<PortalUser, 'email'> | null): boolean {
   return user?.email?.toLowerCase() === MASTER_EMAIL;
 }
 
+export function formatUsdtAmount(value: number): string {
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export type OnlineUser = {
   id: string;
   userId: string;
@@ -513,7 +517,10 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
       ],
     }),
   }, token);
-  if (!response.ok) return null;
+  if (!response.ok) {
+    if (response.status === 409 || response.status === 412) return null;
+    throw new Error('화상 매칭 서버에 연결하지 못했습니다.');
+  }
   return { callId, opponent, initiator: profile.id < candidate.userId };
 }
 
@@ -524,7 +531,7 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   const profileDocument = await getRawDocument('profiles', userId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USDT가 부족합니다.`);
+  if (currentBalance < amount) throw new Error(`게임 참가비 ${formatUsdtAmount(amount)} USDT가 부족합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
   const stakeName = `${firestoreBase}/gameStakes/${encodeURIComponent(stakeId)}`;
   const profileFields = {
@@ -555,7 +562,7 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
   const profileDocument = await getRawDocument('profiles', userId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USDT가 부족합니다.`);
+  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${formatUsdtAmount(amount)} USDT가 부족합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
   const stakeName = `${firestoreBase}/genderMatchStakes/${encodeURIComponent(stakeId)}`;
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
@@ -618,7 +625,7 @@ export async function reserveEscrowPurchase(
   const buyerDocument = await getRawDocument('profiles', buyerId, token);
   if (!buyerDocument?.name) throw new Error('구매자 프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(buyerDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${amount} USDT가 필요합니다.`);
+  if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${formatUsdtAmount(amount)} USDT가 필요합니다.`);
   const profileName = `${firestoreBase}/profiles/${encodeURIComponent(buyerId)}`;
   const orderName = `${firestoreBase}/escrowOrders/${encodeURIComponent(orderId)}`;
   const profileFields = { ...(buyerDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) };
