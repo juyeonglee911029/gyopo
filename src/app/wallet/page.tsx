@@ -2,26 +2,29 @@
 
 import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getSessionToken } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
 import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
 
 const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || '';
 
 export default function WalletPage() {
-  const { user, updateUsdt, addTransaction, transactions } = useGlobalStore();
+  const { user, addTransaction, transactions } = useGlobalStore();
   const [activeTab, setActiveTab] = useState<'DEPOSIT' | 'WITHDRAWAL' | 'P2P'>('DEPOSIT');
   
   // Forms state
   const [amount, setAmount] = useState('');
   const [targetId, setTargetId] = useState('');
-  const [depositAddress, setDepositAddress] = useState(() => {
-    if (typeof window === 'undefined') return configuredDepositAddress;
-    return window.localStorage.getItem('gyopo-usdt-deposit-address') || configuredDepositAddress;
-  });
+  const [depositAddress, setDepositAddress] = useState(configuredDepositAddress);
+  const [userSearch, setUserSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; image?: string; country?: string }>>([]);
 
   useEffect(() => {
-    if (depositAddress) window.localStorage.setItem('gyopo-usdt-deposit-address', depositAddress);
-  }, [depositAddress]);
+    const token = getSessionToken();
+    if (!token) return;
+    void getDocument<{ depositAddress?: string }>('adminSettings', 'wallet', token).then((settings) => {
+      if (settings?.depositAddress) setDepositAddress(settings.depositAddress);
+    });
+  }, []);
 
   if (!user) {
     return (
@@ -35,7 +38,7 @@ export default function WalletPage() {
   const handleDeposit = async () => {
     const val = Number(amount);
     if (isNaN(val) || val <= 0) return alert("올바른 금액을 입력하세요.");
-    if (!depositAddress.trim()) return alert('먼저 입금 받을 USDT 지갑 주소를 입력하세요.');
+    if (!depositAddress.trim()) return alert('관리자가 입금 지갑을 설정하지 않았습니다.');
     const token = getSessionToken();
     if (!token) return alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
     try {
@@ -56,36 +59,41 @@ export default function WalletPage() {
     setAmount('');
   };
 
-  const handleWithdrawal = () => {
+  const handleWithdrawal = async () => {
     const val = Number(amount);
     if (isNaN(val) || val <= 0) return alert("올바른 금액을 입력하세요.");
     if (user.usdtBalance < val + 9) return alert(`잔고가 부족합니다. (수수료 9 USDT 포함 ${val + 9} USDT 필요)`);
-
-    // Deduct total amount + fee immediately
-    updateUsdt(-(val + 9));
-    
-    // Log Withdrawal Request
-    addTransaction({ type: 'WITHDRAWAL', amount: val, status: 'PENDING', details: `지갑 주소: ${targetId || '미입력'}` });
-    
-    // Record the network fee in the local transaction feed.
-    addTransaction({ type: 'FEE', amount: 9, status: 'COMPLETED', details: '출금 수수료 차감 (시스템 회수)' });
-    
-    alert(`[시스템] ${val} USDT 출금 신청이 완료되었습니다. (수수료 9 USDT 차감 완료)`);
+    const token = getSessionToken();
+    if (!token || !targetId.trim()) return alert('출금 주소를 입력하세요.');
+    await createDocument('withdrawalRequests', crypto.randomUUID(), { userId: user.id, amount: val, fee: 9, targetAddress: targetId.trim(), network: 'USDT-TRC20', status: 'PENDING', createdAt: new Date() }, token);
+    addTransaction({ type: 'WITHDRAWAL', amount: val, status: 'PENDING', details: `승인 대기 · ${targetId.trim()}` });
+    alert(`[시스템] ${val} USDT 출금 신청이 접수되었습니다. 운영자 승인 후 처리됩니다.`);
     setAmount('');
     setTargetId('');
   };
 
-  const handleP2P = () => {
+  const searchUsers = async () => {
+    const token = getSessionToken();
+    const value = userSearch.trim();
+    if (!token || value.length < 2) return setSearchResults([]);
+    const rows = await queryDocumentsWhere<{ name: string; image?: string; country?: string }>('publicProfiles', [
+      { field: 'name', op: 'GREATER_THAN_OR_EQUAL', value },
+      { field: 'name', op: 'LESS_THAN', value: `${value}\uf8ff` },
+    ], token, 12).catch(() => []);
+    setSearchResults(rows.filter((row) => row.id !== user?.id));
+  };
+
+  const handleP2P = async () => {
     const val = Number(amount);
     if (isNaN(val) || val <= 0) return alert("올바른 금액을 입력하세요.");
-    if (!targetId) return alert("받는 사람의 ID를 입력하세요.");
+    if (!targetId) return alert("받는 사람을 선택하세요.");
     if (user.usdtBalance < val + 9) return alert(`잔고가 부족합니다. (수수료 9 USDT 포함 ${val + 9} USDT 필요)`);
 
-    // Deduct total
-    updateUsdt(-(val + 9), { type: 'P2P_SEND', amount: val, status: 'COMPLETED', details: `To: ${targetId}` });
-    addTransaction({ type: 'FEE', amount: 9, status: 'COMPLETED', details: `P2P 송금 수수료 차감 (시스템 회수)` });
-
-    alert(`[시스템] '${targetId}' 님에게 ${val} USDT를 송금했습니다. (수수료 9 USDT 차감)`);
+    const token = getSessionToken();
+    if (!token) return alert('로그인 세션이 만료되었습니다.');
+    await createDocument('transferRequests', crypto.randomUUID(), { senderId: user.id, recipientId: targetId, amount: val, fee: 9, status: 'PENDING', createdAt: new Date() }, token);
+    addTransaction({ type: 'P2P_SEND', amount: val, status: 'PENDING', details: `송금 승인 대기 · ${targetId}` });
+    alert(`[시스템] ${val} USDT 송금 신청이 접수되었습니다. 수수료 9 USDT 포함 운영 원장에 기록되었습니다.`);
     setAmount('');
     setTargetId('');
   };
@@ -121,9 +129,9 @@ export default function WalletPage() {
                      <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm mb-4">
                        <strong>USDT-TRC20 입금</strong><br/>아래 주소로 실제 입금한 뒤 신청하면 확인 후 잔고에 반영됩니다.
                      </div>
-                     <label className="block text-sm font-bold text-gray-700">입금 받을 USDT 지갑 주소</label>
-                     <div className="flex gap-2">
-                       <input type="text" value={depositAddress} onChange={(event) => setDepositAddress(event.target.value)} className="min-w-0 flex-1 bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="TRC20 지갑 주소를 입력하세요" />
+                      <label className="block text-sm font-bold text-gray-700">마스터 입금 지갑 주소 (서버 고정)</label>
+                      <div className="flex gap-2">
+                        <input type="text" value={depositAddress} readOnly className="min-w-0 flex-1 bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none" placeholder="관리자 설정 대기" />
                        <button type="button" onClick={() => void navigator.clipboard?.writeText(depositAddress)} className="rounded-xl bg-gray-200 px-3 text-gray-700 hover:bg-gray-300" aria-label="지갑 주소 복사"><Copy size={17} /></button>
                      </div>
                      {depositAddress ? <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(depositAddress)}`} alt="USDT 입금 지갑 QR 코드" className="h-44 w-44 rounded-lg" /><p className="break-all text-center text-[11px] text-gray-500">{depositAddress}</p></div> : <div className="rounded-2xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">지갑 주소를 입력하면 QR 코드가 표시됩니다.</div>}
@@ -158,11 +166,13 @@ export default function WalletPage() {
                       <AlertCircle size={16} className="mt-0.5 shrink-0"/> 
                       <span>유저 간 송금 시 <strong>9 USDT</strong>의 시스템 수수료가 발생합니다.</span>
                     </div>
-                    <label className="block text-sm font-bold text-gray-700">받는 사람 아이디 (UID)</label>
-                    <div className="flex gap-2">
-                      <input type="text" value={targetId} onChange={e=>setTargetId(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="user_12345" />
-                      <button className="bg-gray-200 text-gray-700 px-4 rounded-xl font-bold hover:bg-gray-300">검색</button>
-                    </div>
+                     <label className="block text-sm font-bold text-gray-700">받는 사람 이름 검색</label>
+                     <div className="flex gap-2">
+                       <input type="text" value={userSearch} onChange={e=>setUserSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void searchUsers(); } }} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="이름 2글자 이상" />
+                       <button type="button" onClick={() => void searchUsers()} className="bg-gray-200 text-gray-700 px-4 rounded-xl font-bold hover:bg-gray-300">검색</button>
+                     </div>
+                     {searchResults.length > 0 && <div className="space-y-1 rounded-xl border border-gray-200 bg-gray-50 p-2">{searchResults.map((result) => <button type="button" key={result.id} onClick={() => { setTargetId(result.id); setUserSearch(result.name); setSearchResults([]); }} className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-white"><img src={result.image} alt="" className="h-7 w-7 rounded-full" /><span className="text-sm font-bold">{result.name}</span><span className="ml-auto text-[10px] text-gray-500">{result.country || 'Global'}</span></button>)}</div>}
+                     {targetId && <div className="rounded-xl bg-green-50 p-2 text-xs font-bold text-green-700">선택된 수신자: {userSearch}</div>}
 
                     <label className="block text-sm font-bold text-gray-700 mt-4">보낼 금액 (USDT)</label>
                     <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="50" />
