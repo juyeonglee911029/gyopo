@@ -216,12 +216,14 @@ export default function WebRTCPage() {
       setHasRemoteVideo(true);
       setIsConnected(true);
       setIsMatching(false);
+      setPermissionError('');
       setStatus('LIVE CHAT 연결 성공');
     };
     localConnection.onconnectionstatechange = () => {
       if (localConnection.connectionState === 'connected') {
         setIsConnected(true);
         setIsMatching(false);
+        setPermissionError('');
         setStatus('LIVE CHAT 연결 성공');
       }
     };
@@ -623,4 +625,3 @@ export default function WebRTCPage() {
     </div>
   );
 }
- 
