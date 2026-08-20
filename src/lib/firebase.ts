@@ -331,17 +331,35 @@ export type TetrisQueueProfile = { id: string; name: string; image: string; coun
 export type TetrisMatchClaim = { matchId: string; role: 'A' | 'B'; opponent: TetrisQueueProfile };
 export type WebrtcMatchClaim = { callId: string; opponent: TetrisQueueProfile; initiator: boolean };
 
+async function getWaitingQueueDocuments(collection: string, token?: string): Promise<FirestoreDocument[]> {
+  try {
+    const queried = await runQueryDocuments(collection, [{ field: 'status', op: 'EQUAL', value: 'waiting' }], token, 50);
+    if (queried.length) return queried;
+  } catch {
+    // The collection read below keeps matching alive when a REST query briefly fails.
+  }
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}`, {}, token);
+  if (!response.ok) return [];
+  const data = (await response.json()) as { documents?: FirestoreDocument[] };
+  return (data.documents || []).filter((row) => fromFirestoreValue(row.fields?.status) === 'waiting');
+}
+
+function isFreshQueueDocument(row: FirestoreDocument, maxAgeMs: number): boolean {
+  const lastSeenAt = fromFirestoreValue(row.fields?.lastSeenAt);
+  return typeof lastSeenAt === 'string' && new Date(lastSeenAt).getTime() > Date.now() - maxAgeMs && Boolean(row.name && row.updateTime);
+}
+
 export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: string): Promise<TetrisMatchClaim | null> {
-  const waiting = await runQueryDocuments('tetrisQueue', [
-    { field: 'status', op: 'EQUAL', value: 'waiting' },
-  ], token, 20);
+  const waiting = await getWaitingQueueDocuments('tetrisQueue', token);
   const candidateRow = waiting.find((row) => {
-    const candidate = decodeDocument<{ userId?: string; lastSeenAt?: string }>(row);
-    return candidate.userId && candidate.userId !== profile.id && candidate.lastSeenAt && new Date(candidate.lastSeenAt).getTime() > Date.now() - 30_000 && row.name && row.updateTime;
+    const candidate = decodeDocument<{ userId?: string }>(row);
+    const candidateId = candidate.userId || candidate.id;
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000);
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
 
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
+  candidate.userId = candidate.userId || candidate.id;
   const matchId = `tetris-${profile.id}-${candidate.userId}-${crypto.randomUUID()}`;
   const opponent: TetrisQueueProfile = { id: candidate.userId, name: candidate.name, image: candidate.image, country: candidate.country };
   const candidateData = {
@@ -383,15 +401,15 @@ export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: stri
 }
 
 export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: string): Promise<WebrtcMatchClaim | null> {
-  const waiting = await runQueryDocuments('webrtcQueue', [
-    { field: 'status', op: 'EQUAL', value: 'waiting' },
-  ], token, 20);
+  const waiting = await getWaitingQueueDocuments('webrtcQueue', token);
   const candidateRow = waiting.find((row) => {
-    const candidate = decodeDocument<{ userId?: string; lastSeenAt?: string }>(row);
-    return candidate.userId && candidate.userId !== profile.id && candidate.lastSeenAt && new Date(candidate.lastSeenAt).getTime() > Date.now() - 45_000 && row.name && row.updateTime;
+    const candidate = decodeDocument<{ userId?: string }>(row);
+    const candidateId = candidate.userId || candidate.id;
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000);
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
+  candidate.userId = candidate.userId || candidate.id;
   const callId = `webrtc-${profile.id}-${candidate.userId}-${crypto.randomUUID()}`;
   const opponent: TetrisQueueProfile = { id: candidate.userId, name: candidate.name, image: candidate.image, country: candidate.country };
   const candidateFields = {
