@@ -112,9 +112,12 @@ export default function WebRTCPage() {
       country: user.country || 'Global',
       status: 'waiting',
       lastSeenAt: new Date(),
-    }, token).then(() => true).catch(() => false);
+    }, token).then(() => true).catch((error) => {
+      const detail = error instanceof Error ? error.message.slice(0, 180) : '알 수 없는 오류';
+      setPermissionError(`매칭 서버 오류: ${detail}`);
+      return false;
+    });
     if (!queued) {
-      setPermissionError('매칭 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');
       setIsMatching(false);
       setActive(false);
     }
@@ -211,7 +214,15 @@ export default function WebRTCPage() {
       try {
         const current = callRef.current;
         if (!current) {
-          const queue = await listDocuments<QueueEntry>('webrtcQueue', token).catch(() => []);
+          let queue: Array<QueueEntry & { id: string }>;
+          try {
+            queue = await listDocuments<QueueEntry>('webrtcQueue', token);
+          } catch (error) {
+            const detail = error instanceof Error ? error.message.slice(0, 180) : '알 수 없는 오류';
+            setPermissionError(`매칭 목록을 불러오지 못했습니다: ${detail}`);
+            setStatus('매칭 서버 확인 실패');
+            return;
+          }
           const threshold = Date.now() - 45_000;
           const pendingInvite = queue
             .filter((entry) => entry.userId !== user.id && entry.status === 'matched' && entry.callId?.startsWith(`webrtc-${entry.userId}-${user.id}-`) && new Date(entry.lastSeenAt).getTime() > threshold)
