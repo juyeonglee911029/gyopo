@@ -17,7 +17,9 @@ const SHAPES = [
   [[1, 1, 0], [0, 1, 1]],
 ];
 const COLORS = ['#2dd4bf', '#facc15', '#c084fc', '#60a5fa', '#fb923c', '#f472b6', '#4ade80'];
-const DEFAULT_ENTRY_FEE = 1;\nconst MIN_ENTRY_FEE = 1;\nconst MAX_ENTRY_FEE = 100;
+const DEFAULT_ENTRY_FEE = 1;
+const MIN_ENTRY_FEE = 1;
+const MAX_ENTRY_FEE = 100;
 type Piece = { type: number; shape: number[][]; x: number; y: number };
 type ChatMessage = { id: string; authorId: string; user: string; country?: string; text: string; createdAt: string; expiresAt?: string | Date };
 type GameState = { board: number[][]; piece: Piece; nextPiece: Piece; running: boolean; started: boolean; paused: boolean; score: number; lines: number; notice: string; noticeId: number };
@@ -147,7 +149,8 @@ export default function GamesPage() {
   const [inviteStatus, setInviteStatus] = useState('');
   const [readyForBattle, setReadyForBattle] = useState(false);
   const [opponentReady, setOpponentReady] = useState(false);
-  const [selectedOnlineUserId, setSelectedOnlineUserId] = useState<string | null>(null);\n  const [betAmount, setBetAmount] = useState(DEFAULT_ENTRY_FEE);
+  const [selectedOnlineUserId, setSelectedOnlineUserId] = useState<string | null>(null);
+  const [betAmount, setBetAmount] = useState(DEFAULT_ENTRY_FEE);
   const [stakeReserved, setStakeReserved] = useState(false);
   const [countdown, setCountdown] = useState<number | 'START' | null>(null);
   const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
@@ -590,7 +593,8 @@ export default function GamesPage() {
        if (!room) return;
        const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
        const nextState = matchRole === 'A' ? room.playerBState : room.playerAState;
-       const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);\n        if (room.betAmount && room.betAmount !== betAmount) setBetAmount(room.betAmount);
+       const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
+        if (room.betAmount && room.betAmount !== betAmount) setBetAmount(room.betAmount);
        setOpponentReady(nextReady);
        if (nextOpponent) setOpponent(nextOpponent);
        
