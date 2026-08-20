@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CheckCircle2, LockKeyhole, RefreshCcw, Save, ShieldAlert, WalletCards } from 'lucide-react';
-import { getSessionToken, isMasterUser, listDocuments, mergeDocument, type PortalUser } from '@/lib/firebase';
+import { approveDepositRequest, getSessionToken, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string };
@@ -13,10 +13,11 @@ export default function MasterPage() {
   const [profiles, setProfiles] = useState<Array<PortalUser & { id: string }>>([]);
   const [deposits, setDeposits] = useState<RequestRow[]>([]);
   const [withdrawals, setWithdrawals] = useState<RequestRow[]>([]);
-  const [settings, setSettings] = useState<WalletSettings>({ network: 'USDT-TRC20' });
-  const [address, setAddress] = useState('');
+  const [settings, setSettings] = useState<WalletSettings>({ depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK });
+  const [address, setAddress] = useState(MASTER_DEPOSIT_ADDRESS);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [savingAction, setSavingAction] = useState<string | null>(null);
 
   const load = async () => {
     const token = getSessionToken();
@@ -28,12 +29,12 @@ export default function MasterPage() {
       listDocuments<RequestRow>('withdrawalRequests', token).catch(() => []),
       listDocuments<WalletSettings>('adminSettings', token).catch(() => []),
     ]);
-    const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { network: 'USDT-TRC20' };
+    const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK };
     setProfiles(nextProfiles);
     setDeposits(nextDeposits.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setWithdrawals(nextWithdrawals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
-    setSettings(wallet);
-    setAddress(wallet.depositAddress || '');
+    setSettings({ ...wallet, network: MASTER_NETWORK });
+    setAddress(wallet.depositAddress || MASTER_DEPOSIT_ADDRESS);
     setLoading(false);
   };
 
@@ -45,23 +46,50 @@ export default function MasterPage() {
   const totalBalance = profiles.reduce((sum, profile) => sum + Number(profile.usdtBalance || 0), 0);
   const totalDeposits = deposits.filter((item) => item.status === 'APPROVED').reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const saveSettings = async () => {
-    if (!token || !address.trim()) return;
-    await mergeDocument('adminSettings', 'wallet', { depositAddress: address.trim(), network: settings.network || 'USDT-TRC20', updatedAt: new Date() }, token);
-    setMessage('입금 지갑 주소가 서버 설정에 저장되었습니다.');
+    const nextAddress = address.trim();
+    if (!token) return setMessage('로그인 세션이 없습니다. 다시 로그인해주세요.');
+    if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(nextAddress)) return setMessage('올바른 TRX 지갑 주소를 입력해주세요.');
+    setSavingAction('settings');
+    try {
+      await mergeDocument('adminSettings', 'wallet', { depositAddress: nextAddress, network: MASTER_NETWORK, updatedAt: new Date() }, token);
+      setSettings({ depositAddress: nextAddress, network: MASTER_NETWORK });
+      setMessage('TRX 입금 주소가 서버에 저장되었습니다.');
+    } catch (error) {
+      setMessage(error instanceof Error ? `설정 저장 실패: ${error.message.slice(0, 120)}` : '설정 저장에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+    }
   };
   const approveDeposit = async (request: RequestRow) => {
     if (!token || request.status !== 'PENDING') return;
-    const profile = profiles.find((item) => item.id === request.userId);
-    if (!profile) return setMessage('대상 회원 프로필을 찾지 못했습니다.');
-    await mergeDocument('profiles', profile.id, { usdtBalance: Number(profile.usdtBalance || 0) + Number(request.amount || 0), updatedAt: new Date() }, token);
-    await mergeDocument('depositRequests', request.id, { status: 'APPROVED', reviewedAt: new Date(), reviewedBy: user?.email || '' }, token);
-    setMessage('입금 승인 및 잔고 반영이 완료되었습니다.');
-    await load();
+    setSavingAction(request.id);
+    try {
+      await approveDepositRequest(request.id, request.userId, user?.email || MASTER_EMAIL, token);
+      setMessage(`${request.amount} USDT 승인 및 회원 잔고 반영이 완료되었습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `승인 실패: ${error.message.slice(0, 120)}` : '입금 승인에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+      await load();
+    }
   };
   const updateRequest = async (collection: string, request: RequestRow, status: string) => {
     if (!token || request.status !== 'PENDING') return;
-    await mergeDocument(collection, request.id, { status, reviewedAt: new Date(), reviewedBy: user?.email || '' }, token);
-    await load();
+    setSavingAction(request.id);
+    try {
+      if (collection === 'depositRequests' && status === 'REJECTED') {
+        await reviewDepositRequest(request.id, 'REJECTED', user?.email || MASTER_EMAIL, token);
+        setMessage('입금 신청을 거절하고 서버에 기록했습니다.');
+      } else {
+        await mergeDocument(collection, request.id, { status, reviewedAt: new Date(), reviewedBy: user?.email || MASTER_EMAIL }, token);
+        setMessage('신청 상태가 서버에 저장되었습니다.');
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? `처리 실패: ${error.message.slice(0, 120)}` : '신청 처리에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+      await load();
+    }
   };
 
   return (
