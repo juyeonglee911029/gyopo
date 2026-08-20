@@ -9,6 +9,7 @@ const firebaseConfig = {
 
 export const googleClientId =
   '376649492363-lgc1jrll9434im7ehi7o3o86ctrklr5u.apps.googleusercontent.com';
+export const MASTER_EMAIL = 'juyeonglee911029@gmail.com';
 
 export type PortalUser = {
   id: string;
@@ -21,6 +22,10 @@ export type PortalUser = {
   age?: number;
   country?: string;
 };
+
+export function isMasterUser(user?: Pick<PortalUser, 'email'> | null): boolean {
+  return user?.email?.toLowerCase() === MASTER_EMAIL;
+}
 
 export type OnlineUser = {
   id: string;
@@ -54,6 +59,18 @@ type FirestoreValue = {
   timestampValue?: string;
   arrayValue?: { values?: FirestoreValue[] };
   mapValue?: { fields?: Record<string, FirestoreValue> };
+};
+
+type FirestoreDocument = {
+  name?: string;
+  fields?: Record<string, FirestoreValue>;
+  updateTime?: string;
+};
+
+export type FirestoreFilter = {
+  field: string;
+  op: 'EQUAL' | 'GREATER_THAN' | 'GREATER_THAN_OR_EQUAL' | 'LESS_THAN' | 'LESS_THAN_OR_EQUAL';
+  value: unknown;
 };
 
 const sessionKey = 'gyopo-auth-session';
@@ -114,6 +131,40 @@ function decodeDocument<T>(document: { name?: string; fields?: Record<string, Fi
     Object.entries(document.fields || {}).map(([key, value]) => [key, fromFirestoreValue(value)]),
   );
   return { id, ...(data as T) };
+}
+
+function encodeFields(data: Record<string, unknown>): Record<string, FirestoreValue> {
+  return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, toFirestoreValue(value)]));
+}
+
+async function getRawDocument(collection: string, id: string, token?: string): Promise<FirestoreDocument | null> {
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {}, token);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<FirestoreDocument>;
+}
+
+function buildFieldFilter(filter: FirestoreFilter) {
+  return {
+    fieldFilter: {
+      field: { fieldPath: filter.field },
+      op: filter.op,
+      value: toFirestoreValue(filter.value),
+    },
+  };
+}
+
+async function runQueryDocuments(collection: string, filters: FirestoreFilter[], token?: string, limit?: number): Promise<FirestoreDocument[]> {
+  const structuredQuery: Record<string, unknown> = { from: [{ collectionId: collection }] };
+  if (filters.length === 1) structuredQuery.where = buildFieldFilter(filters[0]);
+  if (filters.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: filters.map(buildFieldFilter) } };
+  if (limit) structuredQuery.limit = limit;
+  const data = await firestoreRequest<Array<{ document?: FirestoreDocument }>>(
+    `${firestoreBase}:runQuery`,
+    { method: 'POST', body: JSON.stringify({ structuredQuery }) },
+    token,
+  );
+  return data.flatMap((item) => item.document ? [item.document] : []);
 }
 
 async function refreshSessionToken(): Promise<string | undefined> {
@@ -185,20 +236,11 @@ export async function listDocuments<T>(collection: string, token?: string): Prom
 }
 
 export async function queryDocuments<T>(collection: string, field: string, value: unknown, token?: string): Promise<Array<T & { id: string }>> {
-  const data = await firestoreRequest<Array<{ document?: { name?: string; fields?: Record<string, FirestoreValue> } }>>(
-    `${firestoreBase}:runQuery`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        structuredQuery: {
-          from: [{ collectionId: collection }],
-          where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: toFirestoreValue(value) } },
-        },
-      }),
-    },
-    token,
-  );
-  return data.filter((item) => item.document).map((item) => decodeDocument<T>(item.document!));
+  return (await runQueryDocuments(collection, [{ field, op: 'EQUAL', value }], token)).map((document) => decodeDocument<T>(document));
+}
+
+export async function queryDocumentsWhere<T>(collection: string, filters: FirestoreFilter[], token?: string, limit?: number): Promise<Array<T & { id: string }>> {
+  return (await runQueryDocuments(collection, filters, token, limit)).map((document) => decodeDocument<T>(document));
 }
 
 export async function getDocument<T>(collection: string, id: string, token?: string): Promise<(T & { id: string }) | null> {
@@ -243,6 +285,193 @@ export async function upsertDocument<T extends Record<string, unknown>>(
   if (response.ok) return;
   if (response.status !== 404) throw new Error(await response.text());
   await createDocument(collection, id, data, token);
+}
+
+export async function mergeDocument<T extends Record<string, unknown>>(
+  collection: string,
+  id: string,
+  data: T,
+  token?: string,
+): Promise<void> {
+  const fieldPaths = Object.keys(data).map((field) => `updateMask.fieldPaths=${encodeURIComponent(field)}`).join('&');
+  const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}?${fieldPaths}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: encodeFields(data) }),
+  }, token);
+  if (response.ok) return;
+  if (response.status !== 404) throw new Error(await response.text());
+  try {
+    await createDocument(collection, id, data, token);
+  } catch (error) {
+    // A concurrent creator may have won the first write; retry as a merge.
+    if (error instanceof Error && /already exists|409|ALREADY_EXISTS/i.test(error.message)) {
+      await mergeDocument(collection, id, data, token);
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function incrementDocument(collection: string, id: string, field: string, amount: number, token?: string): Promise<void> {
+  await firestoreRequest(`${firestoreBase}:commit`, {
+    method: 'POST',
+    body: JSON.stringify({
+      writes: [{
+        transform: {
+          document: `${firestoreBase}/${collection}/${encodeURIComponent(id)}`,
+          fieldTransforms: [{ fieldPath: field, increment: toFirestoreValue(amount) }],
+        },
+      }],
+    }),
+  }, token);
+}
+
+export type TetrisQueueProfile = { id: string; name: string; image: string; country?: string };
+export type TetrisMatchClaim = { matchId: string; role: 'A' | 'B'; opponent: TetrisQueueProfile };
+export type WebrtcMatchClaim = { callId: string; opponent: TetrisQueueProfile; initiator: boolean };
+
+export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: string): Promise<TetrisMatchClaim | null> {
+  const waiting = await runQueryDocuments('tetrisQueue', [
+    { field: 'status', op: 'EQUAL', value: 'waiting' },
+  ], token, 20);
+  const candidateRow = waiting.find((row) => {
+    const candidate = decodeDocument<{ userId?: string; lastSeenAt?: string }>(row);
+    return candidate.userId && candidate.userId !== profile.id && candidate.lastSeenAt && new Date(candidate.lastSeenAt).getTime() > Date.now() - 30_000 && row.name && row.updateTime;
+  });
+  if (!candidateRow?.name || !candidateRow.updateTime) return null;
+
+  const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
+  const matchId = `tetris-${profile.id}-${candidate.userId}-${crypto.randomUUID()}`;
+  const opponent: TetrisQueueProfile = { id: candidate.userId, name: candidate.name, image: candidate.image, country: candidate.country };
+  const candidateData = {
+    status: 'matched',
+    matchedBy: profile.id,
+    matchId,
+    role: 'B',
+    opponent: profile,
+    lastSeenAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const ownData = {
+    userId: profile.id,
+    name: profile.name,
+    image: profile.image,
+    country: profile.country || 'Global',
+    status: 'matched',
+    matchedBy: profile.id,
+    matchId,
+    role: 'A',
+    opponent,
+    lastSeenAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const candidateFields = { ...(candidateRow.fields || {}), ...encodeFields(candidateData) };
+  const ownName = `${firestoreBase}/tetrisQueue/${encodeURIComponent(profile.id)}`;
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: candidateRow.name, fields: candidateFields }, currentDocument: { updateTime: candidateRow.updateTime } },
+        { update: { name: ownName, fields: encodeFields(ownData) } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) return null;
+  return { matchId, role: 'A', opponent };
+}
+
+export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: string): Promise<WebrtcMatchClaim | null> {
+  const waiting = await runQueryDocuments('webrtcQueue', [
+    { field: 'status', op: 'EQUAL', value: 'waiting' },
+  ], token, 20);
+  const candidateRow = waiting.find((row) => {
+    const candidate = decodeDocument<{ userId?: string; lastSeenAt?: string }>(row);
+    return candidate.userId && candidate.userId !== profile.id && candidate.lastSeenAt && new Date(candidate.lastSeenAt).getTime() > Date.now() - 45_000 && row.name && row.updateTime;
+  });
+  if (!candidateRow?.name || !candidateRow.updateTime) return null;
+  const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
+  const callId = `webrtc-${profile.id}-${candidate.userId}-${crypto.randomUUID()}`;
+  const opponent: TetrisQueueProfile = { id: candidate.userId, name: candidate.name, image: candidate.image, country: candidate.country };
+  const candidateFields = {
+    ...(candidateRow.fields || {}),
+    ...encodeFields({ status: 'matched', matchedBy: profile.id, callId, opponent: profile, lastSeenAt: new Date(), updatedAt: new Date() }),
+  };
+  const ownName = `${firestoreBase}/webrtcQueue/${encodeURIComponent(profile.id)}`;
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: candidateRow.name, fields: candidateFields }, currentDocument: { updateTime: candidateRow.updateTime } },
+        { update: { name: ownName, fields: encodeFields({ userId: profile.id, name: profile.name, image: profile.image, country: profile.country || 'Global', status: 'matched', matchedBy: profile.id, callId, opponent, lastSeenAt: new Date(), updatedAt: new Date() }) } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) return null;
+  return { callId, opponent, initiator: profile.id < candidate.userId };
+}
+
+export async function reserveGameStake(userId: string, matchId: string, token?: string): Promise<void> {
+  const stakeId = `game-${matchId}-${userId}`;
+  if (await getRawDocument('gameStakes', stakeId, token)) return;
+  const profileDocument = await getRawDocument('profiles', userId, token);
+  if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
+  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
+  if (currentBalance < 1) throw new Error('게임 참가비 1 USDT가 부족합니다.');
+  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
+  const stakeName = `${firestoreBase}/gameStakes/${encodeURIComponent(stakeId)}`;
+  const profileFields = {
+    ...(profileDocument.fields || {}),
+    usdtBalance: toFirestoreValue(currentBalance - 1),
+    updatedAt: toFirestoreValue(new Date()),
+  };
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: profileName, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
+        { update: { name: stakeName, fields: encodeFields({ userId, matchId, amount: 1, createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) {
+    if (await getRawDocument('gameStakes', stakeId, token)) return;
+    throw new Error('게임 참가비 예약에 실패했습니다. 다시 시도해주세요.');
+  }
+}
+
+export async function reserveEscrowPurchase(
+  buyerId: string,
+  productId: string,
+  sellerId: string,
+  amount: number,
+  token?: string,
+): Promise<string> {
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('유효한 상품 금액이 아닙니다.');
+  const orderId = `order-${buyerId}-${productId}-${crypto.randomUUID()}`;
+  const buyerDocument = await getRawDocument('profiles', buyerId, token);
+  if (!buyerDocument?.name) throw new Error('구매자 프로필을 찾을 수 없습니다.');
+  const currentBalance = Number(fromFirestoreValue(buyerDocument.fields?.usdtBalance) || 0);
+  if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${amount} USDT가 필요합니다.`);
+  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(buyerId)}`;
+  const orderName = `${firestoreBase}/escrowOrders/${encodeURIComponent(orderId)}`;
+  const profileFields = { ...(buyerDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) };
+  const orderFields = encodeFields({ buyerId, sellerId, productId, amount, status: 'PAYMENT_HELD', createdAt: new Date(), updatedAt: new Date(), timeline: [{ status: 'PAYMENT_HELD', at: new Date(), note: '구매자 결제 금액을 에스크로에 보관했습니다.' }] });
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: profileName, fields: profileFields }, currentDocument: { updateTime: buyerDocument.updateTime } },
+        { update: { name: orderName, fields: orderFields }, currentDocument: { exists: false } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('에스크로 주문을 생성하지 못했습니다. 다시 시도해주세요.');
+  return orderId;
 }
 
 export function getStoredSession(): StoredSession | null {
@@ -307,6 +536,13 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     isSubscribed: user.isSubscribed,
     updatedAt: new Date(),
   }, result.idToken);
+  await upsertDocument('publicProfiles', user.id, {
+    name: user.name,
+    email: user.email,
+    image: user.image,
+    country: user.country || 'Global',
+    updatedAt: new Date(),
+  }, result.idToken);
   return user;
 }
 
@@ -320,6 +556,13 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     ...(user.gender ? { gender: user.gender } : {}),
     ...(user.age ? { age: user.age } : {}),
     ...(user.country ? { country: user.country } : {}),
+    updatedAt: new Date(),
+  }, token);
+  await upsertDocument('publicProfiles', user.id, {
+    name: user.name,
+    email: user.email,
+    image: user.image,
+    country: user.country || 'Global',
     updatedAt: new Date(),
   }, token);
   if (typeof window !== 'undefined') {
@@ -403,16 +646,14 @@ export async function getSiteStats(): Promise<SiteStats> {
 }
 
 export async function getOnlineCount(): Promise<number> {
-  const presence = await listDocuments<{ lastSeenAt?: string; userId?: string }>('presence');
-  const threshold = Date.now() - 90_000;
-  return presence.filter((item) => item.userId && item.lastSeenAt && new Date(item.lastSeenAt).getTime() > threshold).length;
+  const presence = await queryDocumentsWhere<{ lastSeenAt?: string; userId?: string }>('presence', [{ field: 'lastSeenAt', op: 'GREATER_THAN', value: new Date(Date.now() - 90_000) }]);
+  return presence.filter((item) => item.userId).length;
 }
 
 export async function listOnlineUsers(): Promise<OnlineUser[]> {
-  const presence = await listDocuments<Omit<OnlineUser, 'id'>>('presence');
-  const threshold = Date.now() - 90_000;
+  const presence = await queryDocumentsWhere<Omit<OnlineUser, 'id'>>('presence', [{ field: 'lastSeenAt', op: 'GREATER_THAN', value: new Date(Date.now() - 90_000) }]);
   return presence
-    .filter((item) => item.userId && item.lastSeenAt && new Date(item.lastSeenAt).getTime() > threshold)
+    .filter((item) => item.userId)
     .map((item) => ({ ...item, id: item.userId as string, userId: item.userId as string }))
     .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
 }
@@ -424,7 +665,7 @@ export async function deleteDocument(collection: string, id: string, token?: str
   if (!response.ok && response.status !== 404) throw new Error(await response.text());
 }
 
-export async function deleteExpiredChatMessages(token?: string): Promise<number> {
+export async function deleteExpiredChatMessages(token?: string, collection = 'chatMessages'): Promise<number> {
   if (!token) return 0;
   const rows = await firestoreRequest<Array<{ document?: { name?: string; fields?: Record<string, FirestoreValue> } }>>(
     `${firestoreBase}:runQuery`,
@@ -432,7 +673,7 @@ export async function deleteExpiredChatMessages(token?: string): Promise<number>
       method: 'POST',
       body: JSON.stringify({
         structuredQuery: {
-          from: [{ collectionId: 'chatMessages' }],
+          from: [{ collectionId: collection }],
           where: {
             fieldFilter: {
               field: { fieldPath: 'expiresAt' },
@@ -448,7 +689,7 @@ export async function deleteExpiredChatMessages(token?: string): Promise<number>
   const expired = rows
     .filter((row) => row.document)
     .map((row) => decodeDocument<Record<string, unknown>>(row.document as { name: string; fields?: Record<string, FirestoreValue> }));
-  await Promise.all(expired.map((message) => deleteDocument('chatMessages', message.id, token)));
+  await Promise.all(expired.map((message) => deleteDocument(collection, message.id, token)));
   return expired.length;
 }
 
