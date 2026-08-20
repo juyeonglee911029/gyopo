@@ -331,7 +331,7 @@ export default function WebRTCPage() {
             nextCall = { callId: ownQueue.callId, peer: matchedPeer, initiator: user.id < matchedPeer.userId };
           } else {
             await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
-            const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', gender: gender || '', genderPreference, isSubscribed: Boolean(user.isSubscribed) }, token).catch(() => null);
+            const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', gender: gender || '', genderPreference, isSubscribed: Boolean(user.isSubscribed) }, token);
             if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
           if (!nextCall) {
