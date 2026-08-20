@@ -583,7 +583,7 @@ export default function GamesPage() {
        const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
        setOpponentReady(nextReady);
        if (nextOpponent) setOpponent(nextOpponent);
-       if (room.betAmount !== undefined) setBetAmount(String(room.betAmount));
+       
        if (room.startAt && roomStartAt !== room.startAt) beginCountdown(room.startAt);
        if (room.readyA && room.readyB && !room.startAt && room.phase !== 'finished') setMatchStatus('양쪽 모두 준비 완료 · 빨간 시작 버튼을 눌러주세요');
        else if (readyForBattle && nextReady) setMatchStatus('양쪽 모두 준비 완료 · 빨간 시작 버튼을 눌러주세요');
