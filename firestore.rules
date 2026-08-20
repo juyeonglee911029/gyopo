@@ -128,7 +128,7 @@ service cloud.firestore {
     }
     match /gameStakes/{stakeId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount == 1;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0;
       allow update, delete: if false;
     }
     match /tetrisInvites/{inviteId} {
