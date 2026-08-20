@@ -184,6 +184,23 @@ export async function listDocuments<T>(collection: string, token?: string): Prom
   return (data.documents || []).map((document) => decodeDocument<T>(document));
 }
 
+export async function queryDocuments<T>(collection: string, field: string, value: unknown, token?: string): Promise<Array<T & { id: string }>> {
+  const data = await firestoreRequest<Array<{ document?: { name?: string; fields?: Record<string, FirestoreValue> } }>>(
+    `${firestoreBase}:runQuery`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: collection }],
+          where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: toFirestoreValue(value) } },
+        },
+      }),
+    },
+    token,
+  );
+  return data.filter((item) => item.document).map((item) => decodeDocument<T>(item.document!));
+}
+
 export async function getDocument<T>(collection: string, id: string, token?: string): Promise<(T & { id: string }) | null> {
   const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {}, token);
   if (response.status === 404) return null;
