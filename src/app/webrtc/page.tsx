@@ -88,8 +88,15 @@ export default function WebRTCPage() {
     setPermissionError('');
     try {
       await requestMedia();
-    } catch {
-      setPermissionError('카메라와 마이크 권한이 필요합니다. 브라우저 주소창의 권한 설정을 확인해주세요.');
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : error instanceof Error ? error.message : '알 수 없는 오류';
+      if (name === 'NotFoundError') {
+        setPermissionError('이 기기에서 카메라 또는 마이크를 찾을 수 없습니다. 장치 연결 상태를 확인해주세요.');
+      } else if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setPermissionError('카메라와 마이크 권한이 필요합니다. 브라우저 주소창의 권한 설정을 확인해주세요.');
+      } else {
+        setPermissionError(`카메라와 마이크를 준비하지 못했습니다: ${name}`);
+      }
       return;
     }
     appliedCandidates.current.clear();
