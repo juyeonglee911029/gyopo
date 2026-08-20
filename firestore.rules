@@ -131,6 +131,16 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0;
       allow update, delete: if false;
     }
+    match /genderMatchStakes/{stakeId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0;
+      allow update, delete: if false;
+    }
+    match /premiumSubscriptions/{subscriptionId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount == 30;
+      allow update, delete: if false;
+    }
     match /tetrisInvites/{inviteId} {
       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
