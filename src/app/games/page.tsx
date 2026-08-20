@@ -17,7 +17,7 @@ const SHAPES = [
   [[1, 1, 0], [0, 1, 1]],
 ];
 const COLORS = ['#2dd4bf', '#facc15', '#c084fc', '#60a5fa', '#fb923c', '#f472b6', '#4ade80'];
-const ENTRY_FEE = 1;
+const DEFAULT_ENTRY_FEE = 1;\nconst MIN_ENTRY_FEE = 1;\nconst MAX_ENTRY_FEE = 100;
 type Piece = { type: number; shape: number[][]; x: number; y: number };
 type ChatMessage = { id: string; authorId: string; user: string; country?: string; text: string; createdAt: string; expiresAt?: string | Date };
 type GameState = { board: number[][]; piece: Piece; nextPiece: Piece; running: boolean; started: boolean; paused: boolean; score: number; lines: number; notice: string; noticeId: number };
@@ -147,7 +147,7 @@ export default function GamesPage() {
   const [inviteStatus, setInviteStatus] = useState('');
   const [readyForBattle, setReadyForBattle] = useState(false);
   const [opponentReady, setOpponentReady] = useState(false);
-  const [selectedOnlineUserId, setSelectedOnlineUserId] = useState<string | null>(null);
+  const [selectedOnlineUserId, setSelectedOnlineUserId] = useState<string | null>(null);\n  const [betAmount, setBetAmount] = useState(DEFAULT_ENTRY_FEE);
   const [stakeReserved, setStakeReserved] = useState(false);
   const [countdown, setCountdown] = useState<number | 'START' | null>(null);
   const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
@@ -432,13 +432,23 @@ export default function GamesPage() {
     if (!matchId || !matchRole) return;
     const token = getSessionToken();
     if (!token || !user) return window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+    const roomBeforeBet = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
+    const amount = matchRole === 'B' ? Number(roomBeforeBet?.betAmount || 0) : Number(betAmount);
+    if (!Number.isFinite(amount) || amount < MIN_ENTRY_FEE || amount > MAX_ENTRY_FEE) {
+      window.alert('참가비는 ' + MIN_ENTRY_FEE + '~' + MAX_ENTRY_FEE + ' USDT 사이로 입력해주세요.');
+      return;
+    }
+    if (matchRole === 'B' && !roomBeforeBet?.betAmount) {
+      window.alert('상대방이 참가비를 먼저 설정해야 합니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     if (!stakeReserved) {
       try {
-        await reserveGameStake(user.id, matchId, ENTRY_FEE, token);
+        await reserveGameStake(user.id, matchId, amount, token);
         setStakeReserved(true);
         const refreshed = await refreshStoredUser().catch(() => null);
         if (refreshed) setUser(refreshed);
-        else updateUsdt(-ENTRY_FEE, { type: 'GAME', amount: ENTRY_FEE, status: 'COMPLETED', details: '테트리스 매칭 참가비' });
+        else updateUsdt(-amount, { type: 'GAME', amount, status: 'COMPLETED', details: '테트리스 매칭 참가비' });
       } catch (error) {
         window.alert(error instanceof Error ? error.message : '게임 참가비를 예약하지 못했습니다.');
         return;
@@ -448,7 +458,7 @@ export default function GamesPage() {
     setMatchPhase('betting');
     setMatchStatus('배팅금액 확정 · 상대 준비를 기다리는 중');
     await updateRoom({
-      betAmount: ENTRY_FEE,
+      betAmount: amount,
       phase: 'betting',
       ...(matchRole === 'A' ? { readyA: true, readyAAt: new Date() } : { readyB: true, readyBAt: new Date() }),
     }).catch(() => setMatchStatus('대전 설정을 저장하지 못했습니다.'));
@@ -483,7 +493,7 @@ export default function GamesPage() {
        setRoomStartAt(null);
        setCountdown(null);
        gameStartedRef.current = false;
-      setMatchStatus('상대 입장 완료 · 배팅금액을 입력해주세요');
+      setMatchStatus('상대 입장 완료 · 참가비를 설정해주세요');
       setInviteStatus('상대가 방에 입장했습니다. 양쪽 모두 배팅금액을 확정하면 자동으로 시작합니다.');
     };
     const poll = async () => {
@@ -580,7 +590,7 @@ export default function GamesPage() {
        if (!room) return;
        const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
        const nextState = matchRole === 'A' ? room.playerBState : room.playerAState;
-       const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
+       const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);\n        if (room.betAmount && room.betAmount !== betAmount) setBetAmount(room.betAmount);
        setOpponentReady(nextReady);
        if (nextOpponent) setOpponent(nextOpponent);
        
@@ -643,7 +653,7 @@ export default function GamesPage() {
           </section>
            <aside className="space-y-5"><section className="rounded-[2rem] border border-white/10 bg-[#10182b] p-5"><div className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-slate-500">Next block</div><div className="grid w-24 grid-cols-4 gap-1 rounded-xl bg-black/20 p-2">{Array.from({ length: 16 }, (_, i) => { const x = i % 4; const y = Math.floor(i / 4); return <div key={i} className="aspect-square rounded" style={game.nextPiece.shape[y]?.[x] ? { backgroundColor: COLORS[game.nextPiece.type] } : undefined} />; })}</div><p className="mt-4 text-sm text-slate-400">상대가 같은 대전방에 들어오면 상대 블록 화면이 실시간으로 표시됩니다.</p></section>
              <section className="rounded-[2rem] border border-cyan-300/20 bg-[#10182b] p-5"><div className="mb-3 flex items-center justify-between gap-2"><div className="font-black">상대방 보드</div><span className="text-[10px] font-bold text-cyan-300">{matchStatus}</span></div>{opponent ? <div className="mb-3 flex items-center gap-2"><img src={opponent.image} alt="" className="h-8 w-8 rounded-full object-cover" /><div className="min-w-0"><div className="truncate text-sm font-bold">{opponent.name}</div><div className="text-[10px] text-slate-500">{opponent.country || 'Global'}</div></div></div> : <p className="mb-3 text-xs text-slate-500">매칭 찾기를 누르면 접속 회원에게 대전 신청을 보냅니다.</p>}<div className="mx-auto max-w-[230px] rounded-2xl border border-white/10 bg-[#050914] p-2"><div className="grid grid-cols-10 gap-0.5 rounded-xl bg-[#0b1221] p-1">{opponentVisual.flatMap((row, y) => row.map((cell, x) => <div key={`${x}-${y}`} className={`aspect-square rounded-[2px] ${cell === 0 ? 'bg-white/[0.025]' : cell === -1 ? 'border border-dashed border-cyan-100/50 bg-cyan-200/10' : 'shadow-[inset_0_1px_0_rgba(255,255,255,.55)]'}`} style={cell > 0 ? { backgroundColor: COLORS[cell - 1] } : undefined} />))}</div></div><p className="mt-3 text-center text-[11px] text-slate-500">{opponentState ? '상대 게임 상태를 수신 중' : '상대가 연결되면 보드가 나타납니다.'}</p></section>
-             <section className="rounded-[2rem] border border-amber-300/20 bg-[#10182b] p-5"><div className="mb-2 flex items-center justify-between"><div className="font-black">대전 설정</div><span className="text-[10px] font-bold text-amber-300">{matchPhase}</span></div><p className="mb-3 text-xs text-slate-400">{inviteStatus || matchStatus}</p>{matchPhase === 'waiting' && <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-3 text-sm font-bold text-cyan-100">상대방을 찾는 중입니다...</div>}{matchPhase === 'betting' && <div className="mb-3 rounded-xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">게임 참가비는 매 경기 서버 잔고에서 1 USDT만 예약됩니다.</div>}{matchPhase === 'betting' && matchRole === 'A' && <div className="space-y-2"><div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-amber-100">고정 참가비 <b className="text-amber-300">{ENTRY_FEE} USDT</b></div><button onClick={() => void confirmBet()} disabled={readyForBattle} className="w-full rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950 disabled:opacity-40">참가비 확정 · 준비하기</button></div>}{matchPhase === 'betting' && matchRole === 'B' && <div className="space-y-2"><div className="rounded-xl bg-amber-300/10 px-3 py-2 text-sm text-amber-100">고정 참가비: {ENTRY_FEE} USDT</div><button onClick={() => void confirmBet()} disabled={readyForBattle} className="w-full rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950 disabled:opacity-40">수락하고 준비하기</button></div>}{matchPhase === 'finished' && <div className={`rounded-xl px-3 py-3 text-center text-xl font-black ${matchResult === 'WIN' ? 'bg-emerald-300/10 text-emerald-200' : 'bg-rose-300/10 text-rose-200'}`}>{matchResult || '대전 종료'}</div>}</section>
+             <section className="rounded-[2rem] border border-amber-300/20 bg-[#10182b] p-5"><div className="mb-2 flex items-center justify-between"><div className="font-black">대전 설정</div><span className="text-[10px] font-bold text-amber-300">{matchPhase}</span></div><p className="mb-3 text-xs text-slate-400">{inviteStatus || matchStatus}</p>{matchPhase === 'waiting' && <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-3 text-sm font-bold text-cyan-100">상대방을 찾는 중입니다...</div>}{matchPhase === 'betting' && <div className="mb-3 rounded-xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">참가비는 매 경기 서버 잔고에서 설정한 금액만 예약됩니다.</div>}{matchPhase === 'betting' && matchRole === 'A' && <div className="space-y-2"><label className="block text-xs font-bold text-amber-100">참가비 설정 (1~100 USDT)<input type="number" min={MIN_ENTRY_FEE} max={MAX_ENTRY_FEE} step="1" value={betAmount} onChange={(event) => setBetAmount(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-amber-300" /></label><button onClick={() => void confirmBet()} disabled={readyForBattle} className="w-full rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950 disabled:opacity-40">참가비 확정 · 준비하기</button></div>}{matchPhase === 'betting' && matchRole === 'B' && <div className="space-y-2"><div className="rounded-xl bg-amber-300/10 px-3 py-2 text-sm text-amber-100">상대가 설정한 참가비: {ENTRY_FEE} USDT</div><button onClick={() => void confirmBet()} disabled={readyForBattle} className="w-full rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950 disabled:opacity-40">수락하고 준비하기</button></div>}{matchPhase === 'finished' && <div className={`rounded-xl px-3 py-3 text-center text-xl font-black ${matchResult === 'WIN' ? 'bg-emerald-300/10 text-emerald-200' : 'bg-rose-300/10 text-rose-200'}`}>{matchResult || '대전 종료'}</div>}</section>
              {matchId && matchPhase === 'betting' && <section className="rounded-[2rem] border border-rose-400/30 bg-[#10182b] p-5"><div className="mb-3 flex items-center justify-between"><div className="font-black">실시간 준비 상태</div><span className="text-[10px] font-bold text-slate-500">자동 갱신</span></div><div className="grid grid-cols-2 gap-2 text-center text-xs"><div className={`rounded-xl px-3 py-3 ${readyForBattle ? 'bg-emerald-300/15 text-emerald-200' : 'bg-white/[.05] text-slate-400'}`}>나<br /><b className="text-sm">{readyForBattle ? '준비 완료' : '준비 전'}</b></div><div className={`rounded-xl px-3 py-3 ${opponentReady ? 'bg-emerald-300/15 text-emerald-200' : 'bg-white/[.05] text-slate-400'}`}>상대<br /><b className="text-sm">{opponentReady ? '준비 완료' : '준비 전'}</b></div></div>{readyForBattle && opponentReady && !roomStartAt && <button onClick={() => void startBattle()} className="mt-4 w-full rounded-xl bg-rose-500 py-3.5 text-sm font-black text-white shadow-[0_0_24px_rgba(244,63,94,.35)] transition hover:bg-rose-400">빨간 시작 버튼 · 대전 시작</button>}{readyForBattle && !opponentReady && <p className="mt-3 text-center text-xs text-slate-500">상대방의 준비 완료를 기다리는 중입니다.</p>}</section>}
             <section className="flex min-h-[240px] flex-col md:min-h-[360px] rounded-[2rem] border border-white/10 bg-[#10182b] p-5"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 font-black"><MessageCircle size={17} className="text-cyan-300" /> 실시간 메시지</div><span className="text-[10px] font-bold text-emerald-300">LIVE</span></div><div className="flex-1 space-y-3 overflow-y-auto pr-1">{messages.length === 0 ? <p className="py-10 text-center text-sm text-slate-500">아직 메시지가 없습니다.</p> : messages.map((message) => <div key={message.id} className="rounded-2xl bg-white/[0.045] p-3"><div className="mb-1 flex justify-between gap-2 text-[10px]"><b className="text-cyan-200">{message.user}</b><span className="text-slate-600">{formatTime(message.createdAt)}</span></div><p className="break-words text-sm text-slate-200">{message.text}</p></div>)}</div>{user ? <form onSubmit={sendMessage} className="mt-4 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="게임 중 메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-300" /><button aria-label="메시지 보내기" className="rounded-xl bg-cyan-400 px-3 text-slate-950"><Send size={16} /></button></form> : <p className="mt-4 text-center text-xs text-slate-500">로그인 후 참여할 수 있습니다.</p>}</section>
              <section className="rounded-[2rem] border border-white/10 bg-[#10182b] p-5"><div className="mb-3 flex items-center justify-between gap-2"><div className="flex items-center gap-2 font-black"><Users size={17} className="text-emerald-300" /> 실제 접속 회원</div><span className="text-[10px] font-bold text-emerald-300">클릭하여 신청</span></div>{onlineUsers.length === 0 ? <p className="text-sm text-slate-500">현재 접속 중인 인증 회원이 없습니다.</p> : <div className="space-y-2">{onlineUsers.filter((online) => online.id !== user?.id).map((online) => <div key={online.id} className={`rounded-xl p-2.5 transition ${selectedOnlineUserId === online.id ? 'bg-cyan-300/10 ring-1 ring-cyan-300/40' : 'bg-white/[0.04]'}`}><button onClick={() => setSelectedOnlineUserId(selectedOnlineUserId === online.id ? null : online.id)} className="flex w-full items-center gap-2 text-left"><img src={online.image} alt="" className="h-8 w-8 rounded-full object-cover" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{online.name}</span><span className="text-[10px] text-emerald-300">● {online.country || '국가 미설정'}</span></span></button>{selectedOnlineUserId === online.id && <button onClick={() => void sendInvite(online)} disabled={matchPhase === 'betting' || matchPhase === 'countdown' || matchPhase === 'playing'} className="mt-2 w-full rounded-lg bg-cyan-400 py-2 text-xs font-black text-slate-950 disabled:opacity-40">대전 신청하기</button>}</div>)}</div>}</section></aside>
