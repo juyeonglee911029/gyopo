@@ -857,27 +857,29 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     country: savedProfile?.country,
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
-  await upsertDocument('profiles', user.id, {
-    name: user.name,
-    email: user.email,
-    image: user.image,
-    usdtBalance: user.usdtBalance,
-    isSubscribed: user.isSubscribed,
-    ...(user.gender ? { gender: user.gender } : {}),
-    ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
-    ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
-    updatedAt: new Date(),
-  }, result.idToken);
-  await upsertDocument('publicProfiles', user.id, {
-    name: user.name,
-    email: user.email,
-    image: user.image,
-    country: user.country || 'Global',
-    gender: user.gender || '',
-    genderPreference: user.genderPreference || 'any',
-    isSubscribed: Boolean(user.isSubscribed),
-    updatedAt: new Date(),
-  }, result.idToken);
+  await Promise.allSettled([
+    upsertDocument('profiles', user.id, {
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      usdtBalance: user.usdtBalance,
+      isSubscribed: user.isSubscribed,
+      ...(user.gender ? { gender: user.gender } : {}),
+      ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
+      ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
+      updatedAt: new Date(),
+    }, result.idToken),
+    upsertDocument('publicProfiles', user.id, {
+      name: user.name,
+      email: user.email,
+      image: user.image,
+      country: user.country || 'Global',
+      gender: user.gender || '',
+      genderPreference: user.genderPreference || 'any',
+      isSubscribed: Boolean(user.isSubscribed),
+      updatedAt: new Date(),
+    }, result.idToken),
+  ]);
   return user;
 }
 
@@ -1078,4 +1080,3 @@ declare global {
     };
   }
 }
-
