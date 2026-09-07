@@ -19,6 +19,7 @@ type Post = {
   comments?: number;
   sourceUrl?: string;
   sourceName?: string;
+  sourceContentId?: string;
 };
 
 function formatDate(value: string) {
@@ -124,7 +125,7 @@ export default function CommunityPage() {
           {!loading && filteredPosts.length === 0 && <div className="text-center py-20 text-gray-500">아직 게시글이 없습니다. 첫 글을 남겨보세요.</div>}
           {filteredPosts.map((post) => (
              <div key={post.id} className="relative hover:bg-blue-50/50 transition-colors">
-              <Link href={`/community/${post.id}`} className="block">
+              <Link href={post.sourceContentId ? `/content/${post.sourceContentId}` : `/community/${post.id}`} className="block">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center">
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center">
                   <span className={post.type === 'notice' ? 'text-red-500' : post.type === 'news' ? 'text-blue-500' : 'text-gray-400'}>
