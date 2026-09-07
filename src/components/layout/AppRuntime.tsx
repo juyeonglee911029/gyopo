@@ -6,13 +6,17 @@ import { useGlobalStore } from '@/store/useGlobalStore';
 
 export default function AppRuntime({ children }: { children: React.ReactNode }) {
   const setUser = useGlobalStore((state) => state.setUser);
+  const user = useGlobalStore((state) => state.user);
   const selectedCountry = useGlobalStore((state) => state.selectedCountry);
+  const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
   const darkMode = useGlobalStore((state) => state.darkMode);
   const setDarkMode = useGlobalStore((state) => state.setDarkMode);
 
   useEffect(() => {
-    setDarkMode(window.localStorage.getItem('gyopo-dark-mode') !== '0');
-  }, [setDarkMode]);
+    setDarkMode(window.localStorage.getItem('gyopo-dark-mode') === '1');
+    const savedRegion = window.localStorage.getItem('gyopo-region');
+    if (savedRegion) setSelectedCountry(savedRegion);
+  }, [setDarkMode, setSelectedCountry]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
@@ -20,14 +24,22 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   }, [darkMode]);
 
   useEffect(() => {
-    const sessionUser = getStoredSession()?.user || null;
-    setUser(sessionUser);
-    void recordVisit(sessionUser, selectedCountry);
+    window.localStorage.setItem('gyopo-region', selectedCountry);
+  }, [selectedCountry]);
+
+  useEffect(() => {
+    const beat = () => recordVisit(getStoredSession()?.user || user || null, selectedCountry);
+    setUser(getStoredSession()?.user || user || null);
+    void beat();
     const heartbeat = window.setInterval(() => {
-      void recordVisit(getStoredSession()?.user || null, selectedCountry);
-    }, 20_000);
-    return () => window.clearInterval(heartbeat);
-  }, [selectedCountry, setUser]);
+      void beat();
+    }, 10_000);
+    window.addEventListener('focus', beat);
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener('focus', beat);
+    };
+  }, [selectedCountry, setUser, user?.id]);
 
   useEffect(() => {
     const refresh = async () => {
