@@ -32,11 +32,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={notoSansKr.variable + ' ' + manrope.variable + ' font-sans bg-[#070b17] text-slate-100 pt-16 min-h-screen flex flex-col'}>
+      <body className={`${notoSansKr.variable} ${manrope.variable} font-sans bg-[#070b17] text-slate-100 pt-16 min-h-screen flex flex-col`}>
         <AppRuntime>
           <AdSenseScript />
           <Header />
           <GlobalChat />
+
           <div className="flex-grow flex flex-col lg:ml-80 transition-all">
             <main className="flex-grow">
               {children}
