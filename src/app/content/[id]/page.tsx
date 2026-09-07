@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ExternalLink, Image as ImageIcon, ShieldCheck } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getDocument, getSessionToken } from '@/lib/firebase';
 
@@ -29,7 +29,23 @@ type ContentRecord = {
   createdAt?: string;
 };
 
-async function findContent(id: string) {
+type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string };
+
+async function findLiveContent(sourceId: string, category: string, sourceUrl: string) {
+  const response = await fetch(`/api/content/preview?source=${encodeURIComponent(sourceId)}`);
+  if (!response.ok) return null;
+  const snapshot = await response.json() as { sourceName?: string; region?: string; fetchedAt?: string; items?: SourceItem[]; sections?: Array<{ category: string; items: SourceItem[] }> };
+  const entries = [...(snapshot.items || []), ...(snapshot.sections || []).filter((section) => section.category === category).flatMap((section) => section.items)];
+  const entry = entries.find((item) => item.url === sourceUrl);
+  if (!entry) return null;
+  return { ...entry, id: '', body: entry.body || entry.description || '원문 본문을 확인하세요.', sourceName: snapshot.sourceName, country: snapshot.region, sourceCategory: category, sourceUrl: entry.url, createdAt: entry.publishedAt || snapshot.fetchedAt };
+}
+
+async function findContent(id: string, sourceId?: string, category?: string, sourceUrl?: string) {
+  if (sourceId && category && sourceUrl) {
+    const live = await findLiveContent(sourceId, category, sourceUrl).catch(() => null);
+    if (live) return live;
+  }
   const token = getSessionToken();
   const collections = ['posts', 'jobs', 'directories', 'marketItems'];
   for (const collection of collections) {
@@ -41,14 +57,15 @@ async function findContent(id: string) {
 
 export default function ContentDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [content, setContent] = useState<ContentRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const id = Array.isArray(params.id) ? params.id[0] : params.id;
     if (!id) return;
-    void findContent(id).then(setContent).finally(() => setLoading(false));
-  }, [params.id]);
+    void findContent(id, searchParams.get('source') || undefined, searchParams.get('category') || undefined, searchParams.get('url') || undefined).then(setContent).finally(() => setLoading(false));
+  }, [params.id, searchParams]);
 
   if (loading) return <div className="mx-auto max-w-3xl px-4 py-24 text-center text-sm text-slate-500">콘텐츠를 불러오는 중입니다...</div>;
   if (!content) return <div className="mx-auto max-w-3xl px-4 py-24 text-center"><p className="text-slate-500">게시된 콘텐츠를 찾을 수 없습니다.</p><Link href="/news" className="mt-4 inline-block font-bold text-teal-400">뉴스 허브로 돌아가기</Link></div>;
