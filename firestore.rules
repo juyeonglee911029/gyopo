@@ -74,7 +74,7 @@ service cloud.firestore {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update: if isMaster();
-       allow delete: if request.auth != null && (resource.data.playerAId == request.auth.uid || resource.data.playerBId == request.auth.uid);
+       allow delete: if false;
      }
     match /transferRequests/{requestId} {
       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
@@ -91,6 +91,10 @@ service cloud.firestore {
     match /adminSettings/{settingId} {
       allow read: if true;
       allow write: if isMaster();
+    }
+    match /contentSnapshots/{snapshotId} {
+      allow read: if true;
+      allow create, update, delete: if isMaster();
     }
     match /stats/{statId} {
       allow read, create, update: if true;
@@ -160,4 +164,3 @@ service cloud.firestore {
      }
   }
 }
- 
