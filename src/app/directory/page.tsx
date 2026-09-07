@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import BannerAd from '@/components/ads/BannerAd';
 import { createDocument, getSessionToken, listDocuments } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { seedDirectories } from '@/lib/seedData';
 
 type Directory = { id: string; name: string; category: string; desc: string; tel: string; address?: string; rating?: number; reviews?: number; lat?: number; lng?: number; country: string; image?: string; authorId: string; createdAt: string; sourceUrl?: string; sourceName?: string };
 
@@ -21,8 +20,8 @@ export default function DirectoryPage() {
   const loadDirectories = async () => {
     try {
       const data = await listDocuments<Omit<Directory, 'id'>>('directories', getSessionToken());
-       setDirectories([...data, ...seedDirectories].filter((directory) => directory.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-     } catch { setDirectories(seedDirectories); }
+       setDirectories(data.filter((directory) => directory.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+     } catch { setDirectories([]); }
   };
 
   useEffect(() => { void loadDirectories(); }, []);
