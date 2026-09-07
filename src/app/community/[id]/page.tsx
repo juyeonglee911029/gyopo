@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { deleteDocument, getDocument, getSessionToken, incrementDocument, mergeDocument } from '@/lib/firebase';
-import { seedPosts } from '@/lib/seedData';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 export const runtime = 'edge';
@@ -37,11 +36,11 @@ export default function CommunityPostPage() {
     if (!id) return;
     const load = async () => {
       const stored = await getDocument<Omit<Post, 'id'>>('posts', id, getSessionToken()).catch(() => null);
-      const next = stored || seedPosts.find((item) => item.id === id) || null;
+       const next = stored || null;
       setPost(next);
       setTitle(next?.title || '');
       setBody(next?.body || '');
-      if (next && !id.startsWith('seed-')) {
+       if (next) {
         await incrementDocument('posts', id, 'views', 1, getSessionToken()).catch(() => undefined);
         setPost((current) => current ? { ...current, views: Number(current.views || 0) + 1 } : current);
       }
@@ -53,7 +52,7 @@ export default function CommunityPostPage() {
   if (loading) return <div className="container mx-auto px-4 py-20 text-center text-gray-400">게시글을 불러오는 중입니다...</div>;
   if (!post) return <div className="container mx-auto px-4 py-20 text-center"><p className="text-gray-500 mb-4">게시글을 찾을 수 없습니다.</p><Link href="/community" className="text-blue-600 font-bold">커뮤니티로 돌아가기</Link></div>;
 
-  const canEdit = Boolean(user && user.id === post.authorId && !post.id.startsWith('seed-'));
+  const canEdit = Boolean(user && user.id === post.authorId);
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
     const token = getSessionToken();
