@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createDocument, deleteDocument, getSessionToken, listDocuments, mergeDocument } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { seedPosts } from '@/lib/seedData';
 
 type Post = {
   id: string;
@@ -38,9 +37,9 @@ export default function CommunityPage() {
   const loadPosts = async () => {
     try {
       const data = await listDocuments<Omit<Post, 'id'>>('posts', getSessionToken());
-       setPosts([...data, ...seedPosts].filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-     } catch {
-       setPosts(seedPosts);
+       setPosts(data.filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      } catch {
+        setPosts([]);
     } finally {
       setLoading(false);
     }
@@ -85,7 +84,7 @@ export default function CommunityPage() {
   const handleDelete = async (post: Post) => {
     if (!user || user.id !== post.authorId || !window.confirm('이 게시글을 삭제할까요?')) return;
     const token = getSessionToken();
-    if (!token || post.id.startsWith('seed-')) return;
+    if (!token) return;
     try {
       await deleteDocument('posts', post.id, token);
       setPosts((current) => current.filter((item) => item.id !== post.id));
