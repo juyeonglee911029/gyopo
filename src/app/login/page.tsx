@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
-import { googleClientId, loadGoogleIdentityScript, signInWithGoogleCredential } from '@/lib/firebase';
+import { getStoredSession, googleClientId, loadGoogleIdentityScript, signInWithGoogleCredential } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 export default function LoginPage() {
@@ -16,6 +16,13 @@ export default function LoginPage() {
   useEffect(() => {
     let cancelled = false;
 
+    const existingUser = getStoredSession()?.user;
+    if (existingUser) {
+      setUser(existingUser);
+      router.replace('/');
+      return () => { cancelled = true; };
+    }
+
     void loadGoogleIdentityScript()
       .then(() => {
         if (cancelled || !buttonRef.current || !window.google?.accounts?.id) return;
@@ -27,7 +34,7 @@ export default function LoginPage() {
             try {
               const user = await signInWithGoogleCredential(credential);
               setUser(user);
-              router.push('/');
+               router.replace('/');
             } catch {
               setError('Google 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
               setLoading(false);
