@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { Gamepad2, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen, Video } from 'lucide-react';
+import { useState } from 'react';
+import { Gamepad2, Wallet, LogIn, LogOut, Users, Film, Moon, Sun, BookOpen, Video, Menu, X, MapPin } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
-
+import { REGIONS } from '@/lib/regions';
 
 export default function Header() {
-  const { user, setUser, darkMode, setDarkMode } = useGlobalStore();
+  const { user, setUser, darkMode, setDarkMode, selectedCountry, setSelectedCountry } = useGlobalStore();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
     signOut();
@@ -30,6 +32,7 @@ export default function Header() {
             <Link href="/directory" className="hover:text-teal-300 transition-colors">업소록</Link>
             <Link href="/market" className="hover:text-teal-300 transition-colors">에스크로장터</Link>
             <Link href="/community" className="hover:text-teal-300 transition-colors">커뮤니티</Link>
+            <Link href="/news" className="hover:text-teal-300 transition-colors">오늘의 뉴스</Link>
             <Link href="/blog" className="hover:text-teal-300 transition-colors flex items-center gap-1"><BookOpen size={14}/> 블로그</Link>
             <Link href="/games" className="hover:text-teal-300 transition-colors">테트리스</Link>
             <Link href="/webrtc" className="hover:text-teal-300 transition-colors flex items-center gap-1"><Video size={14}/> 화상채팅</Link>
@@ -39,6 +42,12 @@ export default function Header() {
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+          <label className="header-region hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-slate-300 md:flex">
+            <MapPin size={14} className="text-teal-300" />
+            <select value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} aria-label="지역 선택" className="max-w-28 bg-transparent text-xs font-bold text-slate-200 outline-none">
+              {REGIONS.map((region) => <option key={region.id} value={region.id} className="bg-slate-900">{region.flag} {region.short}</option>)}
+            </select>
+          </label>
           <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
             <Gamepad2 size={16} />
             <span>테트리스</span>
@@ -55,7 +64,7 @@ export default function Header() {
             <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/wallet" className="flex items-center gap-1.5 rounded-lg border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-sm font-bold text-teal-200 transition hover:bg-teal-300/20">
                 <Wallet size={16} />
-                <span className="hidden sm:inline">{user.usdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="hidden sm:inline">{user.usdtBalance.toFixed(2)}</span>
               </Link>
               {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
               <div className="flex items-center gap-2">
@@ -74,8 +83,31 @@ export default function Header() {
               <span>로그인</span>
             </Link>
           )}
+          <button onClick={() => setMenuOpen((open) => !open)} aria-label="메뉴 열기" className="header-menu-button lg:hidden">
+            {menuOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
         </div>
       </div>
+      {menuOpen && <div className="header-mobile-menu lg:hidden">
+        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-bold text-slate-200">
+          <MapPin size={16} className="text-teal-300" />
+          <span className="text-slate-400">지역</span>
+          <select value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} aria-label="모바일 지역 선택" className="ml-auto bg-transparent text-right font-bold text-white outline-none">
+            {REGIONS.map((region) => <option key={region.id} value={region.id} className="bg-slate-900">{region.flag} {region.label}</option>)}
+          </select>
+        </label>
+        <nav className="grid grid-cols-2 gap-2 text-sm font-bold text-slate-200">
+          <Link onClick={() => setMenuOpen(false)} href="/jobs">구인구직</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/directory">업소록</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/market">장터</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/community">커뮤니티</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/news">오늘의 뉴스</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/games">테트리스</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/webrtc">화상채팅</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/theater">극장</Link>
+          <Link onClick={() => setMenuOpen(false)} href="/users">유저목록</Link>
+        </nav>
+      </div>}
     </header>
   );
 }
