@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getDocument, getSessionToken } from '@/lib/firebase';
 
+export const runtime = 'edge';
+
 type ContentRecord = {
   id: string;
   title?: string;
