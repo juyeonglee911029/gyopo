@@ -214,7 +214,7 @@ async function authenticatedFetch(url: string, options: RequestInit = {}, token?
     },
   });
   let response = await send(token);
-  if (response.status === 401 && token) {
+  if ((response.status === 401 || response.status === 403) && token) {
     const refreshed = await refreshSessionToken();
     if (refreshed) response = await send(refreshed);
   }
@@ -857,8 +857,28 @@ export function loadGoogleIdentityScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.getElementById('google-identity-script');
     if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Google 로그인 스크립트를 불러오지 못했습니다.')), { once: true });
+      if (existing.dataset.loaded === '1' || window.google?.accounts?.id) return resolve();
+      let settled = false;
+      let poll = 0;
+      let timeout = 0;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        window.clearInterval(poll);
+        if (error) reject(error);
+        else resolve();
+      };
+      const check = () => {
+        if (!window.google?.accounts?.id) return;
+        existing.dataset.loaded = '1';
+        finish();
+      };
+      timeout = window.setTimeout(() => finish(new Error('Google 로그인 시간이 초과되었습니다.')), 10_000);
+      poll = window.setInterval(check, 100);
+      existing.addEventListener('load', check, { once: true });
+      existing.addEventListener('error', () => finish(new Error('Google 로그인 스크립트를 불러오지 못했습니다.')), { once: true });
+      check();
       return;
     }
     const script = document.createElement('script');
@@ -866,8 +886,18 @@ export function loadGoogleIdentityScript(): Promise<void> {
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Google 로그인 스크립트를 불러오지 못했습니다.'));
+    const timeout = window.setTimeout(() => reject(new Error('Google 로그인 시간이 초과되었습니다.')), 10_000);
+    script.onload = () => {
+      if (window.google?.accounts?.id) {
+        window.clearTimeout(timeout);
+        script.dataset.loaded = '1';
+        resolve();
+        return;
+      }
+      window.clearTimeout(timeout);
+      reject(new Error('Google 로그인 스크립트를 초기화하지 못했습니다.'));
+    };
+    script.onerror = () => { window.clearTimeout(timeout); reject(new Error('Google 로그인 스크립트를 불러오지 못했습니다.')); };
     document.head.appendChild(script);
   });
 }
@@ -986,4 +1016,3 @@ declare global {
     };
   }
 }
- 
