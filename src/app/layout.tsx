@@ -4,6 +4,7 @@ import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import GlobalChat from '@/components/layout/GlobalChat';
+import PortalSidebar from '@/components/layout/PortalSidebar';
 import AppRuntime from '@/components/layout/AppRuntime';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
@@ -36,10 +37,11 @@ export default function RootLayout({
         <AppRuntime>
           <AdSenseScript />
           <Header />
+          <PortalSidebar />
           <GlobalChat />
 
-          <div className="flex-grow flex flex-col lg:ml-80 transition-all">
-            <main className="flex-grow">
+          <div className="flex-grow flex min-w-0 flex-col transition-all lg:pl-64 lg:pr-80">
+            <main className="min-w-0 flex-grow">
               {children}
             </main>
             <Footer />
