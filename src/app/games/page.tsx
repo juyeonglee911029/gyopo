@@ -288,10 +288,26 @@ export default function GamesPage() {
     const token = getSessionToken();
     if (!token) throw new Error('로그인 세션이 만료되었습니다.');
     const profile: TetrisProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    const opponentProfile = opponent ? {
+      id: opponent.id,
+      name: opponent.name,
+      image: opponent.image,
+      country: opponent.country || 'Global',
+    } : null;
     await mergeDocument('tetrisRooms', matchId, {
       ...patch,
       matchId,
-      ...(matchRole === 'A' ? { playerAId: user.id, playerA: profile } : { playerBId: user.id, playerB: profile }),
+      ...(matchRole === 'A'
+        ? {
+            playerAId: user.id,
+            playerA: profile,
+            ...(opponentProfile ? { playerBId: opponentProfile.id, playerB: opponentProfile } : {}),
+          }
+        : {
+            playerBId: user.id,
+            playerB: profile,
+            ...(opponentProfile ? { playerAId: opponentProfile.id, playerA: opponentProfile } : {}),
+          }),
       updatedAt: new Date(),
     }, token);
   };
