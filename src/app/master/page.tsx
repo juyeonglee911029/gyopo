@@ -4,20 +4,14 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, LockKeyhole, RefreshCcw, Save, ShieldAlert, WalletCards } from 'lucide-react';
 import { approveDepositRequest, approveTransferRequest, getSessionToken, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, reviewTransferRequest, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { CONTENT_SOURCES, REVIEW_REGIONS, type ContentSource } from '@/lib/contentSources';
+import { CONTENT_SOURCES, REVIEW_REGIONS, sourceItemId, type ContentSource } from '@/lib/contentSources';
 import { regionLabel } from '@/lib/regions';
 
 type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number };
 type WalletSettings = { depositAddress?: string; network?: string; updatedAt?: string };
-type SourceItem = { title: string; url: string; description?: string; publishedAt?: string; category?: string };
+type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category?: string };
 type SourceSection = { category: string; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
-
-function sourceItemId(sourceId: string, category: string, url: string) {
-  let hash = 0;
-  for (const character of `${sourceId}:${category}:${url}`) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return `source-${sourceId}-${category}-${hash.toString(36)}`;
-}
 
 async function retryPublish(action: () => Promise<void>) {
   let lastError: unknown;
@@ -125,13 +119,13 @@ export default function MasterPage() {
           const id = sourceItemId(source.id, section.category, item.url);
           try {
             if (section.category === 'jobs') {
-              await retryPublish(() => mergeDocument('jobs', id, { title: item.title, company: source.name, location: source.region, salary: '원문 확인', tag: '출처 자동수집', country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name }, token));
+              await retryPublish(() => mergeDocument('jobs', id, { title: item.title, company: source.name, location: source.region, salary: '원문 확인', tag: '출처 자동수집', country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'directory') {
-              await retryPublish(() => mergeDocument('directories', id, { name: item.title, category: source.name, desc: item.description || '공식 출처에서 확인된 정보입니다.', tel: '원문 확인', address: source.region, rating: 0, reviews: 0, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name }, token));
+              await retryPublish(() => mergeDocument('directories', id, { name: item.title, category: source.name, desc: item.description || '공식 출처에서 확인된 정보입니다.', tel: '원문 확인', address: source.region, rating: 0, reviews: 0, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'market') {
-              await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: source.region, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name }, token));
+              await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: source.region, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'community' || section.category === 'news' || section.category === 'events') {
-              await retryPublish(() => mergeDocument('posts', id, { type: 'news', title: item.title, body: item.description || `${source.name} 원문에서 확인하세요.`, authorId, author: source.name, country: source.region, createdAt, sourceUrl: item.url, sourceName: source.name }, token));
+              await retryPublish(() => mergeDocument('posts', id, { type: 'news', title: item.title, body: item.body || item.description || `${source.name} 원문에서 확인하세요.`, authorId, author: source.name, country: source.region, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
             }
           } catch {
             publishErrors.push(item.title);
@@ -229,4 +223,3 @@ export default function MasterPage() {
      </div>
   );
 }
-
