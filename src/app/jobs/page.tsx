@@ -17,25 +17,22 @@ export default function JobsPage() {
   const [form, setForm] = useState({ title: '', company: '', location: '', salary: '', tag: '정규직' });
 
   const loadJobs = async () => {
-    try {
-      const sources = CONTENT_SOURCES.filter((source) => source.categories.includes('jobs') && (selectedCountry === 'Global' || source.region === selectedCountry || source.region === 'Global'));
-      const [data, sourceResults] = await Promise.all([
-        listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken()).catch(() => []),
-        Promise.all(sources.map((source) => fetchSourceCategory(source.id, 'jobs').then((result) => ({ source, result })))),
-      ]);
-      const sourceJobs = sourceResults.flatMap(({ source, result }) => {
-        if (!result) return [];
-        return result.items.map((item) => {
+    const sources = CONTENT_SOURCES.filter((source) => source.categories.includes('jobs') && (selectedCountry === 'Global' || source.region === selectedCountry || source.region === 'Global'));
+    const [data, sourceResults] = await Promise.all([
+      listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken()).catch(() => []),
+      Promise.allSettled(sources.map(async (source) => ({ source, result: await fetchSourceCategory(source.id, 'jobs') }))),
+    ]);
+    const sourceJobs = sourceResults.flatMap((entry) => {
+      if (entry.status !== 'fulfilled' || !entry.value.result) return [];
+      const { source, result } = entry.value;
+      return result.items.map((item) => {
         const id = sourceItemId(source.id, 'jobs', item.url);
         return { id, title: item.title, company: item.company || source.name, location: item.location || source.region, salary: item.salary || '상세 내용 참조', tag: item.tag || '출처 자동수집', country: source.region, authorId: 'source', createdAt: item.publishedAt || result.fetchedAt, image: item.image, images: item.images, sourceId: source.id, sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
-        });
       });
-      const merged = new Map<string, Job>();
-      [...data, ...sourceJobs].filter((job) => job.authorId).forEach((job) => merged.set(job.sourceUrl || job.id, job as Job));
-      setJobs([...merged.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    } catch {
-      setJobs([]);
-    }
+    });
+    const merged = new Map<string, Job>();
+    [...data, ...sourceJobs].filter((job) => job.authorId).forEach((job) => merged.set(job.sourceUrl || job.id, job as Job));
+    setJobs([...merged.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
   };
 
   useEffect(() => { void loadJobs(); }, [selectedCountry]);
