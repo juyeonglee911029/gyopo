@@ -588,18 +588,43 @@ function waitingLobbyData(roomNumber: number, matchId: string, profile: TetrisQu
   };
 }
 
+async function setTetrisRoomAccess(
+  roomNumber: number,
+  matchId: string,
+  playerAId: string | null | undefined,
+  playerBId: string | null | undefined,
+  token?: string,
+  active = true,
+): Promise<void> {
+  await mergeDocument('tetrisRoomAccess', matchId, {
+    roomNumber,
+    matchId,
+    playerAId: playerAId || null,
+    playerBId: playerBId || null,
+    active,
+    updatedAt: new Date(),
+  }, token);
+}
+
 export async function claimTetrisLobbyRoom(profile: TetrisQueueProfile, token?: string): Promise<TetrisLobbyClaim | null> {
   const member = tetrisProfile(profile);
   for (let roomNumber = 1; roomNumber <= TETRIS_LOBBY_ROOM_COUNT; roomNumber += 1) {
     const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
     const room = document ? decodeDocument<TetrisLobbyRoom>(document) : null;
     if (room?.status === 'occupied') {
-      if (room.playerAId === member.id && room.activeMatchId) return { roomNumber, matchId: room.activeMatchId, role: 'A', opponent: room.playerB };
-      if (room.playerBId === member.id && room.activeMatchId) return { roomNumber, matchId: room.activeMatchId, role: 'B', opponent: room.playerA };
+      if (room.playerAId === member.id && room.activeMatchId) {
+        await setTetrisRoomAccess(roomNumber, room.activeMatchId, room.playerAId, room.playerBId, token).catch(() => undefined);
+        return { roomNumber, matchId: room.activeMatchId, role: 'A', opponent: room.playerB };
+      }
+      if (room.playerBId === member.id && room.activeMatchId) {
+        await setTetrisRoomAccess(roomNumber, room.activeMatchId, room.playerAId, room.playerBId, token).catch(() => undefined);
+        return { roomNumber, matchId: room.activeMatchId, role: 'B', opponent: room.playerA };
+      }
       continue;
     }
     if (room?.status === 'waiting' && room.waitingUserId === member.id && room.activeMatchId) {
       await compareAndMergeTetrisLobbyRoom(roomNumber, { updatedAt: new Date() }, token, document?.updateTime);
+      await setTetrisRoomAccess(roomNumber, room.activeMatchId, room.playerAId || member.id, room.playerBId, token).catch(() => undefined);
       return { roomNumber, matchId: room.activeMatchId, role: 'A' };
     }
     if (room?.status === 'waiting' && room.waitingUserId && isFreshTetrisLobbyRoom(room)) {
@@ -616,12 +641,18 @@ export async function claimTetrisLobbyRoom(profile: TetrisQueueProfile, token?: 
         playerB: member,
         updatedAt: new Date(),
       }, token, document?.updateTime);
-      if (joined) return { roomNumber, matchId, role: 'B', opponent: room.playerA || room.waitingUser };
+       if (joined) {
+         await setTetrisRoomAccess(roomNumber, matchId, room.playerAId || room.waitingUserId, member.id, token).catch(() => undefined);
+         return { roomNumber, matchId, role: 'B', opponent: room.playerA || room.waitingUser };
+       }
       continue;
     }
     const matchId = `tetris-room-${roomNumber}-${crypto.randomUUID()}`;
     const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member), token, document?.updateTime);
-    if (claimed) return { roomNumber, matchId, role: 'A' };
+    if (claimed) {
+      await setTetrisRoomAccess(roomNumber, matchId, member.id, null, token).catch(() => undefined);
+      return { roomNumber, matchId, role: 'A' };
+    }
   }
   return null;
 }
@@ -633,7 +664,10 @@ export async function reserveTetrisLobbyRoom(profile: TetrisQueueProfile, matchI
     const room = document ? decodeDocument<TetrisLobbyRoom>(document) : null;
     if (room?.status === 'occupied' || (room?.status === 'waiting' && isFreshTetrisLobbyRoom(room) && room.waitingUserId !== member.id)) continue;
     const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member), token, document?.updateTime);
-    if (claimed) return roomNumber;
+    if (claimed) {
+      await setTetrisRoomAccess(roomNumber, matchId, member.id, null, token).catch(() => undefined);
+      return roomNumber;
+    }
   }
   return null;
 }
@@ -644,7 +678,7 @@ export async function joinTetrisLobbyRoom(roomNumber: number, matchId: string, p
   const room = decodeDocument<TetrisLobbyRoom>(document);
   if (room.status !== 'waiting' || room.activeMatchId !== matchId || !room.waitingUserId || !isFreshTetrisLobbyRoom(room)) return false;
   const member = tetrisProfile(profile);
-  return compareAndMergeTetrisLobbyRoom(roomNumber, {
+  const joined = await compareAndMergeTetrisLobbyRoom(roomNumber, {
     roomNumber,
     status: 'occupied',
     activeMatchId: matchId,
@@ -656,6 +690,8 @@ export async function joinTetrisLobbyRoom(roomNumber: number, matchId: string, p
     playerB: member,
     updatedAt: new Date(),
   }, token, document.updateTime);
+  if (joined) await setTetrisRoomAccess(roomNumber, matchId, room.playerAId || room.waitingUserId, member.id, token).catch(() => undefined);
+  return joined;
 }
 
 export async function heartbeatTetrisLobbyRoom(
@@ -685,6 +721,8 @@ export async function releaseTetrisLobbyRoom(roomNumber: number, matchId: string
   if (keepRemaining && remaining?.id) {
     const nextMatchId = `tetris-room-${roomNumber}-${crypto.randomUUID()}`;
     const released = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, nextMatchId, remaining), token, document.updateTime);
+    await setTetrisRoomAccess(roomNumber, matchId, room.playerAId, room.playerBId, token, false).catch(() => undefined);
+    if (released) await setTetrisRoomAccess(roomNumber, nextMatchId, remaining.id, null, token).catch(() => undefined);
     return released ? nextMatchId : null;
   }
   const released = await compareAndMergeTetrisLobbyRoom(roomNumber, {
@@ -699,6 +737,7 @@ export async function releaseTetrisLobbyRoom(roomNumber: number, matchId: string
     playerB: null,
     updatedAt: new Date(),
   }, token, document.updateTime);
+  await setTetrisRoomAccess(roomNumber, matchId, room.playerAId, room.playerBId, token, false).catch(() => undefined);
   return released ? '' : null;
 }
 
