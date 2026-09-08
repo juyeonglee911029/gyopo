@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type TouchEvent, type CSSProperties } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Swords, Users, X } from 'lucide-react';
-import { claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, reserveGameStake, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisQueueProfile } from '@/lib/firebase';
+import { claimTetrisLobbyRoom, claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, heartbeatTetrisLobbyRoom, joinTetrisLobbyRoom, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, releaseTetrisLobbyRoom, reserveGameStake, reserveTetrisLobbyRoom, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisLobbyRoom, type TetrisQueueProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 function formatUsdt(value: number | string) {
@@ -40,6 +40,7 @@ const COLORS = ['#2dd4bf', '#facc15', '#c084fc', '#60a5fa', '#fb923c', '#f472b6'
 const DEFAULT_ENTRY_FEE = 1;
 const MIN_ENTRY_FEE = 1;
 const MAX_ENTRY_FEE = 100;
+const TETRIS_ROOM_COUNT = 10;
 type Piece = { type: number; shape: number[][]; x: number; y: number };
 type ChatMessage = { id: string; authorId: string; user: string; country?: string; text: string; createdAt: string; expiresAt?: string | Date };
 type GameState = {
@@ -59,9 +60,10 @@ type GameState = {
 type TetrisProfile = { id: string; name: string; image: string; country?: string };
 type TetrisLobby = { status?: 'waiting' | 'matched'; waitingUserId?: string; waitingUser?: TetrisProfile; matchId?: string; playerAId?: string; playerBId?: string; playerA?: TetrisProfile; playerB?: TetrisProfile; updatedAt?: string };
 type MatchPhase = 'idle' | 'waiting' | 'betting' | 'holding' | 'countdown' | 'playing' | 'finished';
-type TetrisInvite = { id: string; senderId: string; recipientId: string; sender: TetrisProfile; recipient: TetrisProfile; matchId: string; status: 'pending' | 'accepted' | 'rejected'; createdAt: string; updatedAt?: string };
+type TetrisInvite = { id: string; senderId: string; recipientId: string; sender: TetrisProfile; recipient: TetrisProfile; matchId: string; roomNumber?: number; status: 'pending' | 'accepted' | 'rejected'; createdAt: string; updatedAt?: string };
 type TetrisQueueRecord = TetrisQueueProfile & { userId: string; status: 'waiting' | 'matched'; matchId?: string; role?: 'A' | 'B'; opponent?: TetrisProfile; lastSeenAt: string | Date };
 type TetrisRoom = TetrisLobby & {
+  roomNumber?: number;
   phase?: 'betting' | 'holding' | 'countdown' | 'playing' | 'finished';
   betAmount?: number;
   readyA?: boolean;
@@ -256,6 +258,7 @@ export default function GamesPage() {
   const [stakeReserved, setStakeReserved] = useState(false);
   const [countdown, setCountdown] = useState<number | 'START' | null>(null);
   const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
+  const [roomNumber, setRoomNumber] = useState<number | null>(null);
   const [roomStartAt, setRoomStartAt] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
   const firstChatLoad = useRef(true);
@@ -277,6 +280,7 @@ export default function GamesPage() {
   const resultNoticeRef = useRef<string | null>(null);
   const opponentAttackTotalRef = useRef(0);
   const opponentAttackInitializedRef = useRef(false);
+  const lobbyReleaseRequestedRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const currentUserId = user ? (getSessionUserId() || user.id) : '';
   const [, setRoomBetConfigured] = useState(false);
@@ -385,6 +389,7 @@ export default function GamesPage() {
     await mergeDocument('tetrisRooms', matchId, {
       ...patch,
       matchId,
+      ...(roomNumber ? { roomNumber } : {}),
       ...(matchRole === 'A'
           ? {
             playerAId: sessionUserId,
@@ -437,6 +442,7 @@ export default function GamesPage() {
     if (token) void deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
     setMatchId(null);
     setMatchRole(null);
+    setRoomNumber(null);
     setSentInviteId(null);
     setOpponent(null);
     setOpponentState(null);
@@ -469,6 +475,7 @@ export default function GamesPage() {
     setOpponent(null);
     setMatchId(null);
     setMatchRole(null);
+    setRoomNumber(null);
     setSentInviteId(null);
     setReadyForBattle(false);
     setOpponentReady(false);
@@ -490,24 +497,30 @@ export default function GamesPage() {
     setMatchStatus('매칭 상대를 찾는 중...');
     setInviteStatus('다른 회원이 입장하면 양쪽 화면이 자동으로 대전 준비로 전환됩니다.');
     try {
-      await upsertDocument('tetrisQueue', currentUserId, {
-        userId: currentUserId,
-        name: profile.name,
-        image: profile.image,
-        country: profile.country || 'Global',
-        status: 'waiting',
-        lastSeenAt: new Date(),
-        updatedAt: new Date(),
-      }, token);
-    } catch {
+      const claim = await claimTetrisLobbyRoom(profile, token);
+      if (!claim) throw new Error('현재 10개 방이 모두 사용 중입니다. 잠시 후 다시 시도해주세요.');
+      setRoomNumber(claim.roomNumber);
+      setMatchId(claim.matchId);
+      setMatchRole(claim.role);
+      setOpponent(claim.opponent ? { ...claim.opponent, country: claim.opponent.country || 'Global' } : null);
+      setMatchPhase(claim.role === 'B' ? 'betting' : 'waiting');
+      setMatchStatus(claim.role === 'B' ? '상대 입장 완료 · 배팅금액을 기다리는 중' : `${claim.roomNumber}번 방에서 상대를 기다리는 중`);
+      setInviteStatus(claim.role === 'B' ? '상대가 방에 입장했습니다. 양쪽 모두 배팅금액을 확정하면 자동으로 시작합니다.' : '상대가 입장하면 이 방에서 자동으로 연결됩니다.');
+    } catch (error) {
       setMatchStatus('매칭 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');
       setMatchPhase('idle');
       setMatchId(null);
       setMatchRole(null);
+      setRoomNumber(null);
+      setInviteStatus(error instanceof Error ? error.message : '매칭 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');
     }
   };
 
   const cancelMatch = async () => {
+    if (matchId && matchRole && user) {
+      await leaveBattleRoom();
+      return;
+    }
     if (user) {
       const token = getSessionToken();
       if (token) await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
@@ -528,6 +541,7 @@ export default function GamesPage() {
     roomSeenRef.current = false;
     setMatchId(null);
     setMatchRole(null);
+    setRoomNumber(null);
     setSentInviteId(null);
     setOpponent(null);
     setOpponentState(null);
@@ -557,6 +571,7 @@ export default function GamesPage() {
     const token = getSessionToken();
     if (!token) return;
     try {
+      if (roomNumber) await releaseTetrisLobbyRoom(roomNumber, leavingMatchId, matchRole, token, ['waiting', 'betting', 'holding'].includes(matchPhase)).catch(() => undefined);
       if (matchPhase === 'playing') {
         await updateRoom(matchRole === 'A'
           ? { phase: 'finished', playerAResult: 'lose' }
@@ -567,6 +582,7 @@ export default function GamesPage() {
         if (stakeReserved) await refundGameStake(currentUserId, leavingMatchId, token);
         await deleteDocument('tetrisRooms', leavingMatchId, token);
       }
+      if (sentInviteId) await mergeDocument('tetrisInvites', sentInviteId, { status: 'rejected', updatedAt: new Date() }, token).catch(() => undefined);
       resetBattleRoom('대전방을 나갔습니다.');
       const refreshed = await refreshStoredUser().catch(() => null);
       if (refreshed) setUser(refreshed);
@@ -585,13 +601,17 @@ export default function GamesPage() {
     const inviteId = crypto.randomUUID();
     const sender: TetrisProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     const recipient: TetrisProfile = { id: recipientId, name: online.name, image: online.image, country: online.country || 'Global' };
+    let reservedRoom: number | null = null;
     try {
+      reservedRoom = await reserveTetrisLobbyRoom(sender, matchId, token);
+      if (!reservedRoom) throw new Error('현재 10개 방이 모두 사용 중입니다. 잠시 후 다시 시도해주세요.');
       await createDocument('tetrisInvites', inviteId, {
         senderId: currentUserId,
         recipientId,
         sender,
         recipient,
         matchId,
+        roomNumber: reservedRoom,
         status: 'pending',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -599,8 +619,9 @@ export default function GamesPage() {
       await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
       setSelectedOnlineUserId(null);
       setSentInviteId(inviteId);
-      setMatchId(null);
-      setMatchRole(null);
+      setMatchId(matchId);
+      setMatchRole('A');
+      setRoomNumber(reservedRoom);
       setOpponent(recipient);
       setOpponentState(null);
       setReadyForBattle(false);
@@ -615,8 +636,9 @@ export default function GamesPage() {
       setMatchPhase('waiting');
       setMatchStatus(`${recipient.name}님에게 대전 신청을 보냈습니다`);
       setInviteStatus('상대방 화면에 수락 / 거절 메시지가 표시됩니다.');
-    } catch {
-      setInviteStatus('대전 신청을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } catch (error) {
+      if (reservedRoom) await releaseTetrisLobbyRoom(reservedRoom, matchId, 'A', token, false).catch(() => undefined);
+      setInviteStatus(error instanceof Error ? error.message : '대전 신청을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
     }
   };
 
@@ -628,20 +650,25 @@ export default function GamesPage() {
     const inviteId = crypto.randomUUID();
     const sender: TetrisProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     const recipient: TetrisProfile = { id: opponent.id, name: opponent.name, image: opponent.image, country: opponent.country || 'Global' };
+    let reservedRoom: number | null = null;
     try {
+      reservedRoom = await reserveTetrisLobbyRoom(sender, rematchId, token);
+      if (!reservedRoom) throw new Error('현재 10개 방이 모두 사용 중입니다. 잠시 후 다시 시도해주세요.');
       await createDocument('tetrisInvites', inviteId, {
         senderId: currentUserId,
         recipientId: recipient.id,
         sender,
         recipient,
         matchId: rematchId,
+        roomNumber: reservedRoom,
         status: 'pending',
         createdAt: new Date(),
         updatedAt: new Date(),
       }, token);
       await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
-      setMatchId(null);
-      setMatchRole(null);
+      setMatchId(rematchId);
+      setMatchRole('A');
+      setRoomNumber(reservedRoom);
       setSentInviteId(inviteId);
       setOpponent(recipient);
       setOpponentState(null);
@@ -666,8 +693,9 @@ export default function GamesPage() {
       opponentAttackTotalRef.current = 0;
       opponentAttackInitializedRef.current = false;
       dispatch({ type: 'RESET' });
-    } catch {
-      setMatchStatus('리매치 요청을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } catch (error) {
+      if (reservedRoom) await releaseTetrisLobbyRoom(reservedRoom, rematchId, 'A', token, false).catch(() => undefined);
+      setMatchStatus(error instanceof Error ? error.message : '리매치 요청을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
     }
   };
 
@@ -680,13 +708,22 @@ export default function GamesPage() {
     setIncomingInvite(null);
     await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
     try {
+      if (!invite.roomNumber || !(await joinTetrisLobbyRoom(invite.roomNumber, invite.matchId, {
+        id: currentUserId,
+        name: user.name,
+        image: user.image,
+        country: user.country || 'Global',
+      }, token))) {
+        throw new Error('이 초대의 방이 이미 종료되었습니다. 새 대전을 신청해주세요.');
+      }
       await mergeDocument('tetrisInvites', invite.id, { status: 'accepted', updatedAt: new Date() }, token);
-    } catch {
-      setInviteStatus('수락 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
+    } catch (error) {
+      setInviteStatus(error instanceof Error ? error.message : '수락 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
       return;
     }
     setMatchId(invite.matchId);
     setMatchRole('B');
+    setRoomNumber(invite.roomNumber || null);
     setSentInviteId(null);
     setOpponent(invite.sender);
     setReadyForBattle(false);
@@ -724,7 +761,7 @@ export default function GamesPage() {
     }
   };
 
-  const restoreMatch = (invite: TetrisInvite, role: 'A' | 'B', room: TetrisRoom) => {
+  const restoreMatch = (invite: TetrisInvite, role: 'A' | 'B', room: TetrisRoom, fixedRoomNumber?: number) => {
     const isNewMatch = matchId !== invite.matchId || matchRole !== role;
     const ownReady = role === 'A' ? Boolean(room.readyA) : Boolean(room.readyB);
     const nextReady = role === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
@@ -751,6 +788,7 @@ export default function GamesPage() {
     }
     setMatchId(invite.matchId);
     setMatchRole(role);
+    setRoomNumber(fixedRoomNumber || invite.roomNumber || room.roomNumber || null);
     setSentInviteId(role === 'A' ? invite.id : null);
     setOpponent(role === 'A' ? invite.recipient : invite.sender);
     setOpponentState(role === 'A' ? room.playerBState || null : room.playerAState || null);
@@ -899,7 +937,36 @@ export default function GamesPage() {
           queryDocuments<TetrisInvite>('tetrisInvites', 'recipientId', currentUserId, token),
           queryDocuments<TetrisInvite>('tetrisInvites', 'senderId', currentUserId, token),
         ]).catch(() => [[], []] as [TetrisInvite[], TetrisInvite[]]);
+        const lobbyRooms = await listDocuments<TetrisLobbyRoom>('tetrisLobby', token).catch(() => []);
         const invites = [...received, ...sent];
+        const currentLobby = roomNumber
+          ? lobbyRooms.find((room) => room.roomNumber === roomNumber || room.activeMatchId === matchId)
+          : undefined;
+        if (matchId && roomNumber && currentLobby?.activeMatchId && currentLobby.activeMatchId !== matchId) {
+          const previousMatchId = matchId;
+          if (stakeReserved) await refundGameStake(currentUserId, previousMatchId, token).catch(() => undefined);
+          setStakeReserved(false);
+          if (currentLobby.status === 'waiting' && currentLobby.waitingUserId === currentUserId) {
+            startRequestedRef.current = false;
+            autoStartRequestedRef.current = false;
+            holdRequestedRef.current = false;
+            dispatch({ type: 'RESET' });
+            setMatchId(currentLobby.activeMatchId);
+            setMatchRole('A');
+            setOpponent(null);
+            setOpponentState(null);
+            setReadyForBattle(false);
+            setOpponentReady(false);
+            setRoomBetConfigured(false);
+            setRoomStartAt(null);
+            setCountdown(null);
+            setMatchPhase('waiting');
+            setMatchStatus(`${roomNumber}번 방에서 새 상대를 기다리는 중`);
+            setInviteStatus('상대가 나가 배팅과 준비 상태를 초기화했습니다. 같은 방에서 새 대전을 기다립니다.');
+          } else {
+            resetBattleRoom('대전방이 초기화되었습니다. 새 대전을 시작해주세요.');
+          }
+        }
         const accepted = invites
           .filter((invite) => invite.status === 'accepted' && invite.matchId)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -912,7 +979,7 @@ export default function GamesPage() {
             const lastActivity = new Date(String(room.updatedAt || invite.updatedAt || invite.createdAt)).getTime();
             if (!Number.isFinite(lastActivity) || Date.now() - lastActivity > 30 * 60 * 1000) continue;
             const role = invite.senderId === currentUserId ? 'A' : 'B';
-            restoreMatch(invite, role, room);
+            restoreMatch(invite, role, room, lobbyRooms.find((lobby) => lobby.activeMatchId === invite.matchId)?.roomNumber);
             activeMatch = true;
             break;
           }
@@ -928,10 +995,17 @@ export default function GamesPage() {
         if (pending && pending.id !== incomingInvite?.id) setIncomingInvite(pending);
 
         const rejected = invites.find((invite) => invite.id === sentInviteId && invite.status === 'rejected');
-        if (rejected && !matchId) {
+        if (rejected && sentInviteId) {
+          const rejectedMatchId = matchId;
+          const rejectedRoomNumber = roomNumber;
           setSentInviteId(null);
+          if (rejectedRoomNumber && rejectedMatchId) {
+            void releaseTetrisLobbyRoom(rejectedRoomNumber, rejectedMatchId, 'A', token, false).catch(() => undefined);
+            void deleteDocument('tetrisRooms', rejectedMatchId, token).catch(() => undefined);
+          }
           setMatchId(null);
           setMatchRole(null);
+          setRoomNumber(null);
           setOpponent(null);
           setReadyForBattle(false);
           setOpponentReady(false);
@@ -946,11 +1020,23 @@ export default function GamesPage() {
     void pollInvites();
     const timer = window.setInterval(() => void pollInvites(), 1200);
     return () => window.clearInterval(timer);
-  }, [matchId, incomingInvite?.id, sentInviteId, user?.id]);
+  }, [matchId, roomNumber, stakeReserved, incomingInvite?.id, sentInviteId, user?.id]);
 
   useEffect(() => {
     roomSeenRef.current = false;
+    lobbyReleaseRequestedRef.current = null;
   }, [matchId]);
+
+  useEffect(() => {
+    if (!roomNumber || !matchId || !matchRole || !user) return;
+    const token = getSessionToken();
+    if (!token) return;
+    const profile: TetrisQueueProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
+    const heartbeat = () => void heartbeatTetrisLobbyRoom(roomNumber, matchId, profile, matchRole, token);
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 10_000);
+    return () => window.clearInterval(timer);
+  }, [roomNumber, matchId, matchRole, user?.id, user?.image, user?.name, user?.country]);
 
   useEffect(() => {
      if (!matchId || !matchRole || !user || matchPhase === 'finished') return;
@@ -982,6 +1068,7 @@ export default function GamesPage() {
       const profile: TetrisProfile = { id: sessionUserId, name: user.name, image: user.image, country: user.country || 'Global' };
       const ownPatch = {
         matchId,
+        ...(roomNumber ? { roomNumber } : {}),
         ...(matchRole === 'A' ? {
           playerAId: sessionUserId,
           playerA: profile,
@@ -1114,7 +1201,7 @@ export default function GamesPage() {
     void syncRoom();
     const timer = window.setInterval(() => void syncRoom(), 1200);
     return () => window.clearInterval(timer);
-     }, [matchId, matchRole, matchPhase, readyForBattle, stakeReserved, user?.id]);
+      }, [matchId, matchRole, matchPhase, readyForBattle, stakeReserved, roomNumber, user?.id]);
 
   useEffect(() => {
     if (!matchId || matchPhase !== 'finished' || !user) return;
@@ -1125,6 +1212,14 @@ export default function GamesPage() {
     }, 8000);
     return () => window.clearTimeout(timer);
   }, [matchId, matchPhase, user?.id]);
+
+  useEffect(() => {
+    if (!roomNumber || !matchId || !matchRole || matchPhase !== 'finished' || lobbyReleaseRequestedRef.current === matchId) return;
+    const token = getSessionToken();
+    if (!token) return;
+    lobbyReleaseRequestedRef.current = matchId;
+    void releaseTetrisLobbyRoom(roomNumber, matchId, matchRole, token, false);
+  }, [roomNumber, matchId, matchRole, matchPhase]);
 
   useEffect(() => () => {
     if (roomCleanupTimer.current) window.clearTimeout(roomCleanupTimer.current);
@@ -1186,7 +1281,7 @@ export default function GamesPage() {
                 <div className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">Current run</div>
                 <div className="mt-1 flex items-center gap-2 text-lg font-black">{user?.name || '로그인 필요'} <span className="rounded-full bg-cyan-300/10 px-2 py-1 text-[10px] text-cyan-200">{matchStatus}</span></div>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-right text-xs text-slate-400">{matchId ? `ROOM ${matchId.slice(-8)}` : 'PRACTICE / QUEUE'}</div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-right text-xs text-slate-400">{roomNumber ? `ROOM ${roomNumber} · FIXED` : matchId ? `ROOM ${matchId.slice(-8)}` : 'PRACTICE / QUEUE'}</div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(300px,1fr)_minmax(270px,.78fr)]">
