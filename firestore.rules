@@ -14,11 +14,17 @@ service cloud.firestore {
         && data.country.size() <= 80
         && data.country != 'Global';
     }
+    function hasValidAge(data) {
+      return data.keys().hasAny(['age'])
+        && data.age is int
+        && data.age >= 13
+        && data.age <= 130;
+    }
     function hasCompletedOnboarding(data) {
-      return hasValidGender(data) && hasValidCountry(data);
+      return hasValidGender(data) && hasValidCountry(data) && hasValidAge(data);
     }
     function hasNoOnboardingFields(data) {
-      return !data.keys().hasAny(['gender', 'country']);
+      return !data.keys().hasAny(['gender', 'country', 'age']);
     }
     function hasValidProfileState(data) {
       return hasNoOnboardingFields(data) || hasCompletedOnboarding(data);
@@ -26,7 +32,8 @@ service cloud.firestore {
     function hasImmutableOnboardingFields() {
       return hasValidProfileState(request.resource.data)
         && (!hasValidGender(resource.data) || request.resource.data.gender == resource.data.gender)
-        && (!hasValidCountry(resource.data) || request.resource.data.country == resource.data.country);
+        && (!hasValidCountry(resource.data) || request.resource.data.country == resource.data.country)
+        && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age);
     }
     function isSafePublicProfile(data) {
       return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'updatedAt'])
@@ -42,7 +49,8 @@ service cloud.firestore {
     }
     function publicProfileMatchesPrivate(userId) {
       return request.resource.data.gender == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.gender
-        && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country;
+        && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country
+        && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age;
     }
     function isSafePresence(data) {
       return data.keys().hasOnly(['userId', 'name', 'image', 'gender', 'country', 'age', 'lastSeenAt', 'updatedAt'])
@@ -142,7 +150,9 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
       allow update: if false;
-      allow delete: if request.auth != null && resource.data.expiresAt != null && request.time >= resource.data.expiresAt;
+      allow delete: if request.auth != null && resource.data.expiresAt != null
+        && (request.time >= resource.data.expiresAt
+          || get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.status == 'ended');
     }
      match /depositRequests/{requestId} {
        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
@@ -227,6 +237,21 @@ service cloud.firestore {
     }
     match /webrtcCandidates/{candidateId} {
       allow read, create, update, delete: if request.auth != null;
+    }
+    match /friendships/{friendshipId} {
+      allow read: if request.auth != null
+        && (resource.data.requesterId == request.auth.uid || resource.data.addresseeId == request.auth.uid);
+      allow create: if request.auth != null
+        && request.resource.data.requesterId == request.auth.uid
+        && request.resource.data.addresseeId is string
+        && request.resource.data.addresseeId != request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if request.auth != null
+        && (resource.data.requesterId == request.auth.uid || resource.data.addresseeId == request.auth.uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && (request.resource.data.status == 'accepted' || request.resource.data.status == 'declined');
+      allow delete: if request.auth != null
+        && (resource.data.requesterId == request.auth.uid || resource.data.addresseeId == request.auth.uid);
     }
     match /tetrisLobby/{lobbyId} {
       allow read, create, update: if request.auth != null;
