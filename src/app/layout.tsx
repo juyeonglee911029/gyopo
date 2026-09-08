@@ -1,10 +1,12 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Manrope, Noto_Sans_KR } from 'next/font/google';
 import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import GlobalChat from '@/components/layout/GlobalChat';
 import PortalSidebar from '@/components/layout/PortalSidebar';
+import PortalFrame from '@/components/layout/PortalFrame';
+import MarketTicker from '@/components/layout/MarketTicker';
 import AppRuntime from '@/components/layout/AppRuntime';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
@@ -26,6 +28,8 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://gyopo.pages.dev' },
 };
 
+export const viewport: Viewport = { themeColor: '#070b17', colorScheme: 'dark' };
+
 export default function RootLayout({
   children,
 }: {
@@ -33,19 +37,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={`${notoSansKr.variable} ${manrope.variable} font-sans bg-[#070b17] text-slate-100 pt-16 min-h-screen flex flex-col`}>
+      <body className={`${notoSansKr.variable} ${manrope.variable} font-sans bg-[#070b17] text-slate-100 pt-24 min-h-screen flex flex-col`}>
         <AppRuntime>
           <AdSenseScript />
           <Header />
+          <MarketTicker />
           <PortalSidebar />
           <GlobalChat />
 
-          <div className="flex-grow flex min-w-0 flex-col transition-all lg:pl-64 lg:pr-80">
+          <PortalFrame>
             <main className="min-w-0 flex-grow">
               {children}
             </main>
             <Footer />
-          </div>
+          </PortalFrame>
         </AppRuntime>
       </body>
     </html>
