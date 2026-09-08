@@ -454,12 +454,9 @@ export default function WebRTCPage() {
             id: profile.id,
             userId: profile.id,
             name: profile.name,
-            email: '',
             image: profile.image,
              country: profile.country,
-             gender: profile.gender,
-             genderPreference: profile.genderPreference,
-             isSubscribed: profile.isSubscribed,
+             gender: profile.gender === 'male' || profile.gender === 'female' ? profile.gender : undefined,
              lastSeenAt: new Date().toISOString(),
            });
           let nextCall: ActiveCall | null = null;
