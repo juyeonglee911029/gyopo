@@ -255,6 +255,7 @@ export default function GamesPage() {
   const countdownRoomRef = useRef<string | null>(null);
   const settlementRequestedRef = useRef(false);
   const roomCleanupTimer = useRef<number | null>(null);
+  const roomSeenRef = useRef(false);
   const handledInviteIds = useRef(new Set<string>());
   const invitePollingRef = useRef(false);
   const resultNoticeRef = useRef<string | null>(null);
@@ -367,13 +368,13 @@ export default function GamesPage() {
       ...patch,
       matchId,
       ...(matchRole === 'A'
-        ? {
-            playerAId: user.id,
+          ? {
+            playerAId: sessionUserId,
             playerA: profile,
             ...(opponentProfile ? { playerBId: opponentProfile.id, playerB: opponentProfile } : {}),
           }
         : {
-            playerBId: user.id,
+            playerBId: sessionUserId,
             playerB: profile,
             ...(opponentProfile ? { playerAId: opponentProfile.id, playerA: opponentProfile } : {}),
           }),
@@ -503,6 +504,7 @@ export default function GamesPage() {
   };
 
   const resetBattleRoom = (status = '대전 준비 안됨') => {
+    roomSeenRef.current = false;
     setMatchId(null);
     setMatchRole(null);
     setSentInviteId(null);
@@ -910,19 +912,30 @@ export default function GamesPage() {
   }, [matchId, incomingInvite?.id, sentInviteId, user?.id]);
 
   useEffect(() => {
+    roomSeenRef.current = false;
+  }, [matchId]);
+
+  useEffect(() => {
      if (!matchId || !matchRole || !user || matchPhase === 'finished') return;
     const token = getSessionToken();
     if (!token) return;
     const syncRoom = async () => {
       const state = gameRef.current;
-      const current = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
-      if (!current) {
+      let current: TetrisRoom | null;
+      try {
+        current = await getDocument<TetrisRoom>('tetrisRooms', matchId, token);
+      } catch (error) {
+        setMatchStatus(error instanceof Error ? error.message : '대전 방을 확인하지 못했습니다.');
+        return;
+      }
+      if (!current && roomSeenRef.current) {
         if (stakeReserved) await refundGameStake(getSessionUserId() || user.id, matchId, token).catch(() => undefined);
         resetBattleRoom('상대가 대전방을 종료했습니다.');
         const refreshed = await refreshStoredUser().catch(() => null);
         if (refreshed) setUser(refreshed);
         return;
       }
+      if (current) roomSeenRef.current = true;
       const sessionUserId = getSessionUserId() || user.id;
       const profile: TetrisProfile = { id: sessionUserId, name: user.name, image: user.image, country: user.country || 'Global' };
       const ownPatch = {
@@ -939,9 +952,15 @@ export default function GamesPage() {
          ...(matchPhase === 'playing' ? { phase: 'playing' } : {}),
         updatedAt: new Date(),
       };
-      await mergeDocument('tetrisRooms', matchId, ownPatch, token).catch(() => undefined);
+      try {
+        await mergeDocument('tetrisRooms', matchId, ownPatch, token);
+      } catch (error) {
+        setMatchStatus(error instanceof Error ? error.message : '대전 방을 만들지 못했습니다.');
+        return;
+      }
        const room = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
        if (!room) return;
+       roomSeenRef.current = true;
        const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
        const nextState = matchRole === 'A' ? room.playerBState : room.playerAState;
        const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
