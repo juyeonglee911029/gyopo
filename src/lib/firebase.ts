@@ -70,11 +70,14 @@ export type EscrowOrder = {
   timeline?: Array<{ status: EscrowStatus; at: string; note?: string }>;
 };
 
-export function hasCompletedProfile(profile?: Pick<PortalUser, 'gender' | 'country'> | null): profile is Pick<PortalUser, 'gender' | 'country'> & { gender: Gender; country: string } {
+export function hasCompletedProfile(profile?: Pick<PortalUser, 'gender' | 'country' | 'age'> | null): profile is Pick<PortalUser, 'gender' | 'country' | 'age'> & { gender: Gender; country: string; age: number } {
   return (profile?.gender === 'male' || profile?.gender === 'female')
     && typeof profile.country === 'string'
     && profile.country.trim().length > 0
-    && profile.country.trim() !== 'Global';
+    && profile.country.trim() !== 'Global'
+    && typeof profile.age === 'number'
+    && profile.age >= 13
+    && profile.age <= 130;
 }
 
 type StoredSession = {
@@ -515,9 +518,11 @@ export type TetrisQueueProfile = {
   name: string;
   image: string;
   country?: string;
+  age?: number;
   gender?: string;
   genderPreference?: GenderPreference;
   isSubscribed?: boolean;
+  targetUserId?: string;
 };
 export type TetrisMatchClaim = { matchId: string; role: 'A' | 'B'; opponent: TetrisQueueProfile };
 export type TetrisLobbyRoom = {
@@ -819,7 +824,9 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
     const candidatePreference = candidate.genderPreference || 'any';
     const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
     const candidateMatches = candidatePreference === 'any' || profile.gender === candidatePreference;
-    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches;
+    const targetMatches = (!profile.targetUserId || candidateId === profile.targetUserId)
+      && (!candidate.targetUserId || candidate.targetUserId === profile.id);
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && targetMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
@@ -830,9 +837,11 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
     name: candidate.name,
     image: candidate.image,
     country: candidate.country,
+    age: candidate.age,
     gender: candidate.gender,
     genderPreference: candidate.genderPreference,
     isSubscribed: candidate.isSubscribed,
+    targetUserId: candidate.targetUserId,
   };
   const candidateFields = {
     ...(candidateRow.fields || {}),
@@ -845,7 +854,7 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
     body: JSON.stringify({
       writes: [
         { update: { name: candidateRow.name, fields: candidateFields }, currentDocument: { updateTime: candidateRow.updateTime } },
-        { update: { name: ownName, fields: encodeFields({ userId: profile.id, name: profile.name, image: profile.image, country: profile.country || 'Global', status: 'matched', matchedBy: profile.id, callId, opponent, lastSeenAt: new Date(), updatedAt: new Date() }) } },
+        { update: { name: ownName, fields: encodeFields({ userId: profile.id, name: profile.name, image: profile.image, country: profile.country || 'Global', age: profile.age || 0, status: 'matched', matchedBy: profile.id, callId, opponent, lastSeenAt: new Date(), updatedAt: new Date() }) } },
       ],
     }),
   }, token);
@@ -1014,13 +1023,14 @@ export async function settleTetrisMatch(
 
 export async function reserveGenderMatchStake(userId: string, callId: string, amount: number, token?: string): Promise<void> {
   if (!Number.isFinite(amount) || amount <= 0) return;
-  const stakeId = `gender-${callId}-${userId}`;
+  const authUserId = getTokenUserId(token) || userId;
+  const stakeId = `gender-${callId}-${authUserId}`;
   if (await getRawDocument('genderMatchStakes', stakeId, token)) return;
-  const profileDocument = await getRawDocument('profiles', userId, token);
+  const profileDocument = await getRawDocument('profiles', authUserId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
   if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USDT가 부족합니다.`);
-   const profileName = firestoreDocumentName('profiles', userId);
+    const profileName = firestoreDocumentName('profiles', authUserId);
    const stakeName = firestoreDocumentName('genderMatchStakes', stakeId);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
@@ -1037,7 +1047,7 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
         {
           update: {
             name: stakeName,
-            fields: encodeFields({ userId, callId, amount, createdAt: new Date(), status: 'RESERVED' }),
+            fields: encodeFields({ userId: authUserId, callId, amount, createdAt: new Date(), status: 'RESERVED' }),
           },
           currentDocument: { exists: false },
         },
@@ -1151,6 +1161,54 @@ export async function listEscrowOrdersForMember(memberId: string, token = getSes
     .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
 }
 
+export type FriendStatus = 'pending' | 'accepted' | 'declined';
+export type FriendConnection = {
+  id: string;
+  requesterId: string;
+  addresseeId: string;
+  status: FriendStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function friendshipId(first: string, second: string) {
+  return `friend-${[first, second].sort().join('-')}`;
+}
+
+export async function listFriendConnections(userId: string, token = getSessionToken()): Promise<FriendConnection[]> {
+  const viewerId = getTokenUserId(token);
+  if (!token || (viewerId && viewerId !== userId)) return [];
+  const [sent, received] = await Promise.all([
+    queryDocumentsWhere<Omit<FriendConnection, 'id'>>('friendships', [{ field: 'requesterId', op: 'EQUAL', value: userId }], token).catch(() => []),
+    queryDocumentsWhere<Omit<FriendConnection, 'id'>>('friendships', [{ field: 'addresseeId', op: 'EQUAL', value: userId }], token).catch(() => []),
+  ]);
+  return [...new Map([...sent, ...received].map((item) => [item.id, item])).values()]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+export async function sendFriendRequest(addresseeId: string, token = getSessionToken()): Promise<void> {
+  const requesterId = getTokenUserId(token);
+  if (!token || !requesterId || !addresseeId || requesterId === addresseeId) throw new Error('친구 요청 대상을 확인해주세요.');
+  const id = friendshipId(requesterId, addresseeId);
+  const existing = await getDocument<FriendConnection>('friendships', id, token).catch(() => null);
+  if (existing?.status === 'accepted' || existing?.status === 'pending') return;
+  if (existing?.status === 'declined') {
+    await mergeDocument('friendships', id, { status: 'pending', updatedAt: new Date() }, token);
+    return;
+  }
+  const now = new Date();
+  await createDocument('friendships', id, { requesterId, addresseeId, status: 'pending', createdAt: now, updatedAt: now }, token).catch(async (error) => {
+    const current = await getDocument<FriendConnection>('friendships', id, token).catch(() => null);
+    if (!current) throw error;
+  });
+}
+
+export async function respondToFriendRequest(connection: FriendConnection, status: Extract<FriendStatus, 'accepted' | 'declined'>, token = getSessionToken()): Promise<void> {
+  const viewerId = getTokenUserId(token);
+  if (!token || !viewerId || ![connection.requesterId, connection.addresseeId].includes(viewerId)) throw new Error('친구 요청 권한을 확인해주세요.');
+  await mergeDocument('friendships', connection.id, { status, updatedAt: new Date() }, token);
+}
+
 export function getStoredSession(): StoredSession | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -1250,12 +1308,13 @@ export async function completeProfileOnboarding(
   user: PortalUser,
   gender: Gender,
   country: string,
+  age: number,
   token = getSessionToken(),
 ): Promise<PortalUser> {
   const authUserId = getTokenUserId(token);
   const selectedCountry = country.trim();
   if (!token || authUserId !== user.id) throw new Error('로그인 세션을 다시 확인해주세요.');
-  if (!isGender(gender) || !isCountry(selectedCountry)) throw new Error('성별과 국가를 모두 선택해주세요.');
+  if (!isGender(gender) || !isCountry(selectedCountry) || !Number.isInteger(age) || age < 13 || age > 130) throw new Error('성별·나이·국가를 모두 정확히 선택해주세요.');
 
   const [profileDocument, publicDocument] = await Promise.all([
     getRawDocument('profiles', user.id, token),
@@ -1267,15 +1326,18 @@ export async function completeProfileOnboarding(
   const publicGender = savedPublic?.gender;
   const profileCountry = savedProfile?.country;
   const publicCountry = savedPublic?.country;
+  const savedAge = Number(savedProfile?.age || savedPublic?.age || 0);
   const savedGender = isGender(profileGender) ? profileGender : isGender(publicGender) ? publicGender : undefined;
   const savedCountry = isCountry(profileCountry) ? profileCountry.trim() : isCountry(publicCountry) ? publicCountry.trim() : undefined;
   if (savedGender && savedGender !== gender) throw new Error('이미 저장된 성별은 변경할 수 없습니다.');
   if (savedCountry && savedCountry !== selectedCountry) throw new Error('이미 저장된 국가는 변경할 수 없습니다.');
+  if (savedAge && savedAge !== age) throw new Error('이미 저장된 나이는 변경할 수 없습니다.');
 
   const completedUser: PortalUser & { gender: Gender; country: string } = {
     ...user,
     gender: savedGender || gender,
     country: savedCountry || selectedCountry,
+    age: savedAge || age,
   };
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
@@ -1365,7 +1427,7 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     gender: isGender(savedGender) ? savedGender : user.gender,
     country: isCountry(savedCountry) ? savedCountry.trim() : user.country?.trim(),
   };
-  if (!hasCompletedProfile(persistedUser)) throw new Error('먼저 성별과 국가 설정을 완료해주세요.');
+  if (!hasCompletedProfile(persistedUser)) throw new Error('먼저 성별·나이·국가 설정을 완료해주세요.');
   await upsertDocument('profiles', user.id, privateProfileData(persistedUser), token);
   await replaceDocument('publicProfiles', user.id, publicProfileData(persistedUser), token);
   storeSessionUser(persistedUser);
@@ -1491,6 +1553,19 @@ export async function deleteDocument(collection: string, id: string, token?: str
     method: 'DELETE',
   }, token);
   if (!response.ok && response.status !== 404) throw new Error(await response.text());
+}
+
+export async function deleteWebrtcRoomData(callId: string, token?: string): Promise<void> {
+  if (!callId || !token) return;
+  const [candidates, messages] = await Promise.all([
+    queryDocumentsWhere<{ callId?: string }>('webrtcCandidates', [{ field: 'callId', op: 'EQUAL', value: callId }], token).catch(() => []),
+    queryDocumentsWhere<{ callId?: string }>('webrtcChatMessages', [{ field: 'callId', op: 'EQUAL', value: callId }], token).catch(() => []),
+  ]);
+  await Promise.all([
+    ...candidates.map((item) => deleteDocument('webrtcCandidates', item.id, token).catch(() => undefined)),
+    ...messages.map((item) => deleteDocument('webrtcChatMessages', item.id, token).catch(() => undefined)),
+  ]);
+  await deleteDocument('webrtcCalls', callId, token).catch(() => undefined);
 }
 
 export async function deleteExpiredChatMessages(token?: string, collection = 'chatMessages'): Promise<number> {
