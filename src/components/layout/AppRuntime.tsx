@@ -7,25 +7,17 @@ import { useGlobalStore } from '@/store/useGlobalStore';
 export default function AppRuntime({ children }: { children: React.ReactNode }) {
   const setUser = useGlobalStore((state) => state.setUser);
   const user = useGlobalStore((state) => state.user);
-  const selectedCountry = useGlobalStore((state) => state.selectedCountry);
-  const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
   const darkMode = useGlobalStore((state) => state.darkMode);
   const setDarkMode = useGlobalStore((state) => state.setDarkMode);
 
   useEffect(() => {
     setDarkMode(window.localStorage.getItem('gyopo-dark-mode') === '1');
-    const savedRegion = window.localStorage.getItem('gyopo-region');
-    if (savedRegion) setSelectedCountry(savedRegion);
-  }, [setDarkMode, setSelectedCountry]);
+  }, [setDarkMode]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
     window.localStorage.setItem('gyopo-dark-mode', darkMode ? '1' : '0');
   }, [darkMode]);
-
-  useEffect(() => {
-    window.localStorage.setItem('gyopo-region', selectedCountry);
-  }, [selectedCountry]);
 
   useEffect(() => {
     let active = true;
@@ -36,7 +28,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
       if (active) setUser(refreshedUser || savedUser);
     };
     void hydrate();
-    const beat = () => recordVisit(getStoredSession()?.user || user || null, selectedCountry);
+    const beat = () => recordVisit(getStoredSession()?.user || user || null, 'Global');
     void beat();
     const heartbeat = window.setInterval(() => {
       void beat();
@@ -49,7 +41,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
       window.removeEventListener('focus', beat);
       window.removeEventListener('storage', hydrate);
     };
-  }, [selectedCountry, setUser, user?.id]);
+  }, [setUser, user?.id]);
 
   useEffect(() => {
     const refresh = async () => {

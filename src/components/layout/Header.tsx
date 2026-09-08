@@ -3,16 +3,15 @@
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { useState } from 'react';
-import { Gamepad2, Wallet, LogIn, LogOut, Moon, Sun, Video, Menu, X, MapPin } from 'lucide-react';
+import { Gamepad2, Wallet, LogIn, LogOut, Moon, Sun, Video, Menu, X, Globe2 } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
-import { REGIONS } from '@/lib/regions';
 
 function formatUsdt(value: number) {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function Header() {
-  const { user, setUser, darkMode, setDarkMode, selectedCountry, setSelectedCountry } = useGlobalStore();
+  const { user, setUser, darkMode, setDarkMode } = useGlobalStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -35,12 +34,9 @@ export default function Header() {
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-          <label className="header-region hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-slate-300 md:flex">
-            <MapPin size={14} className="text-teal-300" />
-            <select value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} aria-label="지역 선택" className="max-w-28 bg-transparent text-xs font-bold text-slate-200 outline-none">
-              {REGIONS.map((region) => <option key={region.id} value={region.id} className="bg-slate-900">{region.flag} {region.short}</option>)}
-            </select>
-          </label>
+          <div className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-slate-300 md:flex" aria-label="전체 지역">
+            <Globe2 size={14} className="text-teal-300" /> 전체 지역
+          </div>
           <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
             <Gamepad2 size={16} />
             <span>테트리스</span>
@@ -82,13 +78,11 @@ export default function Header() {
         </div>
       </div>
       {menuOpen && <div className="header-mobile-menu lg:hidden">
-        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-bold text-slate-200">
-          <MapPin size={16} className="text-teal-300" />
-          <span className="text-slate-400">지역</span>
-          <select value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} aria-label="모바일 지역 선택" className="ml-auto bg-transparent text-right font-bold text-white outline-none">
-            {REGIONS.map((region) => <option key={region.id} value={region.id} className="bg-slate-900">{region.flag} {region.label}</option>)}
-          </select>
-        </label>
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-bold text-slate-200">
+          <Globe2 size={16} className="text-teal-300" />
+          <span className="text-slate-400">표시 범위</span>
+          <span className="ml-auto font-black text-white">전체 지역</span>
+        </div>
         <nav className="grid grid-cols-2 gap-2 text-sm font-bold text-slate-200">
           <Link onClick={() => setMenuOpen(false)} href="/jobs">구인구직</Link>
           <Link onClick={() => setMenuOpen(false)} href="/directory">업소록</Link>
