@@ -136,7 +136,7 @@ export default function MasterPage() {
             } else if (section.category === 'market') {
               await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: source.region, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'community' || section.category === 'news' || section.category === 'events') {
-              await retryPublish(() => mergeDocument('posts', id, { type: 'news', title: item.title, body: item.body || item.description || `${source.name} 원문에서 확인하세요.`, authorId, author: source.name, country: source.region, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
+               await retryPublish(() => mergeDocument('posts', id, { type: 'news', title: item.title, body: item.body || item.description || '상세 본문이 제공되지 않은 출처 콘텐츠입니다.', authorId, author: source.name, country: source.region, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
             }
           } catch {
             publishErrors.push(item.title);
@@ -157,7 +157,7 @@ export default function MasterPage() {
     setMessage('출처 확인이 끝났습니다. 확인된 결과만 뉴스 허브에 게시했습니다.');
   };
   const syncAutoSources = async () => {
-    for (const source of CONTENT_SOURCES.filter((item) => item.autoImport)) await syncSource(source);
+     for (const source of CONTENT_SOURCES) await syncSource(source);
   };
   useEffect(() => {
     if (user?.id && isMasterUser(user)) void syncAutoSources();
