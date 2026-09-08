@@ -1,6 +1,568 @@
 'use client';
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type TouchEvent, type CSSProperties } from 'react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Swords, Users, X } from 'lucide-react';
+import { claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, reserveGameStake, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisQueueProfile } from '@/lib/firebase';
+import { useGlobalStore } from '@/store/useGlobalStore';
+
+function formatUsdt(value: number | string) {
+  return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const WIDTH = 10;
+const HEIGHT = 20;
+const SHAPES = [
+  [[1, 1, 1, 1]],
+  [[1, 1], [1, 1]],
+  [[0, 1, 0], [1, 1, 1]],
+  [[1, 0, 0], [1, 1, 1]],
+  [[0, 0, 1], [1, 1, 1]],
+  [[0, 1, 1], [1, 1, 0]],
+  [[1, 1, 0], [0, 1, 1]],
+];
+const COLORS = ['#2dd4bf', '#facc15', '#c084fc', '#60a5fa', '#fb923c', '#f472b6', '#4ade80'];
+const DEFAULT_ENTRY_FEE = 1;
+const MIN_ENTRY_FEE = 1;
+const MAX_ENTRY_FEE = 100;
+type Piece = { type: number; shape: number[][]; x: number; y: number };
+type ChatMessage = { id: string; authorId: string; user: string; country?: string; text: string; createdAt: string; expiresAt?: string | Date };
+type GameState = {
+  board: number[][];
+  piece: Piece;
+  nextPiece: Piece;
+  running: boolean;
+  started: boolean;
+  paused: boolean;
+  score: number;
+  lines: number;
+  attackTotal: number;
+  garbageReceived: number;
+  notice: string;
+  noticeId: number;
+};
+type TetrisProfile = { id: string; name: string; image: string; country?: string };
+type TetrisLobby = { status?: 'waiting' | 'matched'; waitingUserId?: string; waitingUser?: TetrisProfile; matchId?: string; playerAId?: string; playerBId?: string; playerA?: TetrisProfile; playerB?: TetrisProfile; updatedAt?: string };
+type MatchPhase = 'idle' | 'waiting' | 'betting' | 'holding' | 'countdown' | 'playing' | 'finished';
+type TetrisInvite = { id: string; senderId: string; recipientId: string; sender: TetrisProfile; recipient: TetrisProfile; matchId: string; status: 'pending' | 'accepted' | 'rejected'; createdAt: string; updatedAt?: string };
+type TetrisQueueRecord = TetrisQueueProfile & { userId: string; status: 'waiting' | 'matched'; matchId?: string; role?: 'A' | 'B'; opponent?: TetrisProfile; lastSeenAt: string | Date };
+type TetrisRoom = TetrisLobby & {
+  phase?: 'betting' | 'holding' | 'countdown' | 'playing' | 'finished';
+  betAmount?: number;
+  readyA?: boolean;
+  readyB?: boolean;
+  readyAAt?: string;
+  readyBAt?: string;
+  startAt?: string;
+  startRequestedBy?: string;
+  startRequestedAt?: string;
+  stakeHeldA?: boolean;
+  stakeHeldB?: boolean;
+  payoutStatus?: 'PAID' | 'PENDING';
+  payoutAmount?: number;
+  playerAResult?: 'win' | 'lose';
+  playerBResult?: 'win' | 'lose';
+  playerAState?: GameState;
+  playerBState?: GameState;
+};
+type GameAction =
+  | { type: 'START' }
+  | { type: 'RESET' }
+  | { type: 'TOGGLE_PAUSE' }
+  | { type: 'MOVE'; dx: number; dy: number }
+  | { type: 'ROTATE' }
+  | { type: 'SWAP_NEXT' }
+  | { type: 'DROP' }
+  | { type: 'RECEIVE_GARBAGE'; lines: number };
+
+const emptyBoard = () => Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(0));
+const cloneShape = (shape: number[][]) => shape.map((row) => [...row]);
+const clonePiece = (piece: Piece): Piece => ({ ...piece, shape: cloneShape(piece.shape) });
+const randomPiece = (): Piece => {
+  const type = Math.floor(Math.random() * SHAPES.length);
+  return { type, shape: cloneShape(SHAPES[type]), x: 3, y: 0 };
+};
+const rotate = (shape: number[][]) => shape[0].map((_, index) => shape.map((row) => row[index]).reverse());
+const collides = (board: number[][], piece: Piece, dx = 0, dy = 0, shape = piece.shape) => shape.some((row, y) => row.some((cell, x) => {
+  if (!cell) return false;
+  const nextX = piece.x + x + dx;
+  const nextY = piece.y + y + dy;
+  return nextX < 0 || nextX >= WIDTH || nextY >= HEIGHT || (nextY >= 0 && Boolean(board[nextY]?.[nextX]));
+}));
+
+const createGame = (): GameState => ({
+  board: emptyBoard(),
+  piece: randomPiece(),
+  nextPiece: randomPiece(),
+  running: false,
+  started: false,
+  paused: false,
+  score: 0,
+  lines: 0,
+  attackTotal: 0,
+  garbageReceived: 0,
+  notice: '',
+  noticeId: 0,
+});
+const buildVisual = (state: GameState) => {
+  const visual = state.board.map((row) => [...row]);
+  let ghostDistance = 0;
+  while (!collides(state.board, state.piece, 0, ghostDistance + 1)) ghostDistance += 1;
+  const ghostY = state.piece.y + ghostDistance;
+  state.piece.shape.forEach((row, y) => row.forEach((cell, x) => {
+    if (!cell) return;
+    if (ghostY + y >= 0 && ghostY + y < HEIGHT && !visual[ghostY + y][state.piece.x + x]) visual[ghostY + y][state.piece.x + x] = -1;
+    if (state.piece.y + y >= 0 && state.piece.y + y < HEIGHT) visual[state.piece.y + y][state.piece.x + x] = state.piece.type + 1;
+  }));
+  return visual;
+};
+
+function BoardGrid({ cells, compact = false }: { cells: number[][]; compact?: boolean }) {
+  return (
+    <div className={`grid grid-cols-10 rounded-xl bg-[#0b1221] ${compact ? 'gap-px p-1' : 'gap-1 p-2'}`}>
+      {cells.flatMap((row, y) => row.map((cell, x) => (
+        <div
+          key={`${x}-${y}`}
+          className={`aspect-square rounded-[3px] ${compact ? '' : 'md:rounded-[4px]'} ${cell === 0 ? 'border border-white/[0.05] bg-white/[0.025]' : cell === -1 ? 'border border-dashed border-cyan-100/60 bg-cyan-200/10' : 'border-white/50 shadow-[inset_0_2px_0_rgba(255,255,255,.55),0_0_12px_var(--cell)]'}`}
+           style={cell > 0 ? ({ '--cell': cell === 8 ? '#64748b' : COLORS[cell - 1], backgroundColor: cell === 8 ? '#64748b' : COLORS[cell - 1] } as CSSProperties) : undefined}
+        />
+      )))}
+    </div>
+  );
+}
+
+function NextBlock({ piece, compact = false }: { piece: Piece; compact?: boolean }) {
+  return (
+    <div className={`grid grid-cols-4 rounded-xl bg-black/20 ${compact ? 'gap-px p-1' : 'gap-1 p-2'}`}>
+      {Array.from({ length: 16 }, (_, index) => {
+        const x = index % 4;
+        const y = Math.floor(index / 4);
+        return <div key={index} className="aspect-square rounded" style={piece.shape[y]?.[x] ? { backgroundColor: COLORS[piece.type] } : undefined} />;
+      })}
+    </div>
+  );
+}
+
+function lockPiece(state: GameState, landed: Piece): GameState {
+  const merged = state.board.map((row) => [...row]);
+  landed.shape.forEach((row, y) => row.forEach((cell, x) => {
+    if (cell && landed.y + y >= 0 && landed.y + y < HEIGHT) merged[landed.y + y][landed.x + x] = landed.type + 1;
+  }));
+  const kept = merged.filter((row) => row.some((cell) => !cell));
+  const cleared = HEIGHT - kept.length;
+  const nextBoard = [...Array.from({ length: cleared }, () => Array(WIDTH).fill(0)), ...kept];
+  const spawned = { ...clonePiece(state.nextPiece), x: 3, y: 0 };
+  const gameOver = collides(nextBoard, spawned);
+  const points = [0, 100, 300, 500, 800][cleared];
+  const attackLines = Math.max(0, cleared - 1);
+  return {
+    ...state,
+    board: nextBoard,
+    piece: spawned,
+    nextPiece: randomPiece(),
+    running: !gameOver,
+    score: state.score + points,
+    lines: state.lines + cleared,
+    attackTotal: state.attackTotal + attackLines,
+    notice: gameOver ? '게임 오버 · 새 게임을 시작하세요' : cleared ? `${cleared}줄 클리어 · ${attackLines ? `상대에게 ${attackLines}줄 공격` : `+${points}`}` : '',
+    noticeId: Date.now(),
+  };
+}
+
+function addGarbageLines(state: GameState, lines: number): GameState {
+  if (lines <= 0) return state;
+  const safeLines = Math.min(lines, HEIGHT);
+  const garbage = Array.from({ length: safeLines }, () => {
+    const gap = Math.floor(Math.random() * WIDTH);
+    return Array.from({ length: WIDTH }, (_, index) => (index === gap ? 0 : 8));
+  });
+  const board = [...state.board.slice(safeLines), ...garbage];
+  const gameOver = collides(board, state.piece);
+  return {
+    ...state,
+    board,
+    running: gameOver ? false : state.running,
+    garbageReceived: state.garbageReceived + safeLines,
+    notice: gameOver ? '상대 공격으로 게임 오버' : `상대 공격 · ${safeLines}줄 수신`,
+    noticeId: Date.now(),
+  };
+}
+
+function gameReducer(state: GameState, action: GameAction): GameState {
+  if (action.type === 'START') return { ...createGame(), running: true, started: true, notice: '게임 시작 · 방향키로 조작하세요', noticeId: Date.now() };
+  if (action.type === 'RESET') return createGame();
+  if (action.type === 'RECEIVE_GARBAGE') return addGarbageLines(state, action.lines);
+  if (action.type === 'TOGGLE_PAUSE') return state.running ? { ...state, paused: !state.paused } : state;
+  if (!state.running || state.paused) return state;
+  if (action.type === 'ROTATE') {
+    const rotated = rotate(state.piece.shape);
+    return collides(state.board, state.piece, 0, 0, rotated) ? state : { ...state, piece: { ...state.piece, shape: rotated } };
+  }
+  if (action.type === 'SWAP_NEXT') {
+    const current = { ...clonePiece(state.piece), x: 3, y: 0 };
+    const next = { ...clonePiece(state.nextPiece), x: 3, y: 0 };
+    if (collides(state.board, next)) return state;
+    return { ...state, piece: next, nextPiece: current, notice: '다음 블록으로 교체', noticeId: Date.now() };
+  }
+  if (action.type === 'DROP') {
+    let distance = 0;
+    while (!collides(state.board, state.piece, 0, distance + 1)) distance += 1;
+    return lockPiece(state, { ...state.piece, y: state.piece.y + distance });
+  }
+  if (!collides(state.board, state.piece, action.dx, action.dy)) return { ...state, piece: { ...state.piece, x: state.piece.x + action.dx, y: state.piece.y + action.dy } };
+  return action.dy === 1 ? lockPiece(state, state.piece) : state;
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
+export default function GamesPage() {
+  const user = useGlobalStore((state) => state.user);
+  const setUser = useGlobalStore((state) => state.setUser);
+  const [game, dispatch] = useReducer(gameReducer, undefined, createGame);
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [matchRole, setMatchRole] = useState<'A' | 'B' | null>(null);
+  const [opponent, setOpponent] = useState<TetrisProfile | null>(null);
+  const [opponentState, setOpponentState] = useState<GameState | null>(null);
+  const [matchStatus, setMatchStatus] = useState('대전 준비 안됨');
+  const [matchPhase, setMatchPhase] = useState<MatchPhase>('idle');
+  const [incomingInvite, setIncomingInvite] = useState<TetrisInvite | null>(null);
+  const [sentInviteId, setSentInviteId] = useState<string | null>(null);
+  const [inviteStatus, setInviteStatus] = useState('');
+  const [readyForBattle, setReadyForBattle] = useState(false);
+  const [opponentReady, setOpponentReady] = useState(false);
+  const [selectedOnlineUserId, setSelectedOnlineUserId] = useState<string | null>(null);
+  const [betAmount, setBetAmount] = useState(DEFAULT_ENTRY_FEE);
+  const [stakeReserved, setStakeReserved] = useState(false);
+  const [countdown, setCountdown] = useState<number | 'START' | null>(null);
+  const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
+  const [roomStartAt, setRoomStartAt] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  const firstChatLoad = useRef(true);
+  const lastMessageId = useRef<string | null>(null);
+  const lastChatCleanup = useRef(0);
+  const queuePollingRef = useRef(false);
+  const gameRef = useRef(game);
+  const resultSent = useRef(false);
+  const gameStartedRef = useRef(false);
+  const startRequestedRef = useRef(false);
+  const autoStartRequestedRef = useRef(false);
+  const holdRequestedRef = useRef(false);
+  const countdownRoomRef = useRef<string | null>(null);
+  const settlementRequestedRef = useRef(false);
+  const roomCleanupTimer = useRef<number | null>(null);
+  const handledInviteIds = useRef(new Set<string>());
+  const invitePollingRef = useRef(false);
+  const resultNoticeRef = useRef<string | null>(null);
+  const opponentAttackTotalRef = useRef(0);
+  const opponentAttackInitializedRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    gameRef.current = game;
+  }, [game]);
+
+  const showToast = (text: string) => {
+    setToast({ id: Date.now(), text });
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4200);
+  };
+
+  useEffect(() => {
+    if (game.notice) showToast(game.notice);
+  }, [game.noticeId]);
+
+  useEffect(() => {
+    const load = async () => setOnlineUsers(await listOnlineUsers().catch(() => []));
+    void load();
+    const timer = window.setInterval(load, 3000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      const token = getSessionToken();
+      if (token && Date.now() - lastChatCleanup.current > 30_000) {
+        lastChatCleanup.current = Date.now();
+        await deleteExpiredChatMessages(token, 'tetrisChatMessages').catch(() => undefined);
+      }
+      const next = (await queryDocumentsWhere<Omit<ChatMessage, 'id'>>('tetrisChatMessages', [{ field: 'expiresAt', op: 'GREATER_THAN', value: new Date() }], token, 60).catch(() => []))
+        .filter((message) => message.authorId)
+        .filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now())
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .slice(-24);
+      const latest = next[next.length - 1];
+      if (!firstChatLoad.current && latest && latest.id !== lastMessageId.current) showToast(`${latest.user}: ${latest.text}`);
+      firstChatLoad.current = false;
+      lastMessageId.current = latest?.id || null;
+      setMessages(next);
+    };
+    void load();
+    const timer = window.setInterval(load, 1500);
+    return () => window.clearInterval(timer);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!game.running) return;
+      if (event.key === 'ArrowLeft') { event.preventDefault(); dispatch({ type: 'MOVE', dx: -1, dy: 0 }); }
+      if (event.key === 'ArrowRight') { event.preventDefault(); dispatch({ type: 'MOVE', dx: 1, dy: 0 }); }
+      if (event.key === 'ArrowDown') { event.preventDefault(); dispatch({ type: 'MOVE', dx: 0, dy: 1 }); }
+      if (event.key === 'ArrowUp') { event.preventDefault(); dispatch({ type: 'ROTATE' }); }
+       if (event.key.toLowerCase() === 'c') { event.preventDefault(); dispatch({ type: 'SWAP_NEXT' }); }
+      if (event.key === ' ') { event.preventDefault(); dispatch({ type: 'DROP' }); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [game.running]);
+
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    const touch = event.changedTouches[0];
+    touchStartRef.current = null;
+    if (!start || !touch || !game.running || game.paused) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) {
+      dispatch({ type: 'DROP' });
+      return;
+    }
+    if (Math.abs(dx) > Math.abs(dy)) dispatch({ type: 'MOVE', dx: dx > 0 ? 1 : -1, dy: 0 });
+    else if (dy < 0) dispatch({ type: 'ROTATE' });
+    else dispatch({ type: 'MOVE', dx: 0, dy: 1 });
+  };
+
+  useEffect(() => {
+    if (!game.running || game.paused) return;
+    const timer = window.setInterval(() => dispatch({ type: 'MOVE', dx: 0, dy: 1 }), Math.max(180, 850 - Math.floor(game.lines / 5) * 45));
+    return () => window.clearInterval(timer);
+  }, [game.running, game.paused, game.lines]);
+
+  const updateRoom = async (patch: Record<string, unknown>) => {
+    if (!matchId || !matchRole || !user) throw new Error('대전 방 정보가 없습니다.');
+    const token = getSessionToken();
+    if (!token) throw new Error('로그인 세션이 만료되었습니다.');
+    const sessionUserId = getSessionUserId() || user.id;
+    const profile: TetrisProfile = { id: sessionUserId, name: user.name, image: user.image, country: user.country || 'Global' };
+    const opponentProfile = opponent ? {
+      id: opponent.id,
+      name: opponent.name,
+      image: opponent.image,
+      country: opponent.country || 'Global',
+    } : null;
+    await mergeDocument('tetrisRooms', matchId, {
+      ...patch,
+      matchId,
+      ...(matchRole === 'A'
+        ? {
+            playerAId: user.id,
+            playerA: profile,
+            ...(opponentProfile ? { playerBId: opponentProfile.id, playerB: opponentProfile } : {}),
+          }
+        : {
+            playerBId: user.id,
+            playerB: profile,
+            ...(opponentProfile ? { playerAId: opponentProfile.id, playerA: opponentProfile } : {}),
+          }),
+      updatedAt: new Date(),
+    }, token);
+  };
+
+  const beginCountdown = (startAt = new Date(Date.now() + 5000).toISOString()) => {
+    if (countdownRoomRef.current === startAt) return;
+    countdownRoomRef.current = startAt;
+    setMatchResult(null);
+    setMatchPhase('countdown');
+    setRoomStartAt(startAt);
+  };
+
+  useEffect(() => {
+    if (!roomStartAt) return;
+    const startTime = new Date(roomStartAt).getTime();
+    const timer = window.setInterval(() => {
+      const remaining = Math.ceil((startTime - Date.now()) / 1000);
+      if (remaining > 1) {
+        setCountdown(Math.min(5, remaining));
+        return;
+      }
+      setCountdown('START');
+      if (remaining <= 0) {
+        window.clearInterval(timer);
+         window.setTimeout(() => {
+           setCountdown(null);
+           setMatchPhase('playing');
+           gameStartedRef.current = true;
+           dispatch({ type: 'START' });
+        }, 650);
+      }
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [roomStartAt]);
+
+  const practiceStart = () => {
+    if (!user) return window.alert('로그인 후 게임을 시작할 수 있습니다.');
+    const token = getSessionToken();
+    if (token) void deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+    setMatchId(null);
+    setMatchRole(null);
+    setSentInviteId(null);
+    setOpponent(null);
+    setOpponentState(null);
+    setReadyForBattle(false);
+    setOpponentReady(false);
+    startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
+    setStakeReserved(false);
+    setRoomStartAt(null);
+    setCountdown(null);
+    gameStartedRef.current = false;
+    resultSent.current = false;
+    holdRequestedRef.current = false;
+    settlementRequestedRef.current = false;
+    resultNoticeRef.current = null;
+    opponentAttackTotalRef.current = 0;
+    opponentAttackInitializedRef.current = false;
+    dispatch({ type: 'RESET' });
+    setMatchStatus('연습 모드');
+    beginCountdown();
+  };
+
+  const findMatch = async () => {
+    if (!user) return window.alert('로그인 후 게임을 시작할 수 있습니다.');
+    const token = getSessionToken();
+    if (!token) return window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+    const profile: TetrisQueueProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    setOpponentState(null);
+    setOpponent(null);
+    setMatchId(null);
+    setMatchRole(null);
+    setSentInviteId(null);
+    setReadyForBattle(false);
+    setOpponentReady(false);
+    startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
+    setStakeReserved(false);
+    setRoomStartAt(null);
+    setCountdown(null);
+    gameStartedRef.current = false;
+    resultSent.current = false;
+    holdRequestedRef.current = false;
+    settlementRequestedRef.current = false;
+    resultNoticeRef.current = null;
+    opponentAttackTotalRef.current = 0;
+    opponentAttackInitializedRef.current = false;
+    dispatch({ type: 'RESET' });
+    setMatchPhase('waiting');
+    setMatchStatus('매칭 상대를 찾는 중...');
+    setInviteStatus('다른 회원이 입장하면 양쪽 화면이 자동으로 대전 준비로 전환됩니다.');
+    try {
+      await upsertDocument('tetrisQueue', user.id, {
+        userId: user.id,
+        name: profile.name,
+        image: profile.image,
+        country: profile.country || 'Global',
+        status: 'waiting',
+        lastSeenAt: new Date(),
+        updatedAt: new Date(),
+      }, token);
+    } catch {
+      setMatchStatus('매칭 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      setMatchPhase('idle');
+      setMatchId(null);
+      setMatchRole(null);
+    }
+  };
+
+  const cancelMatch = async () => {
+    if (user) {
+      const token = getSessionToken();
+      if (token) await deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+      if (token && sentInviteId) await mergeDocument('tetrisInvites', sentInviteId, { status: 'rejected', updatedAt: new Date() }, token).catch(() => undefined);
+    }
+    setSentInviteId(null);
+    setMatchPhase('idle');
+    setMatchStatus('대전 준비 안됨');
+    setInviteStatus('');
+    setOpponentReady(false);
+    startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
+    holdRequestedRef.current = false;
+  };
+
+  const resetBattleRoom = (status = '대전 준비 안됨') => {
+    setMatchId(null);
+    setMatchRole(null);
+    setSentInviteId(null);
+    setOpponent(null);
+    setOpponentState(null);
+    setReadyForBattle(false);
+    setOpponentReady(false);
+    setStakeReserved(false);
+    setRoomStartAt(null);
+    setCountdown(null);
+    setMatchResult(null);
+    setMatchPhase('idle');
+    setMatchStatus(status);
+    setInviteStatus('');
+    startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
+    holdRequestedRef.current = false;
+    gameStartedRef.current = false;
+    countdownRoomRef.current = null;
+    opponentAttackTotalRef.current = 0;
+    opponentAttackInitializedRef.current = false;
+    dispatch({ type: 'RESET' });
+  };
+
+  const leaveBattleRoom = async () => {
+    if (!matchId || !matchRole || !user) return;
+    const leavingMatchId = matchId;
+    const token = getSessionToken();
+    if (!token) return;
+    try {
+      if (matchPhase === 'playing') {
+        await updateRoom(matchRole === 'A'
+          ? { phase: 'finished', playerAResult: 'lose' }
+          : { phase: 'finished', playerBResult: 'lose' });
+      } else if (matchPhase === 'finished') {
+        await deleteDocument('tetrisRooms', leavingMatchId, token).catch(() => undefined);
+      } else {
+        if (stakeReserved) await refundGameStake(getSessionUserId() || user.id, leavingMatchId, token);
+        await deleteDocument('tetrisRooms', leavingMatchId, token);
+      }
+      resetBattleRoom('대전방을 나갔습니다.');
+      const refreshed = await refreshStoredUser().catch(() => null);
+      if (refreshed) setUser(refreshed);
+    } catch (error) {
+      setMatchStatus(error instanceof Error ? error.message : '대전방을 나가지 못했습니다.');
+    }
+  };
+
+  const sendInvite = async (online: OnlineUser) => {
+    if (!user) return window.alert('로그인 후 대전 신청을 보낼 수 있습니다.');
+    const recipientId = online.userId || online.id;
+    if (recipientId === user.id) return;
+    const token = getSessionToken();
+    if (!token) return window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+    const matchId = `tetris-${user.id}-${recipientId}-${crypto.randomUUID()}`;
+    const inviteId = crypto.randomUUID();
+    const sender: TetrisProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    const recipient: TetrisProfile = { id: recipientId, name: onli'use client';
+
+import { useEffect, useReducer, useRef, useState, type FormEvent, type TouchEvent, type CSSProperties } from 'react';
 import { Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Users } from 'lucide-react';
 import { claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, reserveGameStake, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisQueueProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
