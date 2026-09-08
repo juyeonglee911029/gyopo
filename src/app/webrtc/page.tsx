@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Camera, CheckCircle2, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, ShieldCheck, Users, VideoOff } from 'lucide-react';
 import {
   deleteDocument,
+  deleteWebrtcRoomData,
   claimWebrtcMatch,
   createDocument,
   deleteExpiredChatMessages,
@@ -16,7 +18,6 @@ import {
   reserveGenderMatchStake,
   saveProfile,
   upsertDocument,
-  type Gender,
   type GenderPreference,
   type TetrisQueueProfile,
 } from '@/lib/firebase';
@@ -64,6 +65,7 @@ const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise
 ]);
 
 export default function WebRTCPage() {
+  const router = useRouter();
   const user = useGlobalStore((state) => state.user);
   const setUser = useGlobalStore((state) => state.setUser);
   const [isMatching, setIsMatching] = useState(false);
@@ -80,8 +82,8 @@ export default function WebRTCPage() {
   const [chatMessages, setChatMessages] = useState<VideoChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatError, setChatError] = useState('');
-  const [gender, setGender] = useState<Gender | ''>(user?.gender === 'male' || user?.gender === 'female' ? user.gender : '');
   const [genderPreference, setGenderPreference] = useState<GenderPreference>(user?.genderPreference || 'any');
+  const [targetUserId, setTargetUserId] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const sidebarVideoRef = useRef<HTMLVideoElement>(null);
@@ -115,10 +117,13 @@ export default function WebRTCPage() {
   }, [flip]);
 
   useEffect(() => {
+    setTargetUserId(new URLSearchParams(window.location.search).get('friend') || '');
+  }, []);
+
+  useEffect(() => {
     userRef.current = user;
     if (!user) return;
     if (!active) {
-      setGender(user.gender === 'male' || user.gender === 'female' ? user.gender : '');
       setGenderPreference(user.genderPreference || 'any');
     }
   }, [user, active]);
@@ -238,6 +243,7 @@ export default function WebRTCPage() {
   const createOutgoingStream = () => getOutgoingStream() || streamRef.current;
 
   const closeCallForRematch = (message: string) => {
+    const callId = callRef.current?.callId;
     connectionRef.current?.close();
     connectionRef.current = null;
     screenTrackRef.current?.stop();
@@ -254,7 +260,14 @@ export default function WebRTCPage() {
     setIsMatching(true);
     setStatus(message);
     const token = getSessionToken();
-    if (token && userRef.current) void deleteDocument('webrtcQueue', userRef.current.id, token).catch(() => undefined);
+    if (token && userRef.current) {
+      void deleteDocument('webrtcQueue', userRef.current.id, token).catch(() => undefined);
+      if (callId) {
+        void mergeDocument('webrtcCalls', callId, { status: 'ended' }, token)
+          .then(() => deleteWebrtcRoomData(callId, token))
+          .catch(() => undefined);
+      }
+    }
   };
 
   const startMatch = async () => {
@@ -267,13 +280,9 @@ export default function WebRTCPage() {
       window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
       return;
     }
-    if (genderPreference !== 'any' && !gender) {
-      setPermissionError('성별 선호 매칭을 사용하려면 먼저 내 성별을 설정해주세요.');
-      return;
-    }
     setPermissionError('');
-    const profile = { ...user, ...(gender ? { gender } : {}), genderPreference };
-    const profileChanged = profile.gender !== user.gender || profile.genderPreference !== user.genderPreference;
+    const profile = { ...user, genderPreference };
+    const profileChanged = profile.genderPreference !== user.genderPreference;
     if (profileChanged) {
       try {
         await saveProfile(profile, token);
@@ -311,8 +320,9 @@ export default function WebRTCPage() {
       image: user.image,
        age: user.age || 0,
       country: user.country || 'Global',
-      gender: gender || '',
+      gender: user.gender || '',
       genderPreference,
+      targetUserId: targetUserId || undefined,
       isSubscribed: Boolean(user.isSubscribed),
       status: 'waiting',
       lastSeenAt: new Date(),
@@ -358,7 +368,10 @@ export default function WebRTCPage() {
     connectedRef.current = false;
     if (token && user) {
       await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
-      if (currentCall) await mergeDocument('webrtcCalls', currentCall.callId, { status: 'ended' }, token).catch(() => undefined);
+      if (currentCall) {
+        await mergeDocument('webrtcCalls', currentCall.callId, { status: 'ended' }, token).catch(() => undefined);
+        await deleteWebrtcRoomData(currentCall.callId, token).catch(() => undefined);
+      }
     }
   };
 
@@ -369,7 +382,15 @@ export default function WebRTCPage() {
     videoSenderRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     const token = getSessionToken();
-    if (token && userRef.current) void deleteDocument('webrtcQueue', userRef.current.id, token);
+    if (token && userRef.current) {
+      void deleteDocument('webrtcQueue', userRef.current.id, token);
+      const callId = callRef.current?.callId;
+      if (callId) {
+        void mergeDocument('webrtcCalls', callId, { status: 'ended' }, token)
+          .then(() => deleteWebrtcRoomData(callId, token))
+          .catch(() => undefined);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -454,9 +475,10 @@ export default function WebRTCPage() {
             id: profile.id,
             userId: profile.id,
             name: profile.name,
-            image: profile.image,
-             country: profile.country,
-             gender: profile.gender === 'male' || profile.gender === 'female' ? profile.gender : undefined,
+             image: profile.image,
+              country: profile.country,
+              age: profile.age,
+              gender: profile.gender === 'male' || profile.gender === 'female' ? profile.gender : undefined,
              lastSeenAt: new Date().toISOString(),
            });
           let nextCall: ActiveCall | null = null;
@@ -465,7 +487,7 @@ export default function WebRTCPage() {
             nextCall = { callId: ownQueue.callId, peer: matchedPeer, initiator: user.id < matchedPeer.userId };
           } else {
             await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
-           const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', gender: gender || '', genderPreference, isSubscribed: Boolean(user.isSubscribed) }, token).catch(() => null);
+            const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined }, token).catch(() => null);
            if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
           if (!nextCall) {
@@ -473,20 +495,23 @@ export default function WebRTCPage() {
             return;
           }
            const currentUser = userRef.current;
-           const premiumActive = Boolean(currentUser?.isSubscribed && (!currentUser.premiumExpiresAt || new Date(currentUser.premiumExpiresAt).getTime() > Date.now()));
-           if (currentUser && (currentUser.genderPreference || 'any') !== 'any' && !premiumActive && !chargedMatchIds.current.has(nextCall.callId)) {
+            if (currentUser && (currentUser.genderPreference || 'any') !== 'any' && !chargedMatchIds.current.has(nextCall.callId)) {
              try {
                await reserveGenderMatchStake(currentUser.id, nextCall.callId, 0.25, token);
                chargedMatchIds.current.add(nextCall.callId);
                const refreshed = await refreshStoredUser().catch(() => null);
                if (refreshed) setUser(refreshed);
              } catch (error) {
-               setPermissionError(error instanceof Error ? error.message : 'LIVE CHAT 필터 이용료를 예약하지 못했습니다.');
-               await deleteDocument('webrtcQueue', currentUser.id, token).catch(() => undefined);
-               setIsMatching(false);
-               setActive(false);
-               setStatus('결제 후 성별 매칭을 시작할 수 있습니다');
-               return;
+                setPermissionError(error instanceof Error ? error.message : 'LIVE CHAT 필터 이용료를 예약하지 못했습니다.');
+                await deleteDocument('webrtcQueue', currentUser.id, token).catch(() => undefined);
+                await deleteDocument('webrtcQueue', nextCall.peer.userId, token).catch(() => undefined);
+                await mergeDocument('webrtcCalls', nextCall.callId, { status: 'ended' }, token).catch(() => undefined);
+                await deleteWebrtcRoomData(nextCall.callId, token).catch(() => undefined);
+                setIsMatching(false);
+                setActive(false);
+                setStatus('결제 후 성별 매칭을 시작할 수 있습니다');
+                router.push('/wallet?reason=video-filter');
+                return;
              }
            }
              callRef.current = nextCall;
@@ -591,6 +616,34 @@ export default function WebRTCPage() {
     }
   };
 
+  const askSharedAi = async () => {
+    if (!activeCallId || !user) return;
+    const question = chatInput.trim();
+    if (!question) {
+      setChatError('AI에게 물어볼 내용을 먼저 입력해주세요.');
+      return;
+    }
+    const token = getSessionToken();
+    if (!token) return;
+    setChatError('AI가 함께 답변을 준비하고 있습니다...');
+    try {
+      const response = await fetch('/api/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...chatMessages.slice(-8).map((message) => ({ role: message.user === 'GYOPO AI' ? 'assistant' : 'user', content: message.text })), { role: 'user', content: question }],
+        }),
+      });
+      const result = await response.json() as { answer?: string; error?: string };
+      if (!response.ok || !result.answer) throw new Error(result.error || 'AI 답변을 가져오지 못했습니다.');
+      await createDocument('webrtcChatMessages', crypto.randomUUID(), { callId: activeCallId, authorId: user.id, user: 'GYOPO AI', text: result.answer, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000) }, token);
+      setChatInput('');
+      setChatError('');
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'AI 답변을 가져오지 못했습니다.');
+    }
+  };
+
   return (
     <div className="webrtc-page min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
       <div className="webrtc-shell mx-auto max-w-6xl">
@@ -623,14 +676,14 @@ export default function WebRTCPage() {
           <aside className="space-y-5">
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">LIVE CHAT 상태</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-amber-500/10 p-3 text-xs font-bold text-amber-100">{permissionError}</p>}{!active ? <button onClick={startMatch} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">상대 화면에도 적용</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />내 영상과 상대방에게 전송되는 영상 모두에 적용됩니다.</div></section>
-             <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터</span><span className="text-xs font-bold text-cyan-300">활성화</span></div><label className="block text-xs font-bold text-slate-400">내 성별<select value={gender} onChange={(event) => setGender(event.target.value as Gender | '')} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="">설정 안 함</option><option value="male">남성</option><option value="female">여성</option></select></label><label className="mt-3 block text-xs font-bold text-slate-400">찾고 싶은 상대<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두</option><option value="male">남성</option><option value="female">여성</option></select></label><p className="mt-3 text-xs leading-5 text-slate-500">성별 필터를 선택하면 실제 매칭마다 0.25 USDT가 차감됩니다. 월 30 USDT 프리미엄 구독자는 무료입니다.</p></section>
+              <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터</span><span className="text-xs font-bold text-cyan-300">활성화</span></div><label className="block text-xs font-bold text-slate-400">찾고 싶은 상대<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두</option><option value="male">남성</option><option value="female">여성</option></select></label><p className="mt-3 text-xs leading-5 text-slate-500">내 성별은 필터에서 선택하지 않습니다. 상대 성별을 지정하면 연결될 때마다 0.25 USDT가 차감되며, 잔고가 부족하면 충전 화면으로 이동합니다.</p></section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 자동 연결 안내</div><p>연결이 끊기거나 상대가 나가면 연결 종료를 누르지 않아도 다음 인증 회원을 계속 찾습니다.</p></section>
            <section className="webrtc-sidebar-screen rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-3">
              <div className="mb-2 flex items-center justify-between px-1"><span className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">상대 화면</span><span className="text-[10px] font-bold text-slate-500">글로벌 라운지 위치</span></div>
              <div className="relative aspect-video overflow-hidden rounded-2xl bg-black"><video ref={sidebarVideoRef} autoPlay playsInline className="h-full w-full object-cover" />{!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center text-xs text-slate-500">상대 영상 대기 중</div>}</div>
              <div className="mt-3 grid grid-cols-3 gap-2"><button onClick={toggleMicrophone} disabled={!active} className="flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-2 text-xs font-black disabled:opacity-40">{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}{audioEnabled ? '마이크 켜짐' : '마이크 꺼짐'}</button><button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} />{isSharingScreen ? '공유 중지' : '화면 공유'}</button><span className="flex items-center justify-center rounded-xl border border-white/10 px-2 text-[10px] font-bold text-slate-400">{isConnected ? '연결됨' : '대기 중'}</span></div>
              <div className="mt-3 max-h-36 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-4 text-center text-xs text-slate-500">연결 후 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={`side-${message.id}`} className="rounded-xl bg-white/[0.05] p-2 text-xs"><b className="text-cyan-200">{message.user}</b><p className="mt-1 break-words text-slate-300">{message.text}</p></div>)}</div>
-             {user && activeCallId && <form onSubmit={sendVideoChat} className="mt-2 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none" /><button className="rounded-xl bg-cyan-400 px-3 text-xs font-black text-slate-950">전송</button></form>}
+              {user && activeCallId && <form onSubmit={sendVideoChat} className="mt-2 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="메시지 또는 AI 질문..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none" /><button type="button" onClick={() => void askSharedAi()} className="rounded-xl border border-violet-300/30 bg-violet-300/10 px-3 text-[11px] font-black text-violet-100">AI 함께</button><button className="rounded-xl bg-cyan-400 px-3 text-xs font-black text-slate-950">전송</button></form>}
            </section>
            </aside>
          </div>
