@@ -279,7 +279,7 @@ export default function GamesPage() {
   const opponentAttackInitializedRef = useRef(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const currentUserId = user ? (getSessionUserId() || user.id) : '';
-  const [roomBetConfigured, setRoomBetConfigured] = useState(false);
+  const [, setRoomBetConfigured] = useState(false);
 
   useEffect(() => {
     gameRef.current = game;
