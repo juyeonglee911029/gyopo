@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { createDocument, deleteDocument, getSessionToken, listDocuments, mergeDocument } from '@/lib/firebase';
 import { CONTENT_SOURCES, sourceItemId } from '@/lib/contentSources';
-import { fetchSourceCategory } from '@/lib/sourcepreview';
+import { fetchSourceCategory, isSubstantiveCommunityItem, normalizeSourceBody, normalizeSourceText, normalizeSourceTitle } from '@/lib/sourcepreview';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type Post = {
@@ -26,10 +26,38 @@ type Post = {
   sourceCategory?: string;
   sourceName?: string;
   sourceContentId?: string;
+  sourceSnapshot?: boolean;
 };
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function isImportedPost(post: Post) {
+  return Boolean(post.sourceUrl || post.sourceContentId || post.sourceSnapshot || post.id.startsWith('source-'));
+}
+
+function curateCommunityPosts(items: Post[]) {
+  const byOrigin = new Map<string, Post>();
+  for (const post of items) {
+    if (!post.authorId) continue;
+    if (!isImportedPost(post)) {
+      byOrigin.set(post.id, post);
+      continue;
+    }
+    if (post.sourceSnapshot || post.sourceCategory !== 'community' || !isSubstantiveCommunityItem(post)) continue;
+    byOrigin.set(post.sourceUrl || post.id, { ...post, type: 'general', title: normalizeSourceTitle(post.title), body: normalizeSourceBody(post.body), author: normalizeSourceText(post.author || post.sourceName) });
+  }
+  const seenImported = new Set<string>();
+  return [...byOrigin.values()]
+    .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))
+    .filter((post) => {
+      if (!isImportedPost(post)) return true;
+      const key = `${normalizeSourceTitle(post.title).toLocaleLowerCase()}:${normalizeSourceBody(post.body).slice(0, 160).toLocaleLowerCase()}`;
+      if (seenImported.has(key)) return false;
+      seenImported.add(key);
+      return true;
+    });
 }
 
 export default function CommunityPage() {
@@ -45,28 +73,28 @@ export default function CommunityPage() {
     try {
       const sources = CONTENT_SOURCES.filter((source) => source.categories.includes('community') && (selectedCountry === 'Global' || source.region === selectedCountry || source.region === 'Global'));
       const [data, sourceResults] = await Promise.all([
-        listDocuments<Omit<Post, 'id'>>('posts', getSessionToken()),
+        listDocuments<Omit<Post, 'id'>>('posts', getSessionToken()).catch(() => []),
         Promise.all(sources.map((source) => fetchSourceCategory(source.id, 'community').then((result) => ({ source, result })))),
       ]);
       const sourcePosts = sourceResults.flatMap(({ source, result }) => {
         if (!result) return [];
         return result.items.map((item) => {
           const id = sourceItemId(source.id, 'community', item.url);
-          return { id, type: 'news' as const, title: item.title, body: item.body || item.description || '', authorId: 'source', author: source.name, country: source.region, createdAt: item.publishedAt || result.fetchedAt, image: item.image, images: item.images, sourceId: source.id, sourceCategory: 'community', sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
+          return { id, type: 'general' as const, title: item.title, body: item.body || item.description || '', authorId: 'source', author: item.author || source.name, country: item.country || source.region, createdAt: item.publishedAt || result.fetchedAt, image: item.image, images: item.images, sourceId: source.id, sourceCategory: 'community', sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
         });
       });
-      const merged = new Map<string, Post>();
-      [...data, ...sourcePosts].filter((post) => post.authorId).forEach((post) => merged.set(post.sourceUrl || post.id, post as Post));
-      setPosts([...merged.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setPosts(curateCommunityPosts([...data as Post[], ...sourcePosts]));
       } catch {
         setPosts([]);
     } finally {
       setLoading(false);
     }
   };
+  const loadPostsEffect = useEffectEvent(loadPosts);
 
   useEffect(() => {
-    void loadPosts();
+    const timer = window.setTimeout(() => void loadPostsEffect(), 0);
+    return () => window.clearTimeout(timer);
   }, [selectedCountry]);
 
   const openWrite = (post?: Post) => {
@@ -121,8 +149,8 @@ export default function CommunityPage() {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-black text-gray-800">커뮤니티 & 뉴스</h1>
-          <p className="text-sm text-gray-500 mt-1">국가별 소식과 교민들의 이야기를 나눠보세요.</p>
+          <h1 className="text-3xl font-black text-gray-800">교민 커뮤니티</h1>
+          <p className="text-sm text-gray-500 mt-1">직접 쓴 이야기와 선별된 생활 질문·정보·유머를 나눠보세요.</p>
         </div>
          <button onClick={() => openWrite()} className="bg-blue-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">
           글쓰기
