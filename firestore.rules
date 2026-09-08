@@ -12,7 +12,6 @@ service cloud.firestore {
         && data.country is string
         && data.country.size() > 0
         && data.country.size() <= 80
-        && data.country.matches('.*[A-Za-z].*')
         && data.country != 'Global';
     }
     function hasCompletedOnboarding(data) {
