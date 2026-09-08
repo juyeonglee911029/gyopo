@@ -18,12 +18,13 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    setDarkMode(window.localStorage.getItem('gyopo-dark-mode') === '1');
+    setDarkMode(true);
   }, [setDarkMode]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
-    window.localStorage.setItem('gyopo-dark-mode', darkMode ? '1' : '0');
+    document.documentElement.dataset.theme = 'dark';
+    document.documentElement.style.colorScheme = 'dark';
+    window.localStorage.setItem('gyopo-dark-mode', '1');
   }, [darkMode]);
 
   useEffect(() => {
