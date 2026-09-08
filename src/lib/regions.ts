@@ -1,5 +1,6 @@
 export const REGIONS = [
   { id: 'Global', label: '전체 지역', short: '전체', flag: '🌐' },
+  { id: 'SouthKorea', label: '대한민국', short: '한국', flag: '🇰🇷' },
   { id: 'USA', label: '미국 전체', short: '미국', flag: '🇺🇸' },
   { id: 'USA-LA', label: '미국 · 로스앤젤레스', short: 'LA', flag: '🇺🇸' },
   { id: 'Brazil', label: '브라질', short: '브라질', flag: '🇧🇷' },
@@ -25,6 +26,7 @@ export type RegionId = (typeof REGIONS)[number]['id'];
 
 export const REGION_TIME_ZONES: Record<RegionId, string> = {
   Global: 'UTC',
+  SouthKorea: 'Asia/Seoul',
   USA: 'America/New_York',
   'USA-LA': 'America/Los_Angeles',
   Brazil: 'America/Sao_Paulo',
@@ -53,4 +55,3 @@ export function regionLabel(id: string) {
 export function regionTimeZone(id: string) {
   return REGION_TIME_ZONES[id as RegionId] || 'UTC';
 }
-
