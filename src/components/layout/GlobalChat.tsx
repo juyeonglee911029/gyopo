@@ -82,8 +82,8 @@ export default function GlobalChat() {
 
   return (
     <>
-    <aside className="fixed bottom-0 right-0 top-16 z-40 hidden w-80 flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl lg:flex">
-       <div className="border-b border-white/8 bg-[#0d1628] p-4">
+    <aside className="fixed bottom-0 right-0 top-16 z-40 hidden w-[22rem] flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl lg:flex">
+       <div className="border-b border-white/8 bg-[#0d1628] p-3">
          <div className="flex items-center justify-between gap-3">
            <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> 실시간 라운지</div><p className="mt-1 text-[11px] text-slate-500">지역에 관계없이 연결된 교민들</p></div>
          <div className="flex items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/10 px-2 py-1 text-xs font-bold text-emerald-300">
@@ -93,23 +93,23 @@ export default function GlobalChat() {
          </div>
        </div>
 
-       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="flex-1 space-y-2 overflow-y-auto p-3">
          {messages.length === 0 && <p className="rounded-2xl border border-dashed border-white/10 py-10 text-center text-sm text-slate-500">아직 대화가 없습니다.</p>}
          {messages.map((message) => (
-           <div key={message.id} className="text-sm">
-             <div className="mb-1 flex items-baseline gap-1.5">
-               <span className="font-bold text-slate-200">{message.user}</span>
+            <div key={message.id} className="text-[13px] leading-5">
+              <div className="mb-0.5 flex items-baseline gap-1.5">
+                <span className="font-bold text-slate-200">{message.user}</span>
                <span className="rounded bg-teal-300/10 px-1.5 text-[10px] font-bold text-teal-200">{message.country || 'Global'}</span>
                <span className="text-xs text-slate-600">{formatTime(message.createdAt)}</span>
              </div>
-             <div className="break-words rounded-xl rounded-tl-none border border-white/8 bg-white/[.06] p-2.5 text-slate-300">
+              <div className="break-words rounded-xl rounded-tl-none border border-white/8 bg-white/[.06] px-2.5 py-1.5 text-slate-300">
                {message.text}
              </div>
           </div>
         ))}
       </div>
 
-       <div className="border-t border-white/8 bg-[#0d1628] p-4">
+        <div className="border-t border-white/8 bg-[#0d1628] p-3">
         {user ? (
           <form onSubmit={handleSend} className="relative">
              <input
@@ -117,7 +117,7 @@ export default function GlobalChat() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="메시지를 입력하세요..."
-               className="w-full rounded-full border border-white/10 bg-white/5 py-2.5 pl-4 pr-10 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-teal-300/50 focus:ring-2 focus:ring-teal-300/20"
+                className="w-full rounded-full border border-white/10 bg-white/5 py-2 pl-3 pr-10 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:border-teal-300/50 focus:ring-2 focus:ring-teal-300/20"
             />
              <button type="submit" aria-label="메시지 보내기" className="absolute bottom-1 right-1 top-1 flex w-8 items-center justify-center rounded-full bg-teal-300 text-slate-950 transition-colors hover:bg-teal-200">
               <Send size={14} />
