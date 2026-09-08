@@ -272,16 +272,39 @@ service cloud.firestore {
       allow update: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
       allow delete: if false;
     }
-     match /tetrisRooms/{roomId} {
-      allow read: if request.auth != null && (resource.data.playerAId == request.auth.uid || resource.data.playerBId == request.auth.uid);
-      allow create: if request.auth != null && (request.resource.data.playerAId == request.auth.uid || request.resource.data.playerBId == request.auth.uid);
-      allow update: if request.auth != null && (
-        resource.data.playerAId == request.auth.uid ||
-        resource.data.playerBId == request.auth.uid ||
-        request.resource.data.playerAId == request.auth.uid ||
-        request.resource.data.playerBId == request.auth.uid
-      );
-       allow delete: if request.auth != null && (resource.data.playerAId == request.auth.uid || resource.data.playerBId == request.auth.uid);
-     }
+      function isTetrisParticipant(data) {
+        return request.auth != null && (
+          (data.keys().hasAny(['playerAId']) && data.playerAId == request.auth.uid) ||
+          (data.keys().hasAny(['playerBId']) && data.playerBId == request.auth.uid)
+        );
+      }
+      function hasValidTetrisBet(data) {
+        return data.keys().hasAny(['betAmount'])
+          && data.betAmount is number
+          && data.betAmount >= 1
+          && data.betAmount <= 100;
+      }
+      function preservesTetrisBet() {
+        return (
+          !resource.data.keys().hasAny(['betAmount'])
+          && !request.resource.data.keys().hasAny(['betAmount'])
+        ) || (
+          resource.data.keys().hasAny(['betAmount'])
+          && request.resource.data.keys().hasAny(['betAmount'])
+          && request.resource.data.betAmount == resource.data.betAmount
+        ) || (
+          !resource.data.keys().hasAny(['betAmount'])
+          && request.auth.uid == request.resource.data.playerAId
+          && hasValidTetrisBet(request.resource.data)
+        );
+      }
+      match /tetrisRooms/{roomId} {
+        allow read: if isTetrisParticipant(resource.data);
+        allow create: if isTetrisParticipant(request.resource.data)
+          && (!request.resource.data.keys().hasAny(['betAmount'])
+            || (request.resource.data.playerAId == request.auth.uid && hasValidTetrisBet(request.resource.data)));
+        allow update: if isTetrisParticipant(resource.data) && preservesTetrisBet();
+        allow delete: if isTetrisParticipant(resource.data);
+      }
   }
 }
