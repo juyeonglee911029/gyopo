@@ -58,7 +58,7 @@ function extractLinks(html: string, pageUrl: string, pathPrefix: string, categor
     const heading = match[2].match(/<(h[1-6]|strong|b)[^>]*>([\s\S]*?)<\/\1>/i)?.[2];
     const title = clean(heading || match[2]);
     if (url.origin !== new URL(pageUrl).origin || !url.pathname.startsWith(pathPrefix) || url.pathname === pathPrefix || url.hash || title.length < 4 || title.length > 280) continue;
-    if (seen.has(url.href) || /^(로그인|회원가입|전체보기|전체 상품|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|이용약관|개인정보처리방침|커뮤니티 운영정책|편집·정정정책|제보·문의|검색|앱 설치하기)$/i.test(title)) continue;
+    if (seen.has(url.href) || /^(로그인|회원가입|전체보기|전체 상품|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|이용약관|개인정보처리방침|커뮤니티 운영정책|편집·정정정책|제보·문의|검색|앱 설치하기)$/i.test(title) || /(운영정책|이용약관|개인정보|편집·정정|제보·문의)/i.test(title)) continue;
     seen.add(url.href);
     items.push({ title, url: url.href, category });
     if (items.length >= 8) break;
