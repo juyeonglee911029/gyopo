@@ -947,7 +947,9 @@ function getTokenUserId(token?: string): string | undefined {
   try {
     const encoded = token.split('.')[1];
     if (!encoded) return undefined;
-    const payload = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/') + '==')) as { user_id?: string; sub?: string };
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+    const payload = JSON.parse(atob(normalized + padding)) as { user_id?: string; sub?: string };
     return payload.user_id || payload.sub;
   } catch {
     return undefined;
