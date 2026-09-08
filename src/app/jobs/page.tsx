@@ -20,7 +20,7 @@ export default function JobsPage() {
     try {
       const sources = CONTENT_SOURCES.filter((source) => source.categories.includes('jobs') && (selectedCountry === 'Global' || source.region === selectedCountry || source.region === 'Global'));
       const [data, sourceResults] = await Promise.all([
-        listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken()),
+        listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken()).catch(() => []),
         Promise.all(sources.map((source) => fetchSourceCategory(source.id, 'jobs').then((result) => ({ source, result })))),
       ]);
       const sourceJobs = sourceResults.flatMap(({ source, result }) => {
