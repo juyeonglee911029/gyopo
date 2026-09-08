@@ -58,7 +58,7 @@ function extractLinks(html: string, pageUrl: string, pathPrefix: string, categor
     const heading = match[2].match(/<(h[1-6]|strong|b)[^>]*>([\s\S]*?)<\/\1>/i)?.[2];
     const title = clean(heading || match[2]);
     if (url.origin !== new URL(pageUrl).origin || !url.pathname.startsWith(pathPrefix) || url.pathname === pathPrefix || url.hash || title.length < 4 || title.length > 280) continue;
-    if (seen.has(url.href) || /^(로그인|회원가입|전체보기|더보기|기사 보기|상품 등록|관심 상품|내 거래)$/i.test(title)) continue;
+    if (seen.has(url.href) || /^(로그인|회원가입|전체보기|전체 상품|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|이용약관|개인정보처리방침|커뮤니티 운영정책|편집·정정정책|제보·문의|검색|앱 설치하기)$/i.test(title)) continue;
     seen.add(url.href);
     items.push({ title, url: url.href, category });
     if (items.length >= 8) break;
@@ -92,7 +92,10 @@ function structuredData(html: string): StructuredData {
       // Ignore malformed structured data and continue with HTML metadata.
     }
   }
-  const article = records.find((record) => ['Article', 'NewsArticle', 'BlogPosting', 'Product', 'LocalBusiness'].some((kind) => String(record['@type'] || '').includes(kind))) || records[0];
+  const article = records.find((record) => ['Article', 'NewsArticle', 'BlogPosting', 'Product', 'LocalBusiness'].some((kind) => String(record['@type'] || '').includes(kind)))
+    || records.find((record) => typeof record.headline === 'string')
+    || records.find((record) => typeof record.name === 'string' && !['PostalAddress', 'Organization', 'WebSite', 'WebPage'].includes(String(record['@type'])))
+    || records[0];
   if (!article) return {};
   const images = Array.isArray(article.image) ? article.image : article.image ? [article.image] : [];
   return {
@@ -175,7 +178,7 @@ export async function GET(request: Request) {
   try {
     const html = await fetchHtml(source.url);
     const pageData = structuredData(html);
-    const title = pageData.headline || meta(html, 'og:title') || clean(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]) || source.name;
+    const title = meta(html, 'og:title') || clean(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]) || pageData.headline || source.name;
     const description = pageData.description || meta(html, 'og:description') || meta(html, 'description') || '';
     const canonicalRaw = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["'][^>]*>/i)?.[1] || pageData.url || source.url;
     const canonical = new URL(canonicalRaw, source.url).href;
