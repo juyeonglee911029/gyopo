@@ -36,7 +36,7 @@ export default function AssistantPage() {
       <div className="mx-auto flex min-h-[calc(100vh-128px)] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
         <header className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,#164e63,#10182b_52%)] p-5 sm:p-7">
           <div className="flex items-center gap-3"><span className="rounded-2xl bg-cyan-300/15 p-3 text-cyan-200"><Sparkles size={23} /></span><div><p className="text-xs font-black uppercase tracking-[.25em] text-cyan-300">GYOPO AI</p><h1 className="mt-1 text-2xl font-black sm:text-3xl">글로벌 정보 도우미</h1></div></div>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">교민 생활과 국가별 정보를 질문하세요. 답변은 참고용이며 최신 뉴스는 오늘의 뉴스 메뉴에서 원문을 함께 확인하세요.</p>
+           <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">교민 생활과 국가별 정보를 질문하세요. 답변은 참고용이며 포털에 정리된 최신 정보와 함께 확인하세요.</p>
         </header>
         <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-7">
           {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}><span className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${message.role === 'user' ? 'order-2 bg-cyan-300 text-slate-950' : 'bg-white/10 text-cyan-200'}`}>{message.role === 'user' ? <UserRound size={16} /> : <Bot size={17} />}</span><div className={`max-w-[min(90%,680px)] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 ${message.role === 'user' ? 'order-1 bg-cyan-300 font-bold text-slate-950' : 'border border-white/10 bg-white/[.05] text-slate-200'}`}>{message.content}</div></div>)}
