@@ -12,6 +12,11 @@ export type LiveSourceItem = {
   location?: string;
   salary?: string;
   tag?: string;
+  category?: string;
+  phone?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
 };
 
 type LiveSourceResponse = {
