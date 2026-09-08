@@ -7,6 +7,10 @@ import { Gamepad2, Wallet, LogIn, LogOut, Moon, Sun, Video, Menu, X, MapPin } fr
 import { isMasterUser, signOut } from '@/lib/firebase';
 import { REGIONS } from '@/lib/regions';
 
+function formatUsdt(value: number) {
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function Header() {
   const { user, setUser, darkMode, setDarkMode, selectedCountry, setSelectedCountry } = useGlobalStore();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -53,7 +57,7 @@ export default function Header() {
             <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/wallet" className="flex items-center gap-1.5 rounded-lg border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-sm font-bold text-teal-200 transition hover:bg-teal-300/20">
                 <Wallet size={16} />
-                <span className="hidden sm:inline">{user.usdtBalance.toFixed(2)}</span>
+                <span className="text-[10px] sm:text-sm">{formatUsdt(user.usdtBalance)} USDT</span>
               </Link>
               {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
               <div className="flex items-center gap-2">
@@ -94,7 +98,8 @@ export default function Header() {
           <Link onClick={() => setMenuOpen(false)} href="/games">테트리스</Link>
           <Link onClick={() => setMenuOpen(false)} href="/webrtc">화상채팅</Link>
           <Link onClick={() => setMenuOpen(false)} href="/theater">극장</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/users">유저목록</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/users">유저목록</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/assistant">AI 검색</Link>
         </nav>
       </div>}
     </header>
