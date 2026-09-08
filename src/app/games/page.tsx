@@ -201,6 +201,7 @@ export default function GamesPage() {
   const startRequestedRef = useRef(false);
   const autoStartRequestedRef = useRef(false);
   const holdRequestedRef = useRef(false);
+  const countdownRoomRef = useRef<string | null>(null);
   const settlementRequestedRef = useRef(false);
   const roomCleanupTimer = useRef<number | null>(null);
   const handledInviteIds = useRef(new Set<string>());
@@ -326,6 +327,8 @@ export default function GamesPage() {
   };
 
   const beginCountdown = (startAt = new Date(Date.now() + 5000).toISOString()) => {
+    if (countdownRoomRef.current === startAt) return;
+    countdownRoomRef.current = startAt;
     setMatchResult(null);
     setMatchPhase('countdown');
     setRoomStartAt(startAt);
@@ -568,6 +571,7 @@ export default function GamesPage() {
     }
   };
 
+  // Kept as a fallback for an already-rendered client; normal matches start automatically.
   const requestBattleStart = async () => {
     if (!matchId || !matchRole || !user || !readyForBattle) return;
     const token = getSessionToken();
@@ -576,14 +580,14 @@ export default function GamesPage() {
       const room = await getDocument<TetrisRoom>('tetrisRooms', matchId, token);
       if (!room?.readyA || !room.readyB) {
         setOpponentReady(matchRole === 'A' ? Boolean(room?.readyB) : Boolean(room?.readyA));
-        setMatchStatus('양쪽 모두 배팅금액을 확정한 뒤 게임 시작을 눌러주세요.');
+        setMatchStatus('양쪽 준비가 완료되면 참가비 홀딩과 카운트다운이 자동으로 시작됩니다.');
         return;
       }
-      await updateRoom({ phase: 'holding', startRequestedBy: user.id, startRequestedAt: new Date() });
+      await updateRoom({ phase: 'holding', startRequestedBy: room.playerAId || room.playerA?.id || user.id, startRequestedAt: new Date() });
       setMatchPhase('holding');
-      setMatchStatus('참가비를 서버 잔고에서 홀딩하는 중입니다...');
+      setMatchStatus('참가비를 자동으로 홀딩하는 중입니다...');
     } catch (error) {
-      setMatchStatus(error instanceof Error ? error.message : '게임 시작 요청을 저장하지 못했습니다.');
+      setMatchStatus(error instanceof Error ? error.message : '자동 게임 시작 신호를 저장하지 못했습니다.');
     }
   };
 
@@ -734,9 +738,10 @@ export default function GamesPage() {
               setMatchStatus(error instanceof Error ? error.message : '참가비 홀딩에 실패했습니다. 다시 시도해주세요.');
              });
          }
-         if (readyForBattle && nextReady && !room.startRequestedBy && !autoStartRequestedRef.current) {
-           autoStartRequestedRef.current = true;
-           void updateRoom({ phase: 'holding', startRequestedBy: user.id, startRequestedAt: new Date() })
+          const startCoordinatorId = room.playerAId || room.playerA?.id || room.startRequestedBy;
+          if (readyForBattle && nextReady && !room.startRequestedBy && !autoStartRequestedRef.current) {
+            autoStartRequestedRef.current = true;
+            void updateRoom({ phase: 'holding', startRequestedBy: startCoordinatorId || user.id, startRequestedAt: new Date() })
              .then(() => {
                setMatchPhase('holding');
                setMatchStatus('양쪽 준비 완료 · 참가비를 자동으로 홀딩하는 중입니다.');
@@ -746,16 +751,18 @@ export default function GamesPage() {
                setMatchStatus('자동 게임 시작 신호를 저장하지 못했습니다. 다시 확인하는 중입니다.');
              });
          }
-         if (room.startRequestedBy && bothStakesHeld && !room.startAt && room.phase !== 'finished' && room.startRequestedBy === user.id && !startRequestedRef.current) {
-          startRequestedRef.current = true;
-          const startAt = new Date(Date.now() + 5000).toISOString();
+          if (room.startRequestedBy && bothStakesHeld && !room.startAt && room.phase !== 'finished' && startCoordinatorId === user.id && !startRequestedRef.current) {
+           startRequestedRef.current = true;
+           const startAt = new Date(Date.now() + 5000).toISOString();
           void updateRoom({ phase: 'countdown', startAt })
             .then(() => beginCountdown(startAt))
             .catch(() => {
               startRequestedRef.current = false;
               setMatchStatus('카운트다운 신호를 저장하지 못했습니다. 잠시 후 다시 시도합니다.');
             });
-        } else if (readyForBattle && nextReady && !room.startRequestedBy) setMatchStatus('양쪽 모두 준비 완료 · 자동으로 게임을 시작합니다.');
+         }
+         if (room.startAt && room.phase !== 'finished') beginCountdown(room.startAt);
+         else if (readyForBattle && nextReady && !room.startRequestedBy) setMatchStatus('양쪽 모두 준비 완료 · 참가비를 자동으로 홀딩하고 5초 후 시작합니다.');
         else if (readyForBattle) setMatchStatus('내 준비 완료 · 상대 준비를 기다리는 중');
         else if (nextReady) setMatchStatus('상대 준비 완료 · 내 배팅금액을 확정해주세요');
        if (room.phase === 'finished') setMatchPhase('finished');
