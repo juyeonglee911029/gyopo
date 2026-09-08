@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, LoaderCircle, PhoneCall, RefreshCcw, ShieldCheck, Users, VideoOff } from 'lucide-react';
+import { Camera, CheckCircle2, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, ShieldCheck, Users, VideoOff } from 'lucide-react';
 import {
   deleteDocument,
   claimWebrtcMatch,
@@ -72,6 +72,8 @@ export default function WebRTCPage() {
   const [status, setStatus] = useState('대기 중');
   const [peer, setPeer] = useState<QueueEntry | null>(null);
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [flip, setFlip] = useState(true);
   const [active, setActive] = useState(false);
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export default function WebRTCPage() {
   const [genderPreference, setGenderPreference] = useState<GenderPreference>(user?.genderPreference || 'any');
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const sidebarVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const connectionRef = useRef<RTCPeerConnection | null>(null);
@@ -98,6 +101,8 @@ export default function WebRTCPage() {
   const outgoingVideoTrackRef = useRef<MediaStreamTrack | null>(null);
   const outgoingAnimationRef = useRef<number | null>(null);
   const outgoingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoSenderRef = useRef<RTCRtpSender | null>(null);
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
 
   const resetSignalingState = () => {
     appliedCandidates.current.clear();
@@ -122,7 +127,7 @@ export default function WebRTCPage() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라와 마이크를 지원하지 않습니다.');
     if (!streamRef.current) {
       try {
-          streamRef.current = await requestMediaWithTimeout({ video: true, audio: true });
+          streamRef.current = await requestMediaWithTimeout({ video: { facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (error) {
         if (error instanceof DOMException && error.name === 'NotFoundError') {
           streamRef.current = await requestMediaWithTimeout({ video: true, audio: false });
@@ -135,6 +140,13 @@ export default function WebRTCPage() {
       videoRef.current.srcObject = streamRef.current;
       await videoRef.current.play().catch(() => undefined);
     }
+    setAudioEnabled(streamRef.current.getAudioTracks().some((track) => track.enabled));
+  };
+
+  const toggleMicrophone = () => {
+    const next = !audioEnabled;
+    streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = next; });
+    setAudioEnabled(next);
   };
 
   const stopOutgoingVideo = () => {
@@ -143,6 +155,44 @@ export default function WebRTCPage() {
     outgoingVideoTrackRef.current?.stop();
     outgoingVideoTrackRef.current = null;
     outgoingCanvasRef.current = null;
+  };
+
+  const restoreCameraTrack = async () => {
+    const cameraTrack = outgoingVideoTrackRef.current || streamRef.current?.getVideoTracks()[0] || null;
+    if (videoSenderRef.current && cameraTrack) await videoSenderRef.current.replaceTrack(cameraTrack).catch(() => undefined);
+    if (videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      await videoRef.current.play().catch(() => undefined);
+    }
+    screenTrackRef.current = null;
+    setIsSharingScreen(false);
+  };
+
+  const toggleScreenShare = async () => {
+    if (isSharingScreen) {
+      await restoreCameraTrack();
+      return;
+    }
+    if (!videoSenderRef.current || !navigator.mediaDevices?.getDisplayMedia) {
+      setPermissionError('연결 후 화면 공유를 사용할 수 있습니다.');
+      return;
+    }
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+      const screenTrack = display.getVideoTracks()[0];
+      if (!screenTrack) return;
+      await videoSenderRef.current.replaceTrack(screenTrack);
+      screenTrackRef.current = screenTrack;
+      screenTrack.onended = () => { void restoreCameraTrack(); };
+      if (videoRef.current) {
+        videoRef.current.srcObject = new MediaStream([screenTrack, ...(streamRef.current?.getAudioTracks() || [])]);
+        await videoRef.current.play().catch(() => undefined);
+      }
+      setIsSharingScreen(true);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') return;
+      setPermissionError('화면 공유를 시작하지 못했습니다. 브라우저 권한을 확인해주세요.');
+    }
   };
 
   const getOutgoingStream = () => {
@@ -287,10 +337,15 @@ export default function WebRTCPage() {
     connectionRef.current?.close();
     connectionRef.current = null;
     stopOutgoingVideo();
+    screenTrackRef.current?.stop();
+    screenTrackRef.current = null;
+    videoSenderRef.current = null;
+    setIsSharingScreen(false);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (sidebarVideoRef.current) sidebarVideoRef.current.srcObject = null;
     remoteStreamRef.current = null;
     callRef.current = null;
     resetSignalingState();
@@ -305,6 +360,8 @@ export default function WebRTCPage() {
   useEffect(() => () => {
     connectionRef.current?.close();
     stopOutgoingVideo();
+    screenTrackRef.current?.stop();
+    videoSenderRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     const token = getSessionToken();
     if (token && userRef.current) void deleteDocument('webrtcQueue', userRef.current.id, token);
@@ -324,7 +381,10 @@ export default function WebRTCPage() {
       const connection = new RTCPeerConnection({ iceServers: stunServers, iceCandidatePoolSize: 10 });
       connectionRef.current = connection;
       const outgoing = createOutgoingStream();
-      outgoing?.getTracks().forEach((track) => connection.addTrack(track, outgoing));
+      outgoing?.getTracks().forEach((track) => {
+        const sender = connection.addTrack(track, outgoing);
+        if (track.kind === 'video') videoSenderRef.current = sender;
+      });
       connection.onicecandidate = ({ candidate }) => {
         if (!candidate) return;
         void upsertDocument('webrtcCandidates', `${call.callId}-${user.id}-${crypto.randomUUID()}`, {
@@ -340,6 +400,10 @@ export default function WebRTCPage() {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
           void remoteVideoRef.current.play().catch(() => undefined);
+        }
+        if (sidebarVideoRef.current) {
+          sidebarVideoRef.current.srcObject = remoteStream;
+          void sidebarVideoRef.current.play().catch(() => undefined);
         }
         setHasRemoteVideo(true);
         setStatus('상대 영상 수신 중');
@@ -547,7 +611,14 @@ export default function WebRTCPage() {
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">상대 화면에도 적용</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />내 영상과 상대방에게 전송되는 영상 모두에 적용됩니다.</div></section>
              <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터</span><span className="text-xs font-bold text-cyan-300">활성화</span></div><label className="block text-xs font-bold text-slate-400">내 성별<select value={gender} onChange={(event) => setGender(event.target.value as Gender | '')} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="">설정 안 함</option><option value="male">남성</option><option value="female">여성</option></select></label><label className="mt-3 block text-xs font-bold text-slate-400">찾고 싶은 상대<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두</option><option value="male">남성</option><option value="female">여성</option></select></label><p className="mt-3 text-xs leading-5 text-slate-500">성별 필터를 선택하면 실제 매칭마다 0.25 USDT가 차감됩니다. 월 30 USDT 프리미엄 구독자는 무료입니다.</p></section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 자동 연결 안내</div><p>연결이 끊기거나 상대가 나가면 연결 종료를 누르지 않아도 다음 인증 회원을 계속 찾습니다.</p></section>
-          </aside>
+           <section className="webrtc-sidebar-screen rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-3">
+             <div className="mb-2 flex items-center justify-between px-1"><span className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">상대 화면</span><span className="text-[10px] font-bold text-slate-500">글로벌 라운지 위치</span></div>
+             <div className="relative aspect-video overflow-hidden rounded-2xl bg-black"><video ref={sidebarVideoRef} autoPlay playsInline className="h-full w-full object-cover" />{!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center text-xs text-slate-500">상대 영상 대기 중</div>}</div>
+             <div className="mt-3 grid grid-cols-3 gap-2"><button onClick={toggleMicrophone} disabled={!active} className="flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-2 text-xs font-black disabled:opacity-40">{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}{audioEnabled ? '마이크 켜짐' : '마이크 꺼짐'}</button><button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} />{isSharingScreen ? '공유 중지' : '화면 공유'}</button><span className="flex items-center justify-center rounded-xl border border-white/10 px-2 text-[10px] font-bold text-slate-400">{isConnected ? '연결됨' : '대기 중'}</span></div>
+             <div className="mt-3 max-h-36 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-4 text-center text-xs text-slate-500">연결 후 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={`side-${message.id}`} className="rounded-xl bg-white/[0.05] p-2 text-xs"><b className="text-cyan-200">{message.user}</b><p className="mt-1 break-words text-slate-300">{message.text}</p></div>)}</div>
+             {user && activeCallId && <form onSubmit={sendVideoChat} className="mt-2 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none" /><button className="rounded-xl bg-cyan-400 px-3 text-xs font-black text-slate-950">전송</button></form>}
+           </section>
+           </aside>
          </div>
          <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-black">화상 채팅</h2><span className="text-[10px] font-bold text-emerald-300">1분 후 자동 삭제</span></div><div className="max-h-48 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">상대와 연결되면 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={message.id} className="rounded-xl bg-white/[0.05] p-3 text-sm"><div className="mb-1 text-[10px] font-bold text-cyan-300">{message.user}</div><div className="break-words text-slate-200">{message.text}</div></div>)}</div>{chatError && <p className="mt-2 text-xs font-bold text-rose-300">{chatError}</p>}{user && activeCallId && <form onSubmit={sendVideoChat} className="mt-3 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="화상 채팅 메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none" /><button className="rounded-xl bg-cyan-400 px-4 text-sm font-black text-slate-950">전송</button></form>}</section>
        </div>
