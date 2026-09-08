@@ -58,8 +58,6 @@ const stunServers = [
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
 ];
-const VIRTUAL_FALLBACK_ENABLED = true;
-const VIRTUAL_FALLBACK_DELAY_MS = 7000;
 const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise.race([
   navigator.mediaDevices.getUserMedia(constraints),
   new Promise<MediaStream>((_, reject) => window.setTimeout(() => reject(new Error('카메라와 마이크 권한 응답이 지연되고 있습니다. 브라우저 권한을 확인해주세요.')), 12000)),
@@ -96,17 +94,20 @@ export default function WebRTCPage() {
   const offerApplied = useRef(false);
   const answerApplied = useRef(false);
   const chargedMatchIds = useRef(new Set<string>());
-  const virtualTimerRef = useRef<number | null>(null);
-  const virtualCallRef = useRef(false);
-  const virtualConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const virtualRemoteConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const virtualCleanupRef = useRef<(() => void) | null>(null);
+  const flipRef = useRef(flip);
+  const outgoingVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const outgoingAnimationRef = useRef<number | null>(null);
+  const outgoingCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const resetSignalingState = () => {
     appliedCandidates.current.clear();
     offerApplied.current = false;
     answerApplied.current = false;
   };
+
+  useEffect(() => {
+    flipRef.current = flip;
+  }, [flip]);
 
   useEffect(() => {
     userRef.current = user;
@@ -136,110 +137,69 @@ export default function WebRTCPage() {
     }
   };
 
-  const createVirtualStream = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 360;
-    const context = canvas.getContext('2d');
-    let frame = 0;
-    const draw = () => {
-      if (!context) return;
-      const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, '#082f49');
-      gradient.addColorStop(1, '#312e81');
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = '#67e8f9';
-      context.font = '900 34px sans-serif';
-      context.textAlign = 'center';
-      context.fillText('GYOPO LIVE CHAT', canvas.width / 2, canvas.height / 2 - 8);
-      context.fillStyle = '#c4b5fd';
-      context.font = '700 18px sans-serif';
-      context.fillText(`TEST USER ${String(frame % 4 + 1)}`, canvas.width / 2, canvas.height / 2 + 30);
-      frame += 1;
-    };
-    draw();
-    const timer = window.setInterval(draw, 1000);
-    const stream = typeof canvas.captureStream === 'function' ? canvas.captureStream(15) : new MediaStream();
-    virtualCleanupRef.current = () => window.clearInterval(timer);
-    return stream;
+  const stopOutgoingVideo = () => {
+    if (outgoingAnimationRef.current) window.cancelAnimationFrame(outgoingAnimationRef.current);
+    outgoingAnimationRef.current = null;
+    outgoingVideoTrackRef.current?.stop();
+    outgoingVideoTrackRef.current = null;
+    outgoingCanvasRef.current = null;
   };
 
-  const closeVirtualCall = () => {
-    if (virtualTimerRef.current) window.clearTimeout(virtualTimerRef.current);
-    virtualTimerRef.current = null;
-    virtualConnectionRef.current?.close();
-    virtualRemoteConnectionRef.current?.close();
-    virtualConnectionRef.current = null;
-    virtualRemoteConnectionRef.current = null;
-    virtualCleanupRef.current?.();
-    virtualCleanupRef.current = null;
-    virtualCallRef.current = false;
-  };
-
-  const startVirtualCall = async () => {
-    const currentUser = userRef.current;
-    if (!currentUser || virtualCallRef.current || callRef.current) return;
-    virtualCallRef.current = true;
-    if (!streamRef.current) streamRef.current = createVirtualStream();
-    if (videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      await videoRef.current.play().catch(() => undefined);
+  const getOutgoingStream = () => {
+    if (!streamRef.current) return null;
+    if (!outgoingVideoTrackRef.current && videoRef.current && typeof document.createElement('canvas').captureStream === 'function') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+      const context = canvas.getContext('2d');
+      outgoingCanvasRef.current = canvas;
+      const draw = () => {
+        if (context && videoRef.current) {
+          const width = videoRef.current.videoWidth || canvas.width;
+          const height = videoRef.current.videoHeight || canvas.height;
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+          context.save();
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          if (flipRef.current) {
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
+          }
+          context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          context.restore();
+        }
+        outgoingAnimationRef.current = window.requestAnimationFrame(draw);
+      };
+      draw();
+      outgoingVideoTrackRef.current = canvas.captureStream(30).getVideoTracks()[0] || null;
     }
-    const peer: QueueEntry = {
-      id: 'virtual-test-user',
-      userId: 'virtual-test-user',
-      name: '테스트 상대',
-      email: 'test@gyopo.local',
-      image: 'https://api.dicebear.com/9.x/bottts/svg?seed=gyopo-test',
-      country: 'Test Server',
-      lastSeenAt: new Date().toISOString(),
-    };
-    const callId = `virtual-${crypto.randomUUID()}`;
-    const localConnection = new RTCPeerConnection();
-    const remoteConnection = new RTCPeerConnection();
-    virtualConnectionRef.current = localConnection;
-    virtualRemoteConnectionRef.current = remoteConnection;
-    streamRef.current.getTracks().forEach((track) => localConnection.addTrack(track, streamRef.current as MediaStream));
-    localConnection.onicecandidate = ({ candidate }) => {
-      if (candidate) void remoteConnection.addIceCandidate(candidate).catch(() => undefined);
-    };
-    remoteConnection.onicecandidate = ({ candidate }) => {
-      if (candidate) void localConnection.addIceCandidate(candidate).catch(() => undefined);
-    };
-    remoteConnection.ontrack = (event) => {
-      const remoteStream = event.streams[0] || new MediaStream([event.track]);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        void remoteVideoRef.current.play().catch(() => undefined);
-      }
-      setHasRemoteVideo(true);
-      setIsConnected(true);
-      setIsMatching(false);
-      setPermissionError('');
-      setStatus('LIVE CHAT 연결 성공');
-    };
-    localConnection.onconnectionstatechange = () => {
-      if (localConnection.connectionState === 'connected') {
-        setIsConnected(true);
-        setIsMatching(false);
-        setPermissionError('');
-        setStatus('LIVE CHAT 연결 성공');
-      }
-    };
-    setPeer(peer);
-    setActiveCallId(callId);
-    setActive(true);
-    setIsMatching(false);
-    setStatus('테스트 상대와 LIVE CHAT 연결 중');
-    const offer = await localConnection.createOffer();
-    await localConnection.setLocalDescription(offer);
-    await remoteConnection.setRemoteDescription(offer);
-    const answer = await remoteConnection.createAnswer();
-    await remoteConnection.setLocalDescription(answer);
-    await localConnection.setRemoteDescription(answer);
+    const tracks = [
+      ...(outgoingVideoTrackRef.current ? [outgoingVideoTrackRef.current] : streamRef.current.getVideoTracks()),
+      ...streamRef.current.getAudioTracks(),
+    ];
+    return new MediaStream(tracks);
+  };
+
+  /* The caller's camera is mirrored in the outgoing canvas, so the peer sees the same orientation. */
+  const createOutgoingStream = () => getOutgoingStream() || streamRef.current;
+
+  const closeCallForRematch = (message: string) => {
+    connectionRef.current?.close();
+    connectionRef.current = null;
+    callRef.current = null;
+    resetSignalingState();
+    connectedRef.current = false;
+    connectionStartedAt.current = null;
+    setIsConnected(false);
+    setHasRemoteVideo(false);
+    setPeer(null);
+    setActiveCallId(null);
+    setIsMatching(true);
+    setStatus(message);
     const token = getSessionToken();
-    if (token) await deleteDocument('webrtcQueue', currentUser.id, token).catch(() => undefined);
+    if (token && userRef.current) void deleteDocument('webrtcQueue', userRef.current.id, token).catch(() => undefined);
   };
 
   const startMatch = async () => {
@@ -271,11 +231,6 @@ export default function WebRTCPage() {
       await requestMedia();
     } catch (error) {
       const name = error instanceof DOMException ? error.name : error instanceof Error ? error.message : '알 수 없는 오류';
-      if (VIRTUAL_FALLBACK_ENABLED) {
-        setPermissionError('카메라를 사용할 수 없어 테스트 상대 LIVE CHAT으로 연결합니다.');
-        await startVirtualCall();
-        return;
-      }
       if (name === 'NotFoundError') {
         setPermissionError('이 기기에서 카메라 또는 마이크를 찾을 수 없습니다. 장치 연결 상태를 확인해주세요.');
       } else if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -285,6 +240,7 @@ export default function WebRTCPage() {
       }
       return;
     }
+    getOutgoingStream();
     resetSignalingState();
     callRef.current = null;
     setPeer(null);
@@ -315,11 +271,6 @@ export default function WebRTCPage() {
       setActive(false);
       return;
     }
-    if (VIRTUAL_FALLBACK_ENABLED) {
-      virtualTimerRef.current = window.setTimeout(() => {
-        if (!callRef.current && !virtualCallRef.current) void startVirtualCall();
-      }, VIRTUAL_FALLBACK_DELAY_MS);
-    }
   };
 
   const endMatch = async () => {
@@ -333,9 +284,9 @@ export default function WebRTCPage() {
     setActiveCallId(null);
     setChatMessages([]);
     setStatus('대기 중');
-    closeVirtualCall();
     connectionRef.current?.close();
     connectionRef.current = null;
+    stopOutgoingVideo();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -352,8 +303,8 @@ export default function WebRTCPage() {
   };
 
   useEffect(() => () => {
-    closeVirtualCall();
     connectionRef.current?.close();
+    stopOutgoingVideo();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     const token = getSessionToken();
     if (token && userRef.current) void deleteDocument('webrtcQueue', userRef.current.id, token);
@@ -372,7 +323,8 @@ export default function WebRTCPage() {
       if (connectionRef.current) return connectionRef.current;
       const connection = new RTCPeerConnection({ iceServers: stunServers, iceCandidatePoolSize: 10 });
       connectionRef.current = connection;
-      streamRef.current?.getTracks().forEach((track) => connection.addTrack(track, streamRef.current as MediaStream));
+      const outgoing = createOutgoingStream();
+      outgoing?.getTracks().forEach((track) => connection.addTrack(track, outgoing));
       connection.onicecandidate = ({ candidate }) => {
         if (!candidate) return;
         void upsertDocument('webrtcCandidates', `${call.callId}-${user.id}-${crypto.randomUUID()}`, {
@@ -408,9 +360,7 @@ export default function WebRTCPage() {
         }
         if (connection.connectionState === 'failed') {
           connectedRef.current = false;
-          connectionStartedAt.current = Date.now() - 20_001;
-          setIsMatching(true);
-          setStatus('연결 실패, 다른 상대를 다시 찾는 중');
+          closeCallForRematch('연결 실패, 다른 상대를 자동으로 찾는 중');
         }
         if (connection.connectionState === 'closed') setStatus('연결 종료');
       };
@@ -419,17 +369,13 @@ export default function WebRTCPage() {
         if (connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed') {
           setStatus('상대 영상 연결 중');
         }
-        if (connection.iceConnectionState === 'failed') {
-          connectionStartedAt.current = Date.now() - 20_001;
-          setIsMatching(true);
-          setStatus('네트워크 연결 실패, 다른 상대를 다시 찾는 중');
-        }
+        if (connection.iceConnectionState === 'failed') closeCallForRematch('네트워크 연결 실패, 다른 상대를 자동으로 찾는 중');
       };
       return connection;
     };
 
     const poll = async () => {
-      if (cancelled || pollingRef.current || virtualCallRef.current) return;
+      if (cancelled || pollingRef.current) return;
       pollingRef.current = true;
       try {
         const current = callRef.current;
@@ -477,9 +423,7 @@ export default function WebRTCPage() {
                return;
              }
            }
-            callRef.current = nextCall;
-            if (virtualTimerRef.current) window.clearTimeout(virtualTimerRef.current);
-            virtualTimerRef.current = null;
+             callRef.current = nextCall;
            resetSignalingState();
            connectionStartedAt.current = Date.now();
           connectedRef.current = false;
@@ -500,20 +444,9 @@ export default function WebRTCPage() {
         await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
         const connection = ensureConnection(current);
         if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 20_000) {
-          await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
-          await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
-          connection.close();
-           connectionRef.current = null;
-           callRef.current = null;
-           resetSignalingState();
-           connectionStartedAt.current = null;
-          connectedRef.current = false;
-          setIsConnected(false);
-          setActiveCallId(null);
-          setPeer(null);
-          setIsMatching(true);
-          setStatus('연결 시간이 초과되어 다른 상대를 다시 찾는 중');
-          return;
+           await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
+           closeCallForRematch('연결 시간이 초과되어 다른 상대를 자동으로 찾는 중');
+           return;
         }
         const call = await getDocument<CallDocument>('webrtcCalls', current.callId, token).catch(() => null);
         if (!call) {
@@ -526,13 +459,7 @@ export default function WebRTCPage() {
           return;
         }
         if (call.status === 'ended') {
-          connection.close();
-          connectionRef.current = null;
-          callRef.current = null;
-          setIsConnected(false);
-          setHasRemoteVideo(false);
-          setStatus('상대가 연결을 종료했습니다');
-          await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+          closeCallForRematch('상대가 연결을 종료했습니다. 다른 상대를 자동으로 찾는 중');
           return;
         }
         if (!current.initiator && call.offer && !offerApplied.current) {
@@ -602,7 +529,7 @@ export default function WebRTCPage() {
     <div className="webrtc-page min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
       <div className="webrtc-shell mx-auto max-w-6xl">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">LIVE CHAT</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">LIVE CHAT</h1><p className="mt-2 text-sm text-slate-400">접속 회원 또는 테스트 상대와 바로 연결됩니다.</p></div>
+          <div><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">LIVE CHAT</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">LIVE CHAT</h1><p className="mt-2 text-sm text-slate-400">현재 접속 중인 인증 회원과 자동으로 연결됩니다.</p></div>
           <div className="flex items-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-200"><ShieldCheck size={17} /> 브라우저 간 암호화 연결</div>
         </header>
 
@@ -616,10 +543,10 @@ export default function WebRTCPage() {
           </section>
 
           <aside className="space-y-5">
-             <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">LIVE CHAT 상태</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '테스트 상대'} · {peer.age || ''} · {peer.country || 'Global'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-amber-500/10 p-3 text-xs font-bold text-amber-100">{permissionError}</p>}{!active ? <button onClick={startMatch} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
-             <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">브라우저 기본 기능</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />영상은 서버에 저장하지 않고 상대 브라우저로 직접 전송됩니다.</div></section>
+              <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">LIVE CHAT 상태</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-amber-500/10 p-3 text-xs font-bold text-amber-100">{permissionError}</p>}{!active ? <button onClick={startMatch} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
+              <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">상대 화면에도 적용</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />내 영상과 상대방에게 전송되는 영상 모두에 적용됩니다.</div></section>
              <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터</span><span className="text-xs font-bold text-cyan-300">활성화</span></div><label className="block text-xs font-bold text-slate-400">내 성별<select value={gender} onChange={(event) => setGender(event.target.value as Gender | '')} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="">설정 안 함</option><option value="male">남성</option><option value="female">여성</option></select></label><label className="mt-3 block text-xs font-bold text-slate-400">찾고 싶은 상대<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두</option><option value="male">남성</option><option value="female">여성</option></select></label><p className="mt-3 text-xs leading-5 text-slate-500">성별 필터를 선택하면 실제 매칭마다 0.25 USDT가 차감됩니다. 월 30 USDT 프리미엄 구독자는 무료입니다.</p></section>
-             <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 연결 안내</div><p>접속 회원을 먼저 찾고, 테스트 서버에서는 상대가 없을 때 테스트 상대와 자동 연결됩니다.</p></section>
+              <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 자동 연결 안내</div><p>연결이 끊기거나 상대가 나가면 연결 종료를 누르지 않아도 다음 인증 회원을 계속 찾습니다.</p></section>
           </aside>
          </div>
          <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-black">화상 채팅</h2><span className="text-[10px] font-bold text-emerald-300">1분 후 자동 삭제</span></div><div className="max-h-48 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">상대와 연결되면 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={message.id} className="rounded-xl bg-white/[0.05] p-3 text-sm"><div className="mb-1 text-[10px] font-bold text-cyan-300">{message.user}</div><div className="break-words text-slate-200">{message.text}</div></div>)}</div>{chatError && <p className="mt-2 text-xs font-bold text-rose-300">{chatError}</p>}{user && activeCallId && <form onSubmit={sendVideoChat} className="mt-3 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="화상 채팅 메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none" /><button className="rounded-xl bg-cyan-400 px-4 text-sm font-black text-slate-950">전송</button></form>}</section>
