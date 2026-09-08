@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import BannerAd from '@/components/ads/BannerAd';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { ArrowUpRight, BriefcaseBusiness, CircleDollarSign, Globe2, Megaphone, Newspaper, PlayCircle, ShoppingBag, Store, UsersRound, Video } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, CircleDollarSign, Globe2, Megaphone, Newspaper, PlayCircle, ShoppingBag, Sparkles, Store, UsersRound, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { listDocuments } from '@/lib/firebase';
 import WorldClock from '@/components/layout/WorldClock';
@@ -17,6 +17,7 @@ const services = [
   { href: '/community', label: '커뮤니티', detail: '지금 필요한 이야기를 나눠요', icon: Megaphone, color: 'text-violet-300', bg: 'bg-violet-300/10' },
   { href: '/news', label: '오늘의 뉴스', detail: '운영자가 확인한 실제 출처', icon: Newspaper, color: 'text-lime-300', bg: 'bg-lime-300/10' },
   { href: '/webrtc', label: '랜덤 화상채팅', detail: '접속 회원과 바로 연결', icon: Video, color: 'text-rose-300', bg: 'bg-rose-300/10' },
+  { href: '/assistant', label: 'AI 정보 도우미', detail: '궁금한 정보를 바로 질문', icon: Sparkles, color: 'text-cyan-300', bg: 'bg-cyan-300/10' },
 ];
 
 const typeLabels: Record<string, string> = { notice: '공지', news: '뉴스', free: '자유' };
@@ -113,4 +114,3 @@ export default function Home() {
     </div>
   );
 }
-
