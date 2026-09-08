@@ -1304,7 +1304,7 @@ export default function GamesPage() {
   if (true) {
     return (
       <div className="games-page h-[calc(100dvh-6rem)] min-h-0 overflow-hidden bg-[#070b17] px-2 py-2 text-white sm:px-3 md:px-4">
-        <div className="mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-2">
+        <div className="tetris-modern-shell mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-2">
           <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-3 py-2 shadow-xl sm:px-4">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300"><Gamepad2 size={13} /> Arcade / Live battle</div>
