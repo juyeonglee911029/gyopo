@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { MessageCircle, Send, Users } from 'lucide-react';
 import { createDocument, deleteExpiredChatMessages, getOnlineCount, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { usePathname } from 'next/navigation';
 
 type ChatMessage = {
   id: string;
@@ -22,7 +21,6 @@ function formatTime(value: string) {
 
 export default function GlobalChat() {
   const { user, selectedCountry } = useGlobalStore();
-  const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [onlineCount, setOnlineCount] = useState(0);
@@ -78,11 +76,9 @@ export default function GlobalChat() {
     }
   };
 
-  if (pathname === '/games' || pathname.startsWith('/webrtc') || pathname.startsWith('/theater')) return null;
-
   return (
     <>
-    <aside className="fixed bottom-0 right-0 top-16 z-40 hidden w-[22rem] flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl lg:flex">
+    <aside className="fixed bottom-0 right-0 top-16 z-40 hidden w-80 flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl lg:flex">
        <div className="border-b border-white/8 bg-[#0d1628] p-3">
          <div className="flex items-center justify-between gap-3">
            <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> 실시간 라운지</div><p className="mt-1 text-[11px] text-slate-500">지역에 관계없이 연결된 교민들</p></div>
