@@ -1,11 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MapPin, Users as UsersIcon } from 'lucide-react';
-import { listOnlineUsers, type OnlineUser } from '@/lib/firebase';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { MapPin, PackageCheck, ShieldCheck, UserPlus, Users as UsersIcon, Video, X } from 'lucide-react';
+import { getDocument, getSessionToken, listEscrowOrdersForMember, listFriendConnections, listOnlineUsers, respondToFriendRequest, sendFriendRequest, type EscrowOrder, type FriendConnection, type OnlineUser, type PublicProfile } from '@/lib/firebase';
+import { useGlobalStore } from '@/store/useGlobalStore';
+
+type SelectedMember = Partial<PublicProfile> & Pick<OnlineUser, 'id' | 'name' | 'image'>;
+
+const STATUS_LABELS: Record<string, string> = {
+  PAYMENT_HELD: '결제 보관 완료',
+  SHIPPING: '배송 준비/시작',
+  IN_TRANSIT: '배송 중',
+  DELIVERED: '수령 완료',
+};
 
 export default function UsersPage() {
+  const user = useGlobalStore((state) => state.user);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(null);
+  const [sharedOrders, setSharedOrders] = useState<EscrowOrder[]>([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [friendships, setFriendships] = useState<FriendConnection[]>([]);
+  const [friendBusy, setFriendBusy] = useState('');
+  const selectionRequest = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -20,6 +38,75 @@ export default function UsersPage() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setFriendships([]);
+      return () => { active = false; };
+    }
+    const load = async () => {
+      const rows = await listFriendConnections(user.id).catch(() => []);
+      if (active) setFriendships(rows);
+    };
+    void load();
+    const timer = window.setInterval(load, 5_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [user?.id]);
+
+  const relationshipFor = (memberId: string) => friendships.find((item) => item.requesterId === memberId || item.addresseeId === memberId);
+  const isFriend = (memberId: string) => relationshipFor(memberId)?.status === 'accepted';
+
+  const requestFriend = async (memberId: string) => {
+    setFriendBusy(memberId);
+    try {
+      await sendFriendRequest(memberId);
+      const rows = user ? await listFriendConnections(user.id).catch(() => []) : [];
+      setFriendships(rows);
+    } finally {
+      setFriendBusy('');
+    }
+  };
+
+  const acceptFriend = async (connection: FriendConnection) => {
+    setFriendBusy(connection.id);
+    try {
+      await respondToFriendRequest(connection, 'accepted');
+      setFriendships((rows) => rows.map((row) => row.id === connection.id ? { ...row, status: 'accepted' } : row));
+    } finally {
+      setFriendBusy('');
+    }
+  };
+
+  const showMember = async (online: OnlineUser) => {
+    const requestId = ++selectionRequest.current;
+    setSelectedMember({
+      id: online.id,
+      name: online.name,
+      image: online.image,
+      gender: online.gender,
+      country: online.country,
+      age: online.age,
+    });
+    setSharedOrders([]);
+    setProfileLoading(true);
+    const token = getSessionToken();
+    const [profile, orders] = await Promise.all([
+      getDocument<PublicProfile>('publicProfiles', online.id, token).catch(() => null),
+      user && token ? listEscrowOrdersForMember(online.id, token).catch(() => []) : Promise.resolve([]),
+    ]);
+    if (selectionRequest.current !== requestId) return;
+    if (profile) setSelectedMember(profile);
+    setSharedOrders(orders);
+    setProfileLoading(false);
+  };
+
+  const closeMember = () => {
+    selectionRequest.current += 1;
+    setSelectedMember(null);
+    setSharedOrders([]);
+    setProfileLoading(false);
+  };
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#f5f7fb] px-4 py-8 md:py-12">
@@ -37,6 +124,8 @@ export default function UsersPage() {
           </div>
         </header>
 
+        {user && friendships.length > 0 && <section className="mb-8 rounded-[2rem] border border-indigo-100 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-indigo-500">My network</div><h2 className="mt-1 text-xl font-black text-slate-950">친구와 연결하기</h2></div><span className="text-xs font-bold text-slate-400">{friendships.filter((item) => item.status === 'accepted').length}명 친구</span></div><div className="mt-4 flex flex-wrap gap-2">{friendships.map((connection) => { const memberId = connection.requesterId === user.id ? connection.addresseeId : connection.requesterId; const member = onlineUsers.find((item) => item.id === memberId); return <div key={connection.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2"><span className="text-sm font-bold text-slate-700">{member?.name || '회원'}</span>{connection.status === 'accepted' ? <Link href={`/webrtc?friend=${encodeURIComponent(memberId)}`} className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-black text-white">화상</Link> : connection.addresseeId === user.id && connection.status === 'pending' ? <button type="button" onClick={() => void acceptFriend(connection)} className="rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-black text-slate-950">수락</button> : <span className="text-[11px] font-bold text-slate-400">요청 대기</span>}</div>; })}</div></section>}
+
         {onlineUsers.length === 0 ? (
           <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-20 text-center shadow-sm">
             <UsersIcon className="mx-auto mb-4 text-slate-300" size={38} />
@@ -47,19 +136,67 @@ export default function UsersPage() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {onlineUsers.map((online) => (
               <article key={online.id} className="group overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-                <div className="h-24 bg-[linear-gradient(135deg,#111827,#334155,#4f46e5)]" />
-                <div className="relative px-5 pb-5">
-                  <img src={online.image} alt="" className="-mt-10 h-20 w-20 rounded-3xl border-4 border-white object-cover shadow-lg" />
-                  <h2 className="mt-4 text-xl font-black text-slate-950">{online.name}</h2>
-                  <div className="mt-2 flex items-center gap-1 text-xs font-bold text-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 지금 접속 중</div>
-                  <div className="mt-4 flex items-center gap-1 text-sm text-slate-500"><MapPin size={14} /> {online.country || 'Global'}</div>
-                  {online.age ? <p className="mt-2 text-xs text-slate-400">{online.age}세 · {online.gender || '성별 미설정'}</p> : <p className="mt-2 text-xs text-slate-400">{online.gender || '성별 미설정'}</p>}
-                </div>
+                 <div role="button" tabIndex={0} onClick={() => void showMember(online)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') void showMember(online); }} className="block w-full text-left">
+                  <div className="h-24 bg-[linear-gradient(135deg,#111827,#334155,#4f46e5)]" />
+                  <div className="relative px-5 pb-5">
+                    <img src={online.image} alt="" className="-mt-10 h-20 w-20 rounded-3xl border-4 border-white object-cover shadow-lg" />
+                    <h2 className="mt-4 text-xl font-black text-slate-950">{online.name}</h2>
+                    <div className="mt-2 flex items-center gap-1 text-xs font-bold text-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 지금 접속 중</div>
+                     <div className="mt-4 flex items-center gap-1 text-sm text-slate-500"><MapPin size={14} /> {online.country || '국가 미설정'}</div>
+                     {online.age ? <p className="mt-2 text-xs text-slate-400">{online.age}세 · {online.gender === 'male' ? '남성' : online.gender === 'female' ? '여성' : '성별 미설정'}</p> : <p className="mt-2 text-xs text-slate-400">{online.gender === 'male' ? '남성' : online.gender === 'female' ? '여성' : '성별 미설정'}</p>}
+                     {user && online.id !== user.id && <div className="mt-4 flex gap-2" onClick={(event) => event.stopPropagation()}>
+                       {isFriend(online.id) ? <Link href={`/webrtc?friend=${encodeURIComponent(online.id)}`} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2.5 text-xs font-black text-white hover:bg-indigo-500"><Video size={14} /> 친구 화상</Link> : relationshipFor(online.id)?.status === 'pending' && relationshipFor(online.id)?.addresseeId === user.id ? <button type="button" disabled={friendBusy === relationshipFor(online.id)?.id} onClick={() => { const relation = relationshipFor(online.id); if (relation) void acceptFriend(relation); }} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">친구 수락</button> : <button type="button" disabled={Boolean(relationshipFor(online.id)) || friendBusy === online.id} onClick={() => void requestFriend(online.id)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-xs font-black text-indigo-700 disabled:opacity-50"><UserPlus size={14} /> {relationshipFor(online.id)?.status === 'pending' ? '요청 보냄' : '친구 추가'}</button>}
+                     </div>}
+                   </div>
+                 </div>
               </article>
             ))}
           </div>
         )}
       </div>
+
+      {selectedMember && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 p-4" onMouseDown={(event) => event.target === event.currentTarget && closeMember()}>
+          <section role="dialog" aria-modal="true" aria-label={`${selectedMember.name} 공개 프로필`} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[2rem] bg-white p-6 text-slate-900 shadow-2xl md:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-4">
+                <img src={selectedMember.image} alt="" className="h-20 w-20 rounded-3xl object-cover shadow-md" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-indigo-500"><ShieldCheck size={15} /> Public profile</div>
+                  <h2 className="mt-2 truncate text-3xl font-black">{selectedMember.name}</h2>
+                </div>
+              </div>
+              <button type="button" onClick={closeMember} aria-label="닫기" className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"><X size={19} /></button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-2xl bg-slate-50 p-4"><span className="block text-xs font-bold text-slate-400">국가/지역</span><b className="mt-1 block">{selectedMember.country || '공개 정보 없음'}</b></div>
+              <div className="rounded-2xl bg-slate-50 p-4"><span className="block text-xs font-bold text-slate-400">프로필</span><b className="mt-1 block">{selectedMember.gender === 'male' ? '남성' : selectedMember.gender === 'female' ? '여성' : '공개 정보 없음'}{selectedMember.age ? ` · ${selectedMember.age}세` : ''}</b></div>
+            </div>
+
+            <div className="mt-7 border-t border-slate-200 pt-6">
+              <div className="flex items-center gap-2"><PackageCheck className="text-emerald-600" size={20} /><h3 className="font-black">{selectedMember.id === user?.id ? '내 에스크로 상태' : '나와의 에스크로 상태'}</h3></div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">구매·배송 상태는 거래 당사자에게만 표시되며 금액과 비공개 정보는 공개하지 않습니다.</p>
+              {profileLoading ? (
+                <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">안전하게 정보를 확인하고 있습니다...</p>
+              ) : !user ? (
+                <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">로그인하면 이 회원과 직접 진행한 거래 상태만 확인할 수 있습니다.</p>
+              ) : sharedOrders.length === 0 ? (
+                <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">표시할 공동 거래가 없습니다.</p>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {sharedOrders.map((order) => (
+                    <div key={order.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-4 text-sm">
+                      <div><b>{order.buyerId === user.id ? '구매' : '판매'}</b><div className="mt-1 text-xs text-slate-400">{new Date(order.updatedAt || order.createdAt).toLocaleDateString('ko-KR')}</div></div>
+                      <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">{STATUS_LABELS[order.status] || order.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
