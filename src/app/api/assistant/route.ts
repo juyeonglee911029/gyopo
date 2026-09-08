@@ -11,13 +11,31 @@ export async function POST(request: Request) {
   const messages = body?.messages?.filter((message) => message.role && message.content?.trim()).slice(-12) || [];
   if (!messages.length) return Response.json({ error: '질문을 입력해주세요.' }, { status: 400 });
 
+  const geminiKey = process.env.GEMINI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openAiKey = process.env.OPENAI_API_KEY;
-  if (!anthropicKey && !openAiKey) {
+  if (!geminiKey && !anthropicKey && !openAiKey) {
     return Response.json({ error: 'AI 답변 서비스가 아직 연결되지 않았습니다. 관리자에게 AI API 키 설정을 요청해주세요.' }, { status: 503 });
   }
 
   try {
+    if (geminiKey) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiKey)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: messages.map((message) => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })),
+          generationConfig: { maxOutputTokens: 900, temperature: 0.2 },
+        }),
+      });
+      const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; error?: { message?: string } };
+      if (response.status === 400 || response.status === 401 || response.status === 403) throw new Error('Gemini API 키가 유효하지 않거나 사용할 수 없습니다. Cloudflare 환경변수의 키를 확인해주세요.');
+      if (!response.ok) throw new Error(data.error?.message || 'AI 서비스가 응답하지 않았습니다.');
+      const answer = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim();
+      return Response.json({ answer: answer || '답변을 만들지 못했습니다.' });
+    }
+
     if (anthropicKey) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
