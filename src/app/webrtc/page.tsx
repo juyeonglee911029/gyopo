@@ -258,13 +258,15 @@ export default function WebRTCPage() {
     }
     setPermissionError('');
     const profile = { ...user, ...(gender ? { gender } : {}), genderPreference };
-    try {
-      await saveProfile(profile, token);
-      setUser(profile);
-    } catch {
-      setPermissionError('프로필 설정을 저장하지 못했습니다. 다시 시도해주세요.');
-      return;
+    const profileChanged = profile.gender !== user.gender || profile.genderPreference !== user.genderPreference;
+    if (profileChanged) {
+      try {
+        await saveProfile(profile, token);
+      } catch {
+        setPermissionError('프로필 저장은 지연되고 있지만 현재 설정으로 연결을 계속합니다.');
+      }
     }
+    setUser(profile);
     try {
       await requestMedia();
     } catch (error) {
