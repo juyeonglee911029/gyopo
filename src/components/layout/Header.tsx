@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { useState } from 'react';
-import { Gamepad2, Wallet, LogIn, LogOut, Moon, Sun, Video, Menu, X, Globe2 } from 'lucide-react';
+import { Gamepad2, Wallet, LogIn, LogOut, Moon, Video, Menu, X, Globe2 } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
 
 function formatUsdt(value: number) {
@@ -11,7 +11,7 @@ function formatUsdt(value: number) {
 }
 
 export default function Header() {
-  const { user, setUser, darkMode, setDarkMode } = useGlobalStore();
+  const { user, setUser } = useGlobalStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -45,9 +45,7 @@ export default function Header() {
             <Video size={17} />
             <span>화상채팅</span>
           </Link>
-          <button onClick={() => setDarkMode(!darkMode)} aria-label="다크모드 전환" className="rounded-lg border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:text-teal-300">
-            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+          <div aria-label="다크모드 적용" className="header-night-mode"><Moon size={14} /><span className="hidden xl:inline">NIGHT MODE</span></div>
 
           {user ? (
             <div className="flex items-center gap-2 sm:gap-4">
