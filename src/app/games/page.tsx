@@ -988,6 +988,14 @@ export default function GamesPage() {
             resetBattleRoom('대전방이 초기화되었습니다. 새 대전을 시작해주세요.');
           }
         }
+        if (matchId && roomNumber && matchRole === 'A' && currentLobby?.activeMatchId === matchId && currentLobby.status === 'occupied' && currentLobby.playerBId) {
+          if (currentLobby.playerB) setOpponent(currentLobby.playerB);
+          if (matchPhase === 'waiting') {
+            setMatchPhase('betting');
+            setMatchStatus('상대 입장 완료 · 배팅금액을 기다리는 중');
+            setInviteStatus('상대가 방에 입장했습니다. 양쪽 모두 배팅금액을 확정하면 자동으로 시작합니다.');
+          }
+        }
         const accepted = invites
           .filter((invite) => invite.status === 'accepted' && invite.matchId)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -1063,6 +1071,9 @@ export default function GamesPage() {
      if (!matchId || !matchRole || !user || matchPhase === 'finished') return;
     const token = getSessionToken();
     if (!token) return;
+    // Let the joining player create the first shared room document with both participant IDs.
+    // This also keeps older deployed Firestore rules from rejecting the second player.
+    if (roomNumber && matchPhase === 'waiting') return;
     const syncRoom = async () => {
       const state = gameRef.current;
       let current: TetrisRoom | null;
@@ -1084,6 +1095,7 @@ export default function GamesPage() {
         if (refreshed) setUser(refreshed);
         return;
       }
+      if (!current && roomNumber && matchRole === 'A') return;
       if (current) roomSeenRef.current = true;
       const sessionUserId = currentUserId;
       const profile: TetrisProfile = { id: sessionUserId, name: user.name, image: user.image, country: user.country || 'Global' };
@@ -1095,8 +1107,9 @@ export default function GamesPage() {
           playerA: profile,
            playerAState: serializeGameState(state),
         } : {
-          playerBId: sessionUserId,
-          playerB: profile,
+           playerBId: sessionUserId,
+           playerB: profile,
+           ...(roomNumber && opponent ? { playerAId: opponent.id, playerA: opponent } : {}),
             playerBState: serializeGameState(state),
         }),
          ...(matchPhase === 'playing' ? { phase: 'playing' } : {}),
