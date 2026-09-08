@@ -37,7 +37,10 @@ function categoryLabel(category?: string) {
 }
 
 async function findLiveContent(sourceId: string, category: string, sourceUrl: string) {
-  const response = await fetch(`/api/content/preview?source=${encodeURIComponent(sourceId)}`);
+  const query = sourceId.startsWith('regional-')
+    ? `region=${encodeURIComponent(sourceId.replace(/^regional-/, ''))}`
+    : `source=${encodeURIComponent(sourceId)}`;
+  const response = await fetch(`/api/content/preview?${query}`);
   if (!response.ok) return null;
   const snapshot = await response.json() as { sourceName?: string; region?: string; fetchedAt?: string; items?: SourceItem[]; sections?: Array<{ category: string; items: SourceItem[] }> };
   const entries = [...(snapshot.items || []), ...(snapshot.sections || []).filter((section) => section.category === category).flatMap((section) => section.items)];
@@ -82,10 +85,10 @@ export default function ContentDetailPage() {
   const backHref = content.sourceCategory === 'jobs' ? '/jobs' : content.sourceCategory === 'directory' ? '/directory' : content.sourceCategory === 'market' ? '/market' : content.sourceCategory === 'community' ? '/community' : '/news';
 
   return (
-    <article className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10">
+    <article className="w-full px-4 py-8 sm:px-6 lg:px-10">
       <Link href={backHref} className="text-sm font-bold text-teal-300 hover:text-teal-200">← 목록으로 돌아가기</Link>
       <div className="mt-5 overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
-        {images[0] ? <img src={images[0]} alt={title} className="max-h-[36rem] w-full object-cover" /> : <div className="grid h-52 place-items-center bg-gradient-to-br from-teal-500/20 via-slate-900 to-slate-950 text-sm font-bold text-teal-200">원문 대표 이미지가 없습니다</div>}
+        {images[0] ? <img src={images[0]} alt={title} className="max-h-[42rem] w-full bg-black/20 object-contain" /> : <div className="grid h-52 place-items-center bg-gradient-to-br from-teal-500/20 via-slate-900 to-slate-950 text-sm font-bold text-teal-200">원문 대표 이미지가 없습니다</div>}
         <div className="p-6 sm:p-10">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {content.country && <span className="rounded-full bg-teal-300/10 px-2.5 py-1 font-bold text-teal-200">{content.country}</span>}
@@ -108,8 +111,8 @@ export default function ContentDetailPage() {
             </div>
           )}
 
-          <section className="mt-8"><h2 className="mb-3 text-xs font-black uppercase tracking-[.18em] text-slate-500">본문</h2>{body ? <div className="whitespace-pre-wrap text-[16px] leading-8 text-slate-300">{body}</div> : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm leading-6 text-slate-500">이 출처는 본문을 공개하지 않습니다. 아래 원문 링크에서 전체 내용을 확인할 수 있습니다.</p>}</section>
-          {images.length > 1 && <div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="col-span-full mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-slate-500"><ImageIcon size={14} /> 원문 이미지 {images.length - 1}장</div>{images.slice(1).map((image) => <img key={image} src={image} alt={title} className="max-h-72 w-full rounded-2xl object-cover" />)}</div>}
+           <section className="mx-auto mt-8 max-w-5xl"><h2 className="mb-3 text-xs font-black uppercase tracking-[.18em] text-slate-500">본문</h2>{body ? <div className="whitespace-pre-wrap text-[17px] leading-8 text-slate-200">{body}</div> : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm leading-6 text-slate-500">이 출처는 본문을 공개하지 않습니다. 아래 원문 링크에서 전체 내용을 확인할 수 있습니다.</p>}</section>
+           {images.length > 1 && <div className="mx-auto mt-8 grid max-w-5xl gap-3 sm:grid-cols-2"><div className="col-span-full mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-slate-500"><ImageIcon size={14} /> 원문 이미지 {images.length - 1}장</div>{images.slice(1).map((image) => <img key={image} src={image} alt={title} className="max-h-96 w-full rounded-2xl bg-black/20 object-contain" />)}</div>}
           {content.sourceUrl && <a href={content.sourceUrl} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 rounded-xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-black text-teal-200 hover:bg-teal-300/15">원문 출처 열기 <ExternalLink size={15} /></a>}
         </div>
       </div>
