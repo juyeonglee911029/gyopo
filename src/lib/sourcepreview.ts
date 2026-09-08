@@ -8,6 +8,10 @@ export type LiveSourceItem = {
   image?: string;
   images?: string[];
   publishedAt?: string;
+  company?: string;
+  location?: string;
+  salary?: string;
+  tag?: string;
 };
 
 type LiveSourceResponse = {
