@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_NETWORK } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, MASTER_DEPOSIT_ADDRESS, MASTER_NETWORK, queryDocuments } from '@/lib/firebase';
 import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
 
 const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || MASTER_DEPOSIT_ADDRESS;
@@ -88,10 +88,10 @@ export default function WalletPage() {
     setIsSearching(true);
     setSearchMessage('회원 명단을 검색하는 중...');
     try {
-      const rows = await listDocuments<{ name: string; image?: string; country?: string; email?: string }>('publicProfiles', token);
+      const rows = await queryDocuments<{ name: string; image?: string; country?: string }>('publicProfiles', 'isPublic', true, token);
       const results = rows
         .filter((row) => row.id !== user.id)
-        .filter((row) => `${row.name || ''} ${row.email || ''}`.toLocaleLowerCase('ko-KR').includes(value))
+        .filter((row) => (row.name || '').toLocaleLowerCase('ko-KR').includes(value))
         .sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'))
         .slice(0, 20);
       setSearchResults(results);
