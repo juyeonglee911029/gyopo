@@ -37,6 +37,19 @@ function textContent(value: string) {
     .trim();
 }
 
+function cleanArticleBody(value: string) {
+  const lines = value
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line && !/^(기사 듣기|재생|공유|WhatsApp|TALK|KakaoTalk|f Facebook|링크 복사|AD)$/i.test(line));
+  const body = lines.join('\n\n');
+  return body
+    .replace(/\n\n(?:Story Timeline|이 뉴스의 흐름)[\s\S]*$/i, '')
+    .replace(/\n\n(?:SPONSORED(?: · AD)?|AD)\b[\s\S]*$/i, '')
+    .trim()
+    .slice(0, 16_000);
+}
+
 type CrawlItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category: ContentCategory };
 type StructuredData = { headline?: string; description?: string; articleBody?: string; image?: string[]; datePublished?: string; url?: string };
 
@@ -101,7 +114,7 @@ function structuredData(html: string): StructuredData {
   return {
     headline: typeof article.headline === 'string' ? clean(article.headline) : typeof article.name === 'string' ? clean(article.name) : undefined,
     description: typeof article.description === 'string' ? clean(article.description) : undefined,
-    articleBody: typeof article.articleBody === 'string' ? textContent(article.articleBody) : undefined,
+    articleBody: typeof article.articleBody === 'string' ? cleanArticleBody(textContent(article.articleBody)) : undefined,
     image: images.map((image) => typeof image === 'string' ? image : image && typeof image === 'object' && typeof image.url === 'string' ? image.url : '').filter(Boolean),
     datePublished: typeof article.datePublished === 'string' ? article.datePublished : undefined,
     url: typeof article.url === 'string' ? article.url : undefined,
@@ -128,15 +141,15 @@ function extractImages(html: string, pageUrl: string, data: StructuredData = {})
 }
 
 function extractBody(html: string, data: StructuredData = {}) {
-  if (data.articleBody && data.articleBody.length > 80) return data.articleBody.slice(0, 16_000);
+  if (data.articleBody && data.articleBody.length > 80) return data.articleBody;
   const block = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1]
     || html.match(/<(?:div|section)\b[^>]*(?:itemprop|class|id)=["'][^"']*(?:articleBody|article-body|post-content|entry-content|article-content)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i)?.[1]
     || html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1]
     || html.match(/<div\b[^>]*(?:class|id)=["'][^"']*(?:article|post|content|entry)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1]
     || '';
-  return textContent(block.replace(/<(script|style|noscript|nav|header|footer)\b[\s\S]*?<\/\1>/gi, ' ')
+  return cleanArticleBody(textContent(block.replace(/<(script|style|noscript|nav|header|footer)\b[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n\n')).slice(0, 16_000);
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n\n')));
 }
 
 function extractImage(html: string, pageUrl: string, data: StructuredData = {}) {
