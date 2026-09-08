@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, Film, Gamepad2, Globe2, Home, MessageCircle, Newspaper, ShoppingBag, Store, Users, Video } from 'lucide-react';
+import { BriefcaseBusiness, Film, Gamepad2, Globe2, Home, MessageCircle, Newspaper, ShoppingBag, Sparkles, Store, Users, Video } from 'lucide-react';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { REGIONS, regionLabel } from '@/lib/regions';
 
@@ -20,6 +20,7 @@ const utilityLinks = [
   { href: '/games', label: '테트리스', icon: Gamepad2 },
   { href: '/webrtc', label: '화상채팅', icon: Video },
   { href: '/theater', label: '극장', icon: Film },
+  { href: '/assistant', label: 'AI 검색', icon: Sparkles },
 ];
 
 function LinkRow({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof Home; active: boolean }) {
@@ -35,10 +36,6 @@ export default function PortalSidebar() {
   const pathname = usePathname();
   const selectedCountry = useGlobalStore((state) => state.selectedCountry);
   const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
-  const immersive = pathname === '/games' || pathname.startsWith('/webrtc') || pathname.startsWith('/theater');
-
-  if (immersive) return null;
-
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-[#090f1d] pt-16 lg:flex">
       <div className="border-b border-white/8 px-4 py-4">
@@ -72,4 +69,3 @@ export default function PortalSidebar() {
     </aside>
   );
 }
-
