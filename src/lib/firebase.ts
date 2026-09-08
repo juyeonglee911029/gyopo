@@ -84,7 +84,12 @@ export type FirestoreFilter = {
 
 const sessionKey = 'gyopo-auth-session';
 const firestoreBase = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+const firestoreDocumentBase = `projects/${firebaseConfig.projectId}/databases/(default)/documents`;
 let refreshPromise: Promise<string | undefined> | null = null;
+
+function firestoreDocumentName(collection: string, id: string) {
+  return `${firestoreDocumentBase}/${collection}/${encodeURIComponent(id)}`;
+}
 
 function toFirestoreValue(value: unknown): FirestoreValue {
   if (value === null || value === undefined) return { nullValue: null };
@@ -297,7 +302,7 @@ export async function publishDocument<T extends Record<string, unknown>>(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       writes: [{
-        update: { name: `${firestoreBase}/${collection}/${encodeURIComponent(id)}`, fields },
+        update: { name: firestoreDocumentName(collection, id), fields },
         updateMask: { fieldPaths: Object.keys(data) },
       }],
     }),
@@ -329,7 +334,7 @@ export async function incrementDocument(collection: string, id: string, field: s
     body: JSON.stringify({
       writes: [{
         transform: {
-          document: `${firestoreBase}/${collection}/${encodeURIComponent(id)}`,
+          document: firestoreDocumentName(collection, id),
           fieldTransforms: [{ fieldPath: field, increment: toFirestoreValue(amount) }],
         },
       }],
@@ -513,7 +518,7 @@ export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: stri
     updatedAt: new Date(),
   };
   const candidateFields = { ...(candidateRow.fields || {}), ...encodeFields(candidateData) };
-  const ownName = `${firestoreBase}/tetrisQueue/${encodeURIComponent(profile.id)}`;
+   const ownName = firestoreDocumentName('tetrisQueue', profile.id);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -556,7 +561,7 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
     ...(candidateRow.fields || {}),
     ...encodeFields({ status: 'matched', matchedBy: profile.id, callId, opponent: profile, lastSeenAt: new Date(), updatedAt: new Date() }),
   };
-  const ownName = `${firestoreBase}/webrtcQueue/${encodeURIComponent(profile.id)}`;
+   const ownName = firestoreDocumentName('webrtcQueue', profile.id);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -579,8 +584,8 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
   if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USDT가 부족합니다.`);
-  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
-  const stakeName = `${firestoreBase}/gameStakes/${encodeURIComponent(stakeId)}`;
+   const profileName = firestoreDocumentName('profiles', userId);
+   const stakeName = firestoreDocumentName('gameStakes', stakeId);
   const profileFields = {
     ...(profileDocument.fields || {}),
     usdtBalance: toFirestoreValue(currentBalance - amount),
@@ -630,7 +635,7 @@ export async function settleTetrisMatch(
       writes: [
         {
           update: {
-            name: `${firestoreBase}/profiles/${encodeURIComponent(winnerId)}`,
+             name: firestoreDocumentName('profiles', winnerId),
             fields: {
               ...(winnerProfile.fields || {}),
               usdtBalance: toFirestoreValue(winnerBalance + payoutAmount),
@@ -641,7 +646,7 @@ export async function settleTetrisMatch(
         },
         {
           update: {
-            name: `${firestoreBase}/gamePayouts/${encodeURIComponent(payoutId)}`,
+             name: firestoreDocumentName('gamePayouts', payoutId),
             fields: encodeFields({
               matchId,
               winnerId,
@@ -671,8 +676,8 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
   if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USDT가 부족합니다.`);
-  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
-  const stakeName = `${firestoreBase}/genderMatchStakes/${encodeURIComponent(stakeId)}`;
+   const profileName = firestoreDocumentName('profiles', userId);
+   const stakeName = firestoreDocumentName('genderMatchStakes', stakeId);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -716,8 +721,8 @@ export async function purchasePremiumSubscription(userId: string, token?: string
   nextExpiry.setUTCMonth(nextExpiry.getUTCMonth() + 1);
   const subscriptionId = `premium-${userId}-${nextExpiry.toISOString().slice(0, 7)}`;
   if (await getRawDocument('premiumSubscriptions', subscriptionId, token)) return (await refreshStoredUser()) || profile;
-  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(userId)}`;
-  const subscriptionName = `${firestoreBase}/premiumSubscriptions/${encodeURIComponent(subscriptionId)}`;
+   const profileName = firestoreDocumentName('profiles', userId);
+   const subscriptionName = firestoreDocumentName('premiumSubscriptions', subscriptionId);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -771,8 +776,8 @@ export async function reserveEscrowPurchase(
   if (!buyerDocument?.name) throw new Error('구매자 프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(buyerDocument.fields?.usdtBalance) || 0);
   if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${amount} USDT가 필요합니다.`);
-  const profileName = `${firestoreBase}/profiles/${encodeURIComponent(buyerId)}`;
-  const orderName = `${firestoreBase}/escrowOrders/${encodeURIComponent(orderId)}`;
+   const profileName = firestoreDocumentName('profiles', buyerId);
+   const orderName = firestoreDocumentName('escrowOrders', orderId);
   const profileFields = { ...(buyerDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) };
   const orderFields = encodeFields({ buyerId, sellerId, productId, amount, status: 'PAYMENT_HELD', createdAt: new Date(), updatedAt: new Date(), timeline: [{ status: 'PAYMENT_HELD', at: new Date(), note: '구매자 결제 금액을 에스크로에 보관했습니다.' }] });
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
