@@ -1,23 +1,37 @@
 'use client';
 
 import Link from 'next/link';
-import BannerAd from '@/components/ads/BannerAd';
-import { useGlobalStore } from '@/store/useGlobalStore';
-import { ArrowUpRight, BriefcaseBusiness, CircleDollarSign, Globe2, Megaphone, MessageCircle, Newspaper, PlayCircle, ShoppingBag, Sparkles, Store, UsersRound, Video } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BriefcaseBusiness,
+  Gamepad2,
+  MessageCircle,
+  Newspaper,
+  Play,
+  Radio,
+  ShoppingBag,
+  Sparkles,
+  Store,
+  UsersRound,
+  Video,
+  Zap,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { listDocuments } from '@/lib/firebase';
+import BannerAd from '@/components/ads/BannerAd';
 import WorldClock from '@/components/layout/WorldClock';
+import { listDocuments } from '@/lib/firebase';
+import { useGlobalStore } from '@/store/useGlobalStore';
 
 type HomePost = { id: string; title: string; type: string; authorId: string; views?: number; createdAt: string; country: string; sourceUrl?: string; sourceName?: string };
 
 const services = [
-  { href: '/jobs', label: '구인구직', detail: '일과 사람을 연결합니다', icon: BriefcaseBusiness, color: 'text-sky-300', bg: 'bg-sky-300/10' },
-  { href: '/market', label: '에스크로 장터', detail: '안전한 거래를 시작하세요', icon: ShoppingBag, color: 'text-amber-300', bg: 'bg-amber-300/10' },
-  { href: '/directory', label: '한인 업소록', detail: '검증된 로컬 비즈니스', icon: Store, color: 'text-emerald-300', bg: 'bg-emerald-300/10' },
-  { href: '/community', label: '커뮤니티', detail: '지금 필요한 이야기를 나눠요', icon: Megaphone, color: 'text-violet-300', bg: 'bg-violet-300/10' },
-  { href: '/news', label: '오늘의 뉴스', detail: '운영자가 확인한 실제 출처', icon: Newspaper, color: 'text-lime-300', bg: 'bg-lime-300/10' },
-  { href: '/webrtc', label: '랜덤 화상채팅', detail: '접속 회원과 바로 연결', icon: Video, color: 'text-rose-300', bg: 'bg-rose-300/10' },
-  { href: '/assistant', label: 'AI 정보 도우미', detail: '궁금한 정보를 바로 질문', icon: Sparkles, color: 'text-cyan-300', bg: 'bg-cyan-300/10' },
+  { href: '/news', label: '오늘의 뉴스', detail: '검증된 출처의 핵심 소식을 빠르게', icon: Newspaper, tone: 'text-lime-200 bg-lime-300/10', layout: 'sm:col-span-7' },
+  { href: '/community', label: '커뮤니티', detail: '해외 생활의 진짜 이야기가 모이는 곳', icon: UsersRound, tone: 'text-violet-200 bg-violet-300/10', layout: 'sm:col-span-5' },
+  { href: '/jobs', label: '구인구직', detail: '나에게 맞는 글로벌 기회 찾기', icon: BriefcaseBusiness, tone: 'text-sky-200 bg-sky-300/10', layout: 'sm:col-span-5' },
+  { href: '/market', label: '에스크로 장터', detail: '안심하고 사고파는 교민 마켓', icon: ShoppingBag, tone: 'text-amber-200 bg-amber-300/10', layout: 'sm:col-span-7' },
+  { href: '/directory', label: '한인 업소록', detail: '가까운 한인 비즈니스를 한 번에', icon: Store, tone: 'text-emerald-200 bg-emerald-300/10', layout: 'sm:col-span-7' },
+  { href: '/assistant', label: '정보 도우미', detail: '궁금한 해외 생활 정보를 바로 질문', icon: Sparkles, tone: 'text-cyan-200 bg-cyan-300/10', layout: 'sm:col-span-5' },
 ];
 
 const typeLabels: Record<string, string> = { notice: '공지', news: '뉴스', free: '자유' };
@@ -33,85 +47,123 @@ export default function Home() {
   }, []);
 
   const visiblePosts = posts.filter((post) => selectedCountry === 'Global' || post.country === selectedCountry || post.country === 'Global');
+  const regionName = selectedCountry === 'Global' ? '전 세계' : selectedCountry;
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#070b17] text-slate-100">
-      <section className="relative isolate mx-auto max-w-7xl px-4 pb-10 pt-8 sm:px-6 lg:px-8 lg:pb-14 lg:pt-12">
-        <div className="home-grid absolute inset-0 -z-20 opacity-50" />
-        <div className="home-glow absolute -right-40 top-0 -z-10 h-[520px] w-[520px] rounded-full" />
-        <div className="grid items-end gap-10 lg:grid-cols-[1fr_360px]">
-          <div>
-            <div className="mb-7 flex flex-wrap items-center gap-3 text-[11px] font-bold uppercase tracking-[.24em] text-teal-300">
-              <span className="inline-flex items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5"><span className="h-1.5 w-1.5 rounded-full bg-teal-300 shadow-[0_0_12px_#2dd4bf]" />Live network</span>
-              <span className="text-slate-500">2026 / {selectedCountry === 'Global' ? 'Worldwide' : selectedCountry}</span>
+    <div className="home-page min-h-screen overflow-hidden bg-[#070b17] text-slate-100">
+      <section className="relative mx-auto max-w-7xl px-4 pb-7 pt-5 sm:px-6 sm:pt-7 lg:px-8">
+        <div className="home-grid pointer-events-none absolute inset-0 opacity-35" />
+        <div className="home-video-hero relative isolate overflow-hidden rounded-[30px] border border-white/10 2xl:grid 2xl:min-h-[530px] 2xl:grid-cols-[1.08fr_.92fr]">
+          <div className="relative z-10 flex flex-col justify-center p-6 sm:p-10 2xl:p-12">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[.18em] text-emerald-200">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300 shadow-[0_0_12px_#6ee7b7]" /> Live now
+              </span>
+              <span className="text-xs font-bold text-slate-400">{regionName} 네트워크 연결 중</span>
             </div>
-            <h1 className="font-display max-w-3xl text-5xl font-extrabold leading-[.98] tracking-[-.065em] text-white sm:text-6xl lg:text-8xl">
-              연결의 기준을
-              <span className="block bg-gradient-to-r from-teal-200 via-cyan-300 to-sky-400 bg-clip-text text-transparent">다시 만듭니다.</span>
+
+            <p className="mt-8 text-xs font-black uppercase tracking-[.24em] text-teal-200">Random video meet</p>
+            <h1 className="font-display mt-3 max-w-3xl text-[2.65rem] font-extrabold leading-[1.02] tracking-[-.06em] text-white sm:text-6xl 2xl:text-7xl">
+              어색함은 짧게,
+              <span className="block bg-gradient-to-r from-teal-200 via-cyan-300 to-violet-300 bg-clip-text text-transparent">연결은 진짜로.</span>
             </h1>
-            <p className="mt-7 max-w-xl text-base leading-8 text-slate-400 sm:text-lg">
-              세계 어디서든 한국인으로 살아가는 사람들을 위한 신뢰의 네트워크. 일, 거래, 정보, 그리고 새로운 만남을 한 곳에서 시작하세요.
+            <p className="mt-6 max-w-xl text-sm leading-7 text-slate-300 sm:text-base">
+              지금 접속한 교민과 가볍게 1:1 랜덤 영상 대화. 멀리 있어도 같은 언어로 바로 통하는 순간을 만나보세요.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/community" className="group inline-flex items-center gap-2 rounded-xl bg-teal-300 px-5 py-3.5 text-sm font-extrabold text-slate-950 transition hover:bg-teal-200">
-                커뮤니티 둘러보기 <ArrowUpRight size={17} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link href="/webrtc" className="group inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-white px-6 text-sm font-black text-slate-950 shadow-[0_14px_40px_rgba(45,212,191,.18)] transition hover:-translate-y-0.5 hover:bg-teal-100">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-300"><Video size={17} /></span>
+                지금 영상으로 만나기
+                <ArrowRight size={17} className="transition-transform group-hover:translate-x-1" />
               </Link>
-              <Link href="/games" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3.5 text-sm font-bold text-slate-200 transition hover:border-teal-300/40 hover:bg-teal-300/10 hover:text-teal-200">
-                <PlayCircle size={17} /> 테트리스 대전
-              </Link>
-              <button onClick={() => window.dispatchEvent(new Event('gyopo-open-global-chat'))} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-5 py-3.5 text-sm font-bold text-cyan-100 transition hover:border-cyan-200/50 hover:bg-cyan-300/20">
-                <MessageCircle size={17} /> 라이브 채팅 열기
+              <button onClick={() => window.dispatchEvent(new Event('gyopo-open-global-chat'))} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[.06] px-5 text-sm font-bold text-slate-200 transition hover:border-cyan-300/40 hover:bg-cyan-300/10 hover:text-cyan-100">
+                <MessageCircle size={17} /> 먼저 채팅으로 인사하기
               </button>
             </div>
-            <WorldClock />
-          </div>
 
-          <div className="relative hidden min-h-[300px] overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/45 p-6 lg:block">
-            <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full border border-teal-300/20" />
-            <div className="absolute -right-4 top-0 h-56 w-56 rounded-full border border-teal-300/10" />
-            <div className="relative flex h-full flex-col justify-between">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[.22em] text-slate-500"><span>Network pulse</span><Globe2 size={16} className="text-teal-300" /></div>
-              <div>
-                <div className="font-display text-7xl font-extrabold tracking-[-.08em] text-white">24<span className="text-3xl text-teal-300">/7</span></div>
-                <p className="mt-2 text-sm leading-6 text-slate-400">시간대가 달라도<br />연결은 계속됩니다.</p>
-              </div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-4 text-xs"><span className="text-slate-500">현재 접속 지역</span><span className="font-bold text-teal-200">{selectedCountry === 'Global' ? 'Global' : selectedCountry}</span></div>
+            <div className="mt-9 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-5 text-[11px] font-bold text-slate-500">
+              <span className="inline-flex items-center gap-2"><Zap size={13} className="text-amber-300" /> 빠른 랜덤 매칭</span>
+              <span className="inline-flex items-center gap-2"><UsersRound size={13} className="text-violet-300" /> 글로벌 교민 네트워크</span>
             </div>
           </div>
-        </div>
 
-        <div className="mt-12 grid grid-cols-3 divide-x divide-white/10 border-y border-white/10 py-5 sm:max-w-xl">
-          <div className="pr-4"><p className="font-display text-2xl font-extrabold text-white">GLOBAL</p><p className="mt-1 text-[11px] text-slate-500">활동 지역</p></div>
-          <div className="px-4"><p className="font-display text-2xl font-extrabold text-white">SAFE</p><p className="mt-1 text-[11px] text-slate-500">에스크로 거래</p></div>
-          <div className="pl-4"><p className="font-display text-2xl font-extrabold text-white">REAL</p><p className="mt-1 text-[11px] text-slate-500">실시간 커뮤니티</p></div>
+          <Link href="/webrtc" aria-label="랜덤 화상채팅 시작하기" className="home-video-stage group relative z-10 flex min-h-[330px] flex-col justify-between overflow-hidden border-t border-white/10 p-5 sm:min-h-[400px] sm:p-8 2xl:min-h-0 2xl:border-l 2xl:border-t-0">
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="rounded-full border border-white/15 bg-slate-950/35 px-3 py-1.5 text-[10px] font-black tracking-[.2em] text-white backdrop-blur-md">1:1 MATCH</span>
+              <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[.18em] text-emerald-100"><Radio size={14} /> Ready</span>
+            </div>
+            <div className="relative z-10 mx-auto flex w-full max-w-sm flex-1 items-center justify-center py-8">
+              <div className="home-video-orb absolute h-48 w-48 rounded-full border border-white/15 sm:h-60 sm:w-60" />
+              <div className="home-video-orb home-video-orb-delay absolute h-36 w-36 rounded-full border border-white/20 sm:h-44 sm:w-44" />
+              <div className="relative flex h-24 w-24 items-center justify-center rounded-[30px] border border-white/20 bg-white/15 text-white shadow-[0_24px_80px_rgba(4,10,30,.35)] backdrop-blur-xl transition-transform duration-300 group-hover:scale-105 sm:h-28 sm:w-28">
+                <Play size={34} fill="currentColor" />
+              </div>
+              <span className="absolute bottom-5 left-0 rounded-xl border border-white/15 bg-slate-950/35 px-3 py-2 text-[10px] font-black text-white backdrop-blur-md">SEOUL · ONLINE</span>
+              <span className="absolute right-0 top-5 rounded-xl border border-white/15 bg-slate-950/35 px-3 py-2 text-[10px] font-black text-white backdrop-blur-md">GLOBAL · LIVE</span>
+            </div>
+            <div className="relative z-10 flex items-center justify-between rounded-2xl border border-white/15 bg-slate-950/30 p-3 backdrop-blur-xl">
+              <div><p className="text-[10px] font-bold text-white/60">카메라를 켜고</p><p className="mt-0.5 text-sm font-black text-white">새로운 대화 시작</p></div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-950 transition-transform group-hover:translate-x-1"><ArrowUpRight size={19} /></span>
+            </div>
+          </Link>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-4 pb-12 sm:px-6 lg:grid-cols-[.9fr_1.6fr_1fr] lg:px-8">
-        <div className="surface rounded-3xl p-5">
-          <div className="mb-5 flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.22em] text-teal-300">Explore</p><h2 className="mt-1 text-xl font-extrabold text-white">주요 서비스</h2></div><ArrowUpRight size={18} className="text-slate-600" /></div>
-          <div className="space-y-2">
-            {services.map(({ href, label, detail, icon: Icon, color, bg }) => <Link key={href} href={href} className="group flex items-center gap-3 rounded-2xl p-3 transition hover:bg-white/5"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bg} ${color}`}><Icon size={18} /></span><span className="min-w-0"><span className="block text-sm font-bold text-slate-200 group-hover:text-teal-200">{label}</span><span className="mt-0.5 block truncate text-[11px] text-slate-500">{detail}</span></span><ArrowUpRight size={14} className="ml-auto shrink-0 text-slate-600 transition group-hover:text-teal-300" /></Link>)}
+      <section className="mx-auto grid max-w-7xl gap-4 px-4 pb-8 sm:px-6 lg:px-8 2xl:grid-cols-[1.05fr_.95fr]">
+        <Link href="/games" className="home-tetris-card group relative min-h-[210px] overflow-hidden rounded-[28px] p-6 text-slate-950 sm:p-8">
+          <div className="relative z-10 flex h-full max-w-md flex-col justify-between">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.2em]"><Gamepad2 size={16} /> Quick play</div>
+            <div className="mt-8">
+              <p className="font-display text-3xl font-extrabold tracking-[-.05em] sm:text-4xl">테트리스 한 판?</p>
+              <p className="mt-2 text-sm font-bold text-slate-800/70">설치 없이 바로 시작하는 짜릿한 블록 대전</p>
+            </div>
+            <span className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white transition-transform group-hover:translate-x-1">게임 입장 <ArrowRight size={14} /></span>
           </div>
+          <div className="tetris-piece absolute -right-4 top-5 grid rotate-6 grid-cols-3 gap-1 opacity-90 sm:right-8 sm:top-7" aria-hidden="true">{Array.from({ length: 8 }, (_, index) => <span key={index} className={index === 0 || index === 2 ? 'invisible' : ''} />)}</div>
+        </Link>
+        <div className="surface home-clock flex flex-col justify-between rounded-[28px] p-5 sm:p-7">
+          <div className="flex items-center justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-300">World sync</p><h2 className="mt-1 text-xl font-black text-white">우리의 지금</h2></div><span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-bold text-slate-400">{regionName}</span></div>
+          <WorldClock />
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-5 px-4 pb-12 sm:px-6 lg:px-8 2xl:grid-cols-[1.25fr_.75fr]">
+        <div>
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div><p className="text-[10px] font-black uppercase tracking-[.22em] text-teal-300">Pick your route</p><h2 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">지금 필요한 곳으로</h2></div>
+            <span className="hidden text-xs font-bold text-slate-500 sm:block">한 번에 바로 이동하세요</span>
+          </div>
+          <nav className="grid gap-3 sm:grid-cols-12" aria-label="주요 서비스">
+            {services.map(({ href, label, detail, icon: Icon, tone, layout }, index) => (
+              <Link key={href} href={href} className={`home-route-card group relative min-h-[150px] overflow-hidden rounded-3xl border border-white/10 bg-white/[.045] p-5 transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[.075] ${layout}`}>
+                <div className="relative z-10 flex h-full flex-col">
+                  <div className="flex items-center justify-between"><span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${tone}`}><Icon size={19} /></span><span className="font-display text-[10px] font-extrabold tracking-[.18em] text-slate-600">0{index + 1}</span></div>
+                  <h3 className="mt-5 text-lg font-black text-white transition-colors group-hover:text-teal-100">{label}</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
+                  <ArrowUpRight size={16} className="mt-4 text-slate-600 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-teal-300" />
+                </div>
+              </Link>
+            ))}
+          </nav>
         </div>
 
-        <div className="surface rounded-3xl p-5 sm:p-7">
-          <div className="mb-6 flex items-end justify-between border-b border-white/10 pb-5"><div><p className="text-[10px] font-bold uppercase tracking-[.22em] text-teal-300">Community desk</p><h2 className="mt-1 text-2xl font-extrabold text-white">오늘의 이야기</h2></div><Link href="/community" className="text-xs font-bold text-slate-500 transition hover:text-teal-300">전체 보기 <ArrowUpRight size={13} className="inline" /></Link></div>
-          <div className="space-y-1">
-            {visiblePosts.length === 0 && <p className="py-6 text-sm text-slate-500">아직 등록된 게시글이 없습니다.</p>}
-            {visiblePosts.map((post) => <Link href={post.sourceUrl || `/community/${post.id}`} key={post.id} className="group flex items-center gap-3 rounded-xl px-2 py-3 transition hover:bg-white/5"><span className="w-9 shrink-0 text-center text-[10px] font-bold text-teal-300">{typeLabels[post.type] || '소식'}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-300 transition group-hover:text-white">{post.title}</span>{post.sourceName && <span className="hidden text-[10px] text-slate-600 sm:block">{post.sourceName}</span>}<span className="shrink-0 text-[10px] text-slate-600">{post.views || 0}</span></Link>)}
+        <div className="surface flex flex-col rounded-[28px] p-5 sm:p-6">
+          <div className="flex items-end justify-between border-b border-white/10 pb-5">
+            <div><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.2em] text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" /> Live board</div><h2 className="mt-1 text-xl font-black text-white">방금 올라온 이야기</h2></div>
+            <Link href="/community" className="inline-flex items-center gap-1 text-xs font-black text-slate-500 transition hover:text-teal-300">전체 보기 <ArrowRight size={13} /></Link>
           </div>
-          <div className="mt-6"><BannerAd type="horizontal" /></div>
-        </div>
-
-        <div className="space-y-5">
-          <div className="surface rounded-3xl p-6">
-            <div className="flex items-center gap-2 text-teal-300"><UsersRound size={18} /><span className="text-[10px] font-bold uppercase tracking-[.22em]">Member space</span></div>
-            <h2 className="mt-5 text-2xl font-extrabold leading-tight text-white">혼자가 아니라는<br />감각을 만나세요.</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-500">관심사가 맞는 사람과 대화하고, 필요한 정보를 빠르게 찾아보세요.</p>
-            <Link href="/users" className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-teal-300 transition hover:text-teal-200">멤버 둘러보기 <ArrowUpRight size={15} /></Link>
+          <div className="flex-1 divide-y divide-white/8">
+            {visiblePosts.length === 0 && <p className="py-10 text-center text-sm text-slate-500">아직 등록된 이야기가 없습니다.</p>}
+            {visiblePosts.map((post) => (
+              <Link href={post.sourceUrl || `/community/${post.id}`} key={post.id} className="group flex items-center gap-3 py-4">
+                <span className="shrink-0 rounded-lg bg-teal-300/10 px-2 py-1 text-[10px] font-black text-teal-200">{typeLabels[post.type] || '소식'}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-300 transition group-hover:text-white">{post.title}</span>
+                <ArrowUpRight size={14} className="shrink-0 text-slate-600 transition group-hover:text-teal-300" />
+              </Link>
+            ))}
           </div>
-          <div className="rounded-3xl border border-amber-300/20 bg-amber-300/[.07] p-6"><div className="flex items-center gap-2 text-amber-200"><CircleDollarSign size={17} /><span className="text-[10px] font-bold uppercase tracking-[.22em]">Secure exchange</span></div><p className="mt-4 text-sm font-bold leading-6 text-amber-50">신뢰할 수 있는 거래는<br />에스크로에서 시작됩니다.</p><Link href="/market" className="mt-5 inline-flex items-center gap-2 text-xs font-bold text-amber-200">장터 입장 <ArrowUpRight size={14} /></Link></div>
+          <div className="mt-5"><BannerAd type="horizontal" /></div>
         </div>
       </section>
     </div>
