@@ -5,6 +5,10 @@ import { Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Users } from 'luc
 import { claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, reserveGameStake, settleTetrisMatch, upsertDocument, type TetrisQueueProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
+function formatUsdt(value: number | string) {
+  return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 const WIDTH = 10;
 const HEIGHT = 20;
 const SHAPES = [
@@ -195,9 +199,12 @@ export default function GamesPage() {
   const resultSent = useRef(false);
   const gameStartedRef = useRef(false);
   const startRequestedRef = useRef(false);
+  const autoStartRequestedRef = useRef(false);
   const holdRequestedRef = useRef(false);
   const settlementRequestedRef = useRef(false);
   const roomCleanupTimer = useRef<number | null>(null);
+  const handledInviteIds = useRef(new Set<string>());
+  const resultNoticeRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -359,6 +366,7 @@ export default function GamesPage() {
     setReadyForBattle(false);
     setOpponentReady(false);
     startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
     setStakeReserved(false);
     setRoomStartAt(null);
     setCountdown(null);
@@ -366,6 +374,7 @@ export default function GamesPage() {
     resultSent.current = false;
     holdRequestedRef.current = false;
     settlementRequestedRef.current = false;
+    resultNoticeRef.current = null;
     setMatchStatus('연습 모드');
     beginCountdown();
   };
@@ -383,6 +392,7 @@ export default function GamesPage() {
     setReadyForBattle(false);
     setOpponentReady(false);
     startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
     setStakeReserved(false);
     setRoomStartAt(null);
     setCountdown(null);
@@ -390,6 +400,7 @@ export default function GamesPage() {
     resultSent.current = false;
     holdRequestedRef.current = false;
     settlementRequestedRef.current = false;
+    resultNoticeRef.current = null;
     setMatchPhase('waiting');
     setMatchStatus('매칭 상대를 찾는 중...');
     setInviteStatus('다른 회원이 입장하면 양쪽 화면이 자동으로 대전 준비로 전환됩니다.');
@@ -423,6 +434,7 @@ export default function GamesPage() {
     setInviteStatus('');
     setOpponentReady(false);
     startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
     holdRequestedRef.current = false;
   };
 
@@ -456,7 +468,8 @@ export default function GamesPage() {
        setOpponentState(null);
        setReadyForBattle(false);
        setOpponentReady(false);
-       startRequestedRef.current = false;
+    startRequestedRef.current = false;
+    autoStartRequestedRef.current = false;
        setStakeReserved(false);
       setRoomStartAt(null);
       setCountdown(null);
@@ -471,14 +484,23 @@ export default function GamesPage() {
 
   const acceptInvite = async () => {
     if (!incomingInvite) return;
+    const invite = incomingInvite;
     const token = getSessionToken();
     if (!token || !user) return;
+    handledInviteIds.current.add(invite.id);
+    setIncomingInvite(null);
     await deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
-    await mergeDocument('tetrisInvites', incomingInvite.id, { status: 'accepted', updatedAt: new Date() }, token).catch(() => undefined);
-    setMatchId(incomingInvite.matchId);
+    try {
+      await mergeDocument('tetrisInvites', invite.id, { status: 'accepted', updatedAt: new Date() }, token);
+    } catch {
+      handledInviteIds.current.delete(invite.id);
+      setInviteStatus('수락 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
+      return;
+    }
+    setMatchId(invite.matchId);
     setMatchRole('B');
     setSentInviteId(null);
-    setOpponent(incomingInvite.sender);
+    setOpponent(invite.sender);
     setReadyForBattle(false);
     setOpponentReady(false);
     setStakeReserved(false);
@@ -488,15 +510,26 @@ export default function GamesPage() {
     resultSent.current = false;
     holdRequestedRef.current = false;
     settlementRequestedRef.current = false;
+    resultNoticeRef.current = null;
     setIncomingInvite(null);
     setMatchPhase('betting');
     setMatchStatus('대전 신청 수락 · 상대의 배팅금액을 기다리는 중');
   };
 
   const rejectInvite = async () => {
+    if (!incomingInvite) return;
+    const invite = incomingInvite;
     const token = getSessionToken();
-    if (incomingInvite && token) await mergeDocument('tetrisInvites', incomingInvite.id, { status: 'rejected', updatedAt: new Date() }, token).catch(() => undefined);
     setIncomingInvite(null);
+    handledInviteIds.current.add(invite.id);
+    if (token) {
+      try {
+        await mergeDocument('tetrisInvites', invite.id, { status: 'rejected', updatedAt: new Date() }, token);
+      } catch {
+        handledInviteIds.current.delete(invite.id);
+        setInviteStatus('거절 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
+      }
+    }
   };
 
   const confirmBet = async () => {
@@ -613,7 +646,7 @@ export default function GamesPage() {
       ]).catch(() => [[], []] as [TetrisInvite[], TetrisInvite[]]);
       const invites = [...received, ...sent];
       const pending = invites
-        .filter((invite) => invite.recipientId === user.id && invite.status === 'pending' && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
+         .filter((invite) => invite.recipientId === user.id && invite.status === 'pending' && !handledInviteIds.current.has(invite.id) && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
       if (pending && pending.id !== incomingInvite?.id) setIncomingInvite(pending);
        const accepted = invites.find((invite) => invite.id === sentInviteId && invite.status === 'accepted');
@@ -686,7 +719,7 @@ export default function GamesPage() {
           setMatchPhase('holding');
           setMatchStatus(bothStakesHeld ? '양쪽 참가비 홀딩 완료 · 곧 카운트다운이 시작됩니다.' : '참가비를 서버 잔고에서 홀딩하는 중입니다...');
         }
-        if (room.startRequestedBy && !ownStakeHeld && !holdRequestedRef.current) {
+         if (room.startRequestedBy && !ownStakeHeld && !holdRequestedRef.current) {
           holdRequestedRef.current = true;
           const amount = Number(room.betAmount || betAmount);
           void reserveGameStake(user.id, matchId, amount, token)
@@ -699,9 +732,21 @@ export default function GamesPage() {
             .catch((error) => {
               holdRequestedRef.current = false;
               setMatchStatus(error instanceof Error ? error.message : '참가비 홀딩에 실패했습니다. 다시 시도해주세요.');
-            });
-        }
-        if (room.startRequestedBy && bothStakesHeld && !room.startAt && room.phase !== 'finished' && room.startRequestedBy === user.id && !startRequestedRef.current) {
+             });
+         }
+         if (readyForBattle && nextReady && !room.startRequestedBy && !autoStartRequestedRef.current) {
+           autoStartRequestedRef.current = true;
+           void updateRoom({ phase: 'holding', startRequestedBy: user.id, startRequestedAt: new Date() })
+             .then(() => {
+               setMatchPhase('holding');
+               setMatchStatus('양쪽 준비 완료 · 참가비를 자동으로 홀딩하는 중입니다.');
+             })
+             .catch(() => {
+               autoStartRequestedRef.current = false;
+               setMatchStatus('자동 게임 시작 신호를 저장하지 못했습니다. 다시 확인하는 중입니다.');
+             });
+         }
+         if (room.startRequestedBy && bothStakesHeld && !room.startAt && room.phase !== 'finished' && room.startRequestedBy === user.id && !startRequestedRef.current) {
           startRequestedRef.current = true;
           const startAt = new Date(Date.now() + 5000).toISOString();
           void updateRoom({ phase: 'countdown', startAt })
@@ -710,21 +755,34 @@ export default function GamesPage() {
               startRequestedRef.current = false;
               setMatchStatus('카운트다운 신호를 저장하지 못했습니다. 잠시 후 다시 시도합니다.');
             });
-        } else if (readyForBattle && nextReady && !room.startRequestedBy) setMatchStatus('양쪽 모두 준비 완료 · 한 명이 게임 시작을 눌러주세요');
+        } else if (readyForBattle && nextReady && !room.startRequestedBy) setMatchStatus('양쪽 모두 준비 완료 · 자동으로 게임을 시작합니다.');
         else if (readyForBattle) setMatchStatus('내 준비 완료 · 상대 준비를 기다리는 중');
         else if (nextReady) setMatchStatus('상대 준비 완료 · 내 배팅금액을 확정해주세요');
-      if (room.phase === 'finished') setMatchPhase('finished');
-      const ownResult = matchRole === 'A' ? room.playerAResult : room.playerBResult;
-      const opponentResult = matchRole === 'A' ? room.playerBResult : room.playerAResult;
-       if (ownResult === 'lose') setMatchResult('LOSE');
-       if (opponentResult === 'lose') {
+       if (room.phase === 'finished') setMatchPhase('finished');
+       const ownResult = matchRole === 'A' ? room.playerAResult : room.playerBResult;
+       const opponentResult = matchRole === 'A' ? room.playerBResult : room.playerAResult;
+        if (ownResult === 'lose') {
+          setMatchResult('LOSE');
+          const notice = `패배 · ${formatUsdt(room.betAmount || betAmount)} USDT가 차감되었습니다.`;
+          if (resultNoticeRef.current !== notice) {
+            resultNoticeRef.current = notice;
+            setMatchStatus(notice);
+            showToast(notice);
+          }
+        }
+        if (opponentResult === 'lose') {
          setMatchResult('WIN');
          if (room.payoutStatus !== 'PAID' && !settlementRequestedRef.current && nextOpponent) {
            settlementRequestedRef.current = true;
            const amount = Number(room.betAmount || betAmount);
            void settleTetrisMatch(matchId, user.id, nextOpponent.id, amount, token)
-             .then(() => updateRoom({ payoutStatus: 'PAID', payoutAmount: amount * 2 }))
-             .then(() => setMatchStatus(`승리 정산 완료 · ${amount * 2} USDT 지급`))
+              .then(() => updateRoom({ payoutStatus: 'PAID', payoutAmount: amount * 2 }))
+              .then(() => {
+                const notice = `승리 정산 완료 · ${formatUsdt(amount * 2)} USDT 지급`;
+                resultNoticeRef.current = notice;
+                setMatchStatus(notice);
+                showToast(notice);
+              })
              .catch((error) => {
                settlementRequestedRef.current = false;
                setMatchStatus(error instanceof Error ? error.message : '승리 정산을 완료하지 못했습니다.');
@@ -803,4 +861,3 @@ export default function GamesPage() {
     </div>
   );
 }
-
