@@ -17,7 +17,7 @@ const assets: AssetDefinition[] = [
 ];
 
 async function fetchJson<T>(url: string) {
-  const response = await fetch(url, { headers: { 'User-Agent': 'GYOPO-Market/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+  const response = await fetch(url, { headers: { 'User-Agent': 'GYOPO-Market/1.0 (+https://gyopo.pages.dev)' } });
   if (!response.ok) throw new Error(`market source ${response.status}`);
   return response.json() as Promise<T>;
 }
