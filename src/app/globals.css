@@ -54,6 +54,11 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .touch-control { border: 1px solid rgba(45, 212, 191, .24); border-radius: .75rem; background: rgba(45, 212, 191, .1); padding: .6rem .35rem; font-size: .72rem; font-weight: 900; color: #ccfbf1; }
 .touch-control:disabled { opacity: .35; }
 
+@media (min-width: 1024px) {
+  .webrtc-page { margin-right: -20rem; }
+  .webrtc-shell > section { display: none; }
+}
+
 @media (max-width: 1279px) {
   .games-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .games-layout > .game-main { grid-column: 1 / -1; }
