@@ -23,7 +23,7 @@ export type PortalUser = {
   image: string;
   usdtBalance: number;
   isSubscribed: boolean;
-  gender?: string;
+  gender?: Gender;
   genderPreference?: GenderPreference;
   premiumExpiresAt?: string;
   age?: number;
@@ -38,15 +38,44 @@ export type OnlineUser = {
   id: string;
   userId: string;
   name: string;
-  email: string;
   image: string;
-  gender?: string;
-  genderPreference?: GenderPreference;
-  isSubscribed?: boolean;
+  gender?: Gender;
   age?: number;
   country?: string;
   lastSeenAt: string;
 };
+
+export type PublicProfile = {
+  name: string;
+  image: string;
+  gender: Gender;
+  country: string;
+  isPublic: true;
+  age?: number;
+  isSubscribed?: boolean;
+  updatedAt?: string;
+};
+
+export type EscrowStatus = 'PAYMENT_HELD' | 'SHIPPING' | 'IN_TRANSIT' | 'DELIVERED';
+
+export type EscrowOrder = {
+  id: string;
+  buyerId: string;
+  sellerId: string;
+  productId: string;
+  amount: number;
+  status: EscrowStatus;
+  createdAt: string;
+  updatedAt?: string;
+  timeline?: Array<{ status: EscrowStatus; at: string; note?: string }>;
+};
+
+export function hasCompletedProfile(profile?: Pick<PortalUser, 'gender' | 'country'> | null): profile is Pick<PortalUser, 'gender' | 'country'> & { gender: Gender; country: string } {
+  return (profile?.gender === 'male' || profile?.gender === 'female')
+    && typeof profile.country === 'string'
+    && profile.country.trim().length > 0
+    && profile.country.trim() !== 'Global';
+}
 
 type StoredSession = {
   idToken: string;
@@ -219,7 +248,7 @@ async function authenticatedFetch(url: string, options: RequestInit = {}, token?
     },
   });
   let response = await send(token);
-  if ((response.status === 401 || response.status === 403) && token) {
+  if (response.status === 401 && token) {
     const refreshed = await refreshSessionToken();
     if (refreshed) response = await send(refreshed);
   }
@@ -327,7 +356,34 @@ export async function mergeDocument<T extends Record<string, unknown>>(
   data: T,
   token?: string,
 ): Promise<void> {
-  await publishDocument(collection, id, data, token);
+  await firestoreRequest(`${firestoreBase}:commit`, {
+    method: 'POST',
+    body: JSON.stringify({
+      writes: [{
+        update: { name: firestoreDocumentName(collection, id), fields: encodeFields(data) },
+        updateMask: { fieldPaths: Object.keys(data) },
+      }],
+    }),
+  }, token);
+}
+
+async function replaceDocument<T extends Record<string, unknown>>(
+  collection: string,
+  id: string,
+  data: T,
+  token?: string,
+): Promise<void> {
+  await firestoreRequest(`${firestoreBase}:commit`, {
+    method: 'POST',
+    body: JSON.stringify({
+      writes: [{
+        update: {
+          name: firestoreDocumentName(collection, id),
+          fields: encodeFields(data),
+        },
+      }],
+    }),
+  }, token);
 }
 
 export async function incrementDocument(collection: string, id: string, field: string, amount: number, token?: string): Promise<void> {
@@ -610,6 +666,43 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   }
 }
 
+export async function refundGameStake(userId: string, matchId: string, token?: string): Promise<void> {
+  const authUserId = getTokenUserId(token) || userId;
+  const stakeId = `game-${matchId}-${authUserId}`;
+  const stakeDocument = await getRawDocument('gameStakes', stakeId, token).catch(() => null);
+  if (!stakeDocument?.name) return;
+  const stake = decodeDocument<{ amount?: number; status?: string; userId?: string }>(stakeDocument);
+  if (stake.status === 'REFUNDED') return;
+  if (stake.status !== 'RESERVED' || stake.userId !== authUserId) throw new Error('환불 가능한 참가비가 아닙니다.');
+  const profileDocument = await getRawDocument('profiles', authUserId, token);
+  if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
+  const amount = Number(stake.amount || 0);
+  const balance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        {
+          update: {
+            name: profileDocument.name,
+            fields: { ...(profileDocument.fields || {}), ...encodeFields({ usdtBalance: balance + amount, updatedAt: new Date() }) },
+          },
+          currentDocument: { updateTime: profileDocument.updateTime },
+        },
+        {
+          update: {
+            name: stakeDocument.name,
+            fields: { ...(stakeDocument.fields || {}), ...encodeFields({ status: 'REFUNDED', refundedAt: new Date() }) },
+          },
+          currentDocument: { updateTime: stakeDocument.updateTime },
+        },
+      ],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('참가비 환불을 완료하지 못했습니다.');
+}
+
 export async function startTetrisCountdown(matchId: string, token?: string): Promise<string | null> {
   const roomDocument = await getRawDocument('tetrisRooms', matchId, token).catch(() => null);
   if (!roomDocument?.name || !roomDocument.updateTime) return null;
@@ -826,6 +919,19 @@ export async function reserveEscrowPurchase(
   return orderId;
 }
 
+export async function listEscrowOrdersForMember(memberId: string, token = getSessionToken()): Promise<EscrowOrder[]> {
+  const viewerId = getTokenUserId(token);
+  if (!viewerId || !token) return [];
+  const [purchases, sales] = await Promise.all([
+    queryDocuments<Omit<EscrowOrder, 'id'>>('escrowOrders', 'buyerId', viewerId, token),
+    queryDocuments<Omit<EscrowOrder, 'id'>>('escrowOrders', 'sellerId', viewerId, token),
+  ]);
+  const unique = new Map([...purchases, ...sales].map((order) => [order.id, order]));
+  return [...unique.values()]
+    .filter((order) => memberId === viewerId || order.buyerId === memberId || order.sellerId === memberId)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+}
+
 export function getStoredSession(): StoredSession | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -874,6 +980,114 @@ export function signOut(): void {
   if (typeof window !== 'undefined') window.localStorage.removeItem(sessionKey);
 }
 
+function isGender(value: unknown): value is Gender {
+  return value === 'male' || value === 'female';
+}
+
+function isCountry(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim() !== 'Global';
+}
+
+function privateProfileData(user: PortalUser): Record<string, unknown> {
+  return {
+    name: user.name,
+    email: user.email,
+    image: user.image,
+    usdtBalance: Number(user.usdtBalance || 0),
+    isSubscribed: Boolean(user.isSubscribed),
+    ...(isGender(user.gender) ? { gender: user.gender } : {}),
+    ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
+    ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
+    ...(user.age ? { age: user.age } : {}),
+    ...(isCountry(user.country) ? { country: user.country.trim() } : {}),
+    updatedAt: new Date(),
+  };
+}
+
+function publicProfileData(user: PortalUser & { gender: Gender; country: string }): Record<string, unknown> {
+  return {
+    name: user.name,
+    image: user.image,
+    gender: user.gender,
+    country: user.country.trim(),
+    isPublic: true,
+    ...(user.age ? { age: user.age } : {}),
+    isSubscribed: Boolean(user.isSubscribed),
+    updatedAt: new Date(),
+  };
+}
+
+function storeSessionUser(user: PortalUser): void {
+  if (typeof window === 'undefined') return;
+  const session = getStoredSession();
+  if (session?.user.id === user.id) {
+    window.localStorage.setItem(sessionKey, JSON.stringify({ ...session, user }));
+  }
+}
+
+export async function completeProfileOnboarding(
+  user: PortalUser,
+  gender: Gender,
+  country: string,
+  token = getSessionToken(),
+): Promise<PortalUser> {
+  const authUserId = getTokenUserId(token);
+  const selectedCountry = country.trim();
+  if (!token || authUserId !== user.id) throw new Error('로그인 세션을 다시 확인해주세요.');
+  if (!isGender(gender) || !isCountry(selectedCountry)) throw new Error('성별과 국가를 모두 선택해주세요.');
+
+  const [profileDocument, publicDocument] = await Promise.all([
+    getRawDocument('profiles', user.id, token),
+    getRawDocument('publicProfiles', user.id, token).catch(() => null),
+  ]);
+  const savedProfile = profileDocument ? decodeDocument<Partial<PortalUser>>(profileDocument) : null;
+  const savedPublic = publicDocument ? decodeDocument<Partial<PublicProfile>>(publicDocument) : null;
+  const profileGender = savedProfile?.gender;
+  const publicGender = savedPublic?.gender;
+  const profileCountry = savedProfile?.country;
+  const publicCountry = savedPublic?.country;
+  const savedGender = isGender(profileGender) ? profileGender : isGender(publicGender) ? publicGender : undefined;
+  const savedCountry = isCountry(profileCountry) ? profileCountry.trim() : isCountry(publicCountry) ? publicCountry.trim() : undefined;
+  if (savedGender && savedGender !== gender) throw new Error('이미 저장된 성별은 변경할 수 없습니다.');
+  if (savedCountry && savedCountry !== selectedCountry) throw new Error('이미 저장된 국가는 변경할 수 없습니다.');
+
+  const completedUser: PortalUser & { gender: Gender; country: string } = {
+    ...user,
+    gender: savedGender || gender,
+    country: savedCountry || selectedCountry,
+  };
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        {
+          update: {
+            name: firestoreDocumentName('profiles', user.id),
+            fields: { ...(profileDocument?.fields || {}), ...encodeFields(privateProfileData(completedUser)) },
+          },
+          currentDocument: profileDocument?.updateTime
+            ? { updateTime: profileDocument.updateTime }
+            : { exists: false },
+        },
+        {
+          update: {
+            name: firestoreDocumentName('publicProfiles', user.id),
+            fields: encodeFields(publicProfileData(completedUser)),
+          },
+        },
+      ],
+    }),
+  }, token);
+  if (!response.ok) {
+    const current = await refreshStoredUser();
+    if (hasCompletedProfile(current)) return current;
+    throw new Error('프로필을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
+  }
+  storeSessionUser(completedUser);
+  return completedUser;
+}
+
 export async function signInWithGoogleCredential(credential: string): Promise<PortalUser> {
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${firebaseConfig.apiKey}`,
@@ -912,62 +1126,26 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     country: savedProfile?.country,
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
-  await Promise.allSettled([
-    upsertDocument('profiles', user.id, {
-      name: user.name,
-      email: user.email,
-      image: user.image,
-      usdtBalance: user.usdtBalance,
-      isSubscribed: user.isSubscribed,
-      ...(user.gender ? { gender: user.gender } : {}),
-      ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
-      ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
-      updatedAt: new Date(),
-    }, result.idToken),
-    upsertDocument('publicProfiles', user.id, {
-      name: user.name,
-      email: user.email,
-      image: user.image,
-      country: user.country || 'Global',
-      gender: user.gender || '',
-      genderPreference: user.genderPreference || 'any',
-      isSubscribed: Boolean(user.isSubscribed),
-      updatedAt: new Date(),
-    }, result.idToken),
-  ]);
+  await upsertDocument('profiles', user.id, privateProfileData(user), result.idToken).catch(() => undefined);
+  if (hasCompletedProfile(user)) {
+    await replaceDocument('publicProfiles', user.id, publicProfileData(user), result.idToken).catch(() => undefined);
+  }
   return user;
 }
 
 export async function saveProfile(user: PortalUser, token = getSessionToken()): Promise<void> {
-  await upsertDocument('profiles', user.id, {
-    name: user.name,
-    email: user.email,
-    image: user.image,
-    usdtBalance: Number(user.usdtBalance || 0),
-    isSubscribed: Boolean(user.isSubscribed),
-    ...(user.gender ? { gender: user.gender } : {}),
-    ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
-    ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
-    ...(user.age ? { age: user.age } : {}),
-    ...(user.country ? { country: user.country } : {}),
-    updatedAt: new Date(),
-  }, token);
-  await upsertDocument('publicProfiles', user.id, {
-    name: user.name,
-    email: user.email,
-    image: user.image,
-    country: user.country || 'Global',
-    gender: user.gender || '',
-    genderPreference: user.genderPreference || 'any',
-    isSubscribed: Boolean(user.isSubscribed),
-    updatedAt: new Date(),
-  }, token);
-  if (typeof window !== 'undefined') {
-    const session = getStoredSession();
-    if (session?.user.id === user.id) {
-      window.localStorage.setItem(sessionKey, JSON.stringify({ ...session, user }));
-    }
-  }
+  const savedProfile = await getDocument<Partial<PortalUser>>('profiles', user.id, token);
+  const savedGender = savedProfile?.gender;
+  const savedCountry = savedProfile?.country;
+  const persistedUser: PortalUser = {
+    ...user,
+    gender: isGender(savedGender) ? savedGender : user.gender,
+    country: isCountry(savedCountry) ? savedCountry.trim() : user.country?.trim(),
+  };
+  if (!hasCompletedProfile(persistedUser)) throw new Error('먼저 성별과 국가 설정을 완료해주세요.');
+  await upsertDocument('profiles', user.id, privateProfileData(persistedUser), token);
+  await replaceDocument('publicProfiles', user.id, publicProfileData(persistedUser), token);
+  storeSessionUser(persistedUser);
 }
 
 export function loadGoogleIdentityScript(): Promise<void> {
@@ -1028,7 +1206,7 @@ export type SiteStats = {
   updatedAt?: string;
 };
 
-export async function recordVisit(user?: PortalUser | null, country = 'Global'): Promise<void> {
+export async function recordVisit(user?: PortalUser | null): Promise<void> {
   if (typeof window === 'undefined') return;
   const visitorKey = window.localStorage.getItem('gyopo-visitor-id') || crypto.randomUUID();
   window.localStorage.setItem('gyopo-visitor-id', visitorKey);
@@ -1037,23 +1215,21 @@ export async function recordVisit(user?: PortalUser | null, country = 'Global'):
   const month = day.slice(0, 7);
   const visitMarker = `gyopo-visited-${day}`;
   try {
-    await upsertDocument('presence', visitorKey, {
+    const publicUser = hasCompletedProfile(user) ? user : null;
+    await replaceDocument(publicUser ? 'publicPresence' : 'presence', publicUser?.id || visitorKey, {
       lastSeenAt: now,
       updatedAt: now,
-      ...(user
+      ...(publicUser
         ? {
-            userId: user.id,
-            name: user.name,
-            email: user.email,
-            image: user.image,
-            gender: user.gender || '',
-            genderPreference: user.genderPreference || 'any',
-            isSubscribed: Boolean(user.isSubscribed),
-            age: user.age || 0,
-            country: user.country || country,
+            userId: publicUser.id,
+            name: publicUser.name,
+            image: publicUser.image,
+            gender: publicUser.gender,
+            age: publicUser.age || 0,
+            country: publicUser.country,
           }
         : {}),
-    });
+    }, user ? getSessionToken() : undefined);
     if (window.localStorage.getItem(visitMarker)) return;
     await createDocument('visits', `${visitorKey}-${day}`, { visitorKey, day, month, createdAt: now });
     const current = await getDocument<SiteStats>('stats', 'summary');
@@ -1075,12 +1251,12 @@ export async function getSiteStats(): Promise<SiteStats> {
 }
 
 export async function getOnlineCount(): Promise<number> {
-  const presence = await queryDocumentsWhere<{ lastSeenAt?: string; userId?: string }>('presence', [{ field: 'lastSeenAt', op: 'GREATER_THAN', value: new Date(Date.now() - 90_000) }]);
+  const presence = await queryDocumentsWhere<{ lastSeenAt?: string; userId?: string }>('publicPresence', [{ field: 'lastSeenAt', op: 'GREATER_THAN', value: new Date(Date.now() - 90_000) }]);
   return presence.filter((item) => item.userId).length;
 }
 
 export async function listOnlineUsers(): Promise<OnlineUser[]> {
-  const presence = await queryDocumentsWhere<Omit<OnlineUser, 'id'>>('presence', [{ field: 'lastSeenAt', op: 'GREATER_THAN', value: new Date(Date.now() - 90_000) }]);
+  const presence = await queryDocumentsWhere<Omit<OnlineUser, 'id'>>('publicPresence', [{ field: 'lastSeenAt', op: 'GREATER_THAN', value: new Date(Date.now() - 90_000) }]);
   return presence
     .filter((item) => item.userId)
     .map((item) => ({ ...item, id: item.userId as string, userId: item.userId as string }))
