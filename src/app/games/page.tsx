@@ -9,6 +9,17 @@ function formatUsdt(value: number | string) {
   return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function gameErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('403') || message.includes('PERMISSION_DENIED')) {
+    return '대전 방 권한이 만료되었거나 이미 종료된 방입니다. 방을 나가고 새 대전을 시작해주세요.';
+  }
+  if (message.includes('400') || message.includes('FAILED_PRECONDITION')) {
+    return '대전 방 상태가 동시에 변경되었습니다. 잠시 후 자동으로 다시 확인합니다.';
+  }
+  return message || fallback;
+}
+
 const WIDTH = 10;
 const HEIGHT = 20;
 const SHAPES = [
@@ -262,6 +273,8 @@ export default function GamesPage() {
   const opponentAttackTotalRef = useRef(0);
   const opponentAttackInitializedRef = useRef(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const currentUserId = user ? (getSessionUserId() || user.id) : '';
+  const [roomBetConfigured, setRoomBetConfigured] = useState(false);
 
   useEffect(() => {
     gameRef.current = game;
@@ -356,7 +369,7 @@ export default function GamesPage() {
     if (!matchId || !matchRole || !user) throw new Error('대전 방 정보가 없습니다.');
     const token = getSessionToken();
     if (!token) throw new Error('로그인 세션이 만료되었습니다.');
-    const sessionUserId = getSessionUserId() || user.id;
+    const sessionUserId = currentUserId;
     const profile: TetrisProfile = { id: sessionUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     const opponentProfile = opponent ? {
       id: opponent.id,
@@ -416,7 +429,7 @@ export default function GamesPage() {
   const practiceStart = () => {
     if (!user) return window.alert('로그인 후 게임을 시작할 수 있습니다.');
     const token = getSessionToken();
-    if (token) void deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+    if (token) void deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
     setMatchId(null);
     setMatchRole(null);
     setSentInviteId(null);
@@ -424,6 +437,7 @@ export default function GamesPage() {
     setOpponentState(null);
     setReadyForBattle(false);
     setOpponentReady(false);
+    setRoomBetConfigured(false);
     startRequestedRef.current = false;
     autoStartRequestedRef.current = false;
     setStakeReserved(false);
@@ -445,7 +459,7 @@ export default function GamesPage() {
     if (!user) return window.alert('로그인 후 게임을 시작할 수 있습니다.');
     const token = getSessionToken();
     if (!token) return window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
-    const profile: TetrisQueueProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    const profile: TetrisQueueProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     setOpponentState(null);
     setOpponent(null);
     setMatchId(null);
@@ -453,6 +467,7 @@ export default function GamesPage() {
     setSentInviteId(null);
     setReadyForBattle(false);
     setOpponentReady(false);
+    setRoomBetConfigured(false);
     startRequestedRef.current = false;
     autoStartRequestedRef.current = false;
     setStakeReserved(false);
@@ -470,8 +485,8 @@ export default function GamesPage() {
     setMatchStatus('매칭 상대를 찾는 중...');
     setInviteStatus('다른 회원이 입장하면 양쪽 화면이 자동으로 대전 준비로 전환됩니다.');
     try {
-      await upsertDocument('tetrisQueue', user.id, {
-        userId: user.id,
+      await upsertDocument('tetrisQueue', currentUserId, {
+        userId: currentUserId,
         name: profile.name,
         image: profile.image,
         country: profile.country || 'Global',
@@ -490,7 +505,7 @@ export default function GamesPage() {
   const cancelMatch = async () => {
     if (user) {
       const token = getSessionToken();
-      if (token) await deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+      if (token) await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
       if (token && sentInviteId) await mergeDocument('tetrisInvites', sentInviteId, { status: 'rejected', updatedAt: new Date() }, token).catch(() => undefined);
     }
     setSentInviteId(null);
@@ -498,6 +513,7 @@ export default function GamesPage() {
     setMatchStatus('대전 준비 안됨');
     setInviteStatus('');
     setOpponentReady(false);
+    setRoomBetConfigured(false);
     startRequestedRef.current = false;
     autoStartRequestedRef.current = false;
     holdRequestedRef.current = false;
@@ -512,6 +528,7 @@ export default function GamesPage() {
     setOpponentState(null);
     setReadyForBattle(false);
     setOpponentReady(false);
+    setRoomBetConfigured(false);
     setStakeReserved(false);
     setRoomStartAt(null);
     setCountdown(null);
@@ -542,7 +559,7 @@ export default function GamesPage() {
       } else if (matchPhase === 'finished') {
         await deleteDocument('tetrisRooms', leavingMatchId, token).catch(() => undefined);
       } else {
-        if (stakeReserved) await refundGameStake(getSessionUserId() || user.id, leavingMatchId, token);
+        if (stakeReserved) await refundGameStake(currentUserId, leavingMatchId, token);
         await deleteDocument('tetrisRooms', leavingMatchId, token);
       }
       resetBattleRoom('대전방을 나갔습니다.');
@@ -556,16 +573,16 @@ export default function GamesPage() {
   const sendInvite = async (online: OnlineUser) => {
     if (!user) return window.alert('로그인 후 대전 신청을 보낼 수 있습니다.');
     const recipientId = online.userId || online.id;
-    if (recipientId === user.id) return;
+    if (recipientId === currentUserId) return;
     const token = getSessionToken();
     if (!token) return window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
-    const matchId = `tetris-${user.id}-${recipientId}-${crypto.randomUUID()}`;
+    const matchId = `tetris-${currentUserId}-${recipientId}-${crypto.randomUUID()}`;
     const inviteId = crypto.randomUUID();
-    const sender: TetrisProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    const sender: TetrisProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     const recipient: TetrisProfile = { id: recipientId, name: online.name, image: online.image, country: online.country || 'Global' };
     try {
       await createDocument('tetrisInvites', inviteId, {
-        senderId: user.id,
+        senderId: currentUserId,
         recipientId,
         sender,
         recipient,
@@ -574,15 +591,16 @@ export default function GamesPage() {
         createdAt: new Date(),
         updatedAt: new Date(),
       }, token);
-      await deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+      await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
       setSelectedOnlineUserId(null);
       setSentInviteId(inviteId);
       setMatchId(null);
       setMatchRole(null);
       setOpponent(recipient);
-       setOpponentState(null);
-       setReadyForBattle(false);
-       setOpponentReady(false);
+      setOpponentState(null);
+      setReadyForBattle(false);
+      setOpponentReady(false);
+      setRoomBetConfigured(false);
     startRequestedRef.current = false;
     autoStartRequestedRef.current = false;
        setStakeReserved(false);
@@ -601,13 +619,13 @@ export default function GamesPage() {
     if (!user || !opponent) return;
     const token = getSessionToken();
     if (!token) return window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
-    const rematchId = `tetris-${user.id}-${opponent.id}-${crypto.randomUUID()}`;
+    const rematchId = `tetris-${currentUserId}-${opponent.id}-${crypto.randomUUID()}`;
     const inviteId = crypto.randomUUID();
-    const sender: TetrisProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    const sender: TetrisProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     const recipient: TetrisProfile = { id: opponent.id, name: opponent.name, image: opponent.image, country: opponent.country || 'Global' };
     try {
       await createDocument('tetrisInvites', inviteId, {
-        senderId: user.id,
+        senderId: currentUserId,
         recipientId: recipient.id,
         sender,
         recipient,
@@ -616,7 +634,7 @@ export default function GamesPage() {
         createdAt: new Date(),
         updatedAt: new Date(),
       }, token);
-      await deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+      await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
       setMatchId(null);
       setMatchRole(null);
       setSentInviteId(inviteId);
@@ -624,6 +642,7 @@ export default function GamesPage() {
       setOpponentState(null);
       setReadyForBattle(false);
       setOpponentReady(false);
+      setRoomBetConfigured(false);
       setStakeReserved(false);
       setBetAmount(DEFAULT_ENTRY_FEE);
       setRoomStartAt(null);
@@ -654,7 +673,7 @@ export default function GamesPage() {
     if (!token || !user) return;
     handledInviteIds.current.add(invite.id);
     setIncomingInvite(null);
-    await deleteDocument('tetrisQueue', user.id, token).catch(() => undefined);
+    await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
     try {
       await mergeDocument('tetrisInvites', invite.id, { status: 'accepted', updatedAt: new Date() }, token);
     } catch {
@@ -667,6 +686,7 @@ export default function GamesPage() {
     setOpponent(invite.sender);
     setReadyForBattle(false);
     setOpponentReady(false);
+    setRoomBetConfigured(false);
     setStakeReserved(false);
     setRoomStartAt(null);
     setCountdown(null);
@@ -730,6 +750,7 @@ export default function GamesPage() {
     setOpponent(role === 'A' ? invite.recipient : invite.sender);
     setOpponentState(role === 'A' ? room.playerBState || null : room.playerAState || null);
     setBetAmount(Number(room.betAmount || DEFAULT_ENTRY_FEE));
+    setRoomBetConfigured(Boolean(room.betAmount));
     setReadyForBattle(ownReady);
     setOpponentReady(nextReady);
     setStakeReserved(ownStakeHeld);
@@ -764,7 +785,15 @@ export default function GamesPage() {
         roomBeforeBet = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
       }
     }
-    const amount = matchRole === 'B' ? Number(roomBeforeBet?.betAmount || 0) : Number(betAmount);
+    const roomAmount = Number(roomBeforeBet?.betAmount || 0);
+    const requestedAmount = Number(betAmount);
+    if (matchRole === 'A' && roomAmount && roomBeforeBet?.readyA && roomAmount !== requestedAmount) {
+      setBetAmount(roomAmount);
+      setRoomBetConfigured(true);
+      setMatchStatus(`참가비는 이미 ${formatUsdt(roomAmount)} USDT로 확정되었습니다.`);
+      return;
+    }
+    const amount = matchRole === 'B' ? roomAmount : requestedAmount;
     if (!Number.isFinite(amount) || amount < MIN_ENTRY_FEE || amount > MAX_ENTRY_FEE) {
       window.alert(`참가비는 ${MIN_ENTRY_FEE}~${MAX_ENTRY_FEE} USDT 사이로 입력해주세요.`);
       return;
@@ -774,17 +803,18 @@ export default function GamesPage() {
        return;
     }
     try {
-      // Both players confirm the same amount in one room update before auto-start.
+      // Player A is the only source of truth for the room fee. Player B only confirms it.
       await updateRoom({
-        betAmount: amount,
+        ...(matchRole === 'A' ? { betAmount: amount } : {}),
         phase: 'betting',
         ...(matchRole === 'A' ? { readyA: true, readyAAt: new Date() } : { readyB: true, readyBAt: new Date() }),
       });
       setReadyForBattle(true);
+      setRoomBetConfigured(true);
       setMatchPhase('betting');
       setMatchStatus('서버 준비 완료 · 상대 준비를 기다리는 중');
     } catch (error) {
-      setMatchStatus(error instanceof Error ? error.message : '대전 설정을 저장하지 못했습니다. 다시 눌러주세요.');
+      setMatchStatus(gameErrorMessage(error, '대전 설정을 저장하지 못했습니다. 다시 눌러주세요.'));
     }
   };
 
@@ -796,11 +826,11 @@ export default function GamesPage() {
     try {
       const room = await getDocument<TetrisRoom>('tetrisRooms', matchId, token);
       if (!room?.readyA || !room.readyB) return;
-      await updateRoom({ phase: 'holding', startRequestedBy: room.playerAId || room.playerA?.id || user.id, startRequestedAt: new Date() });
+      await updateRoom({ phase: 'holding', startRequestedBy: room.playerAId || room.playerA?.id || currentUserId, startRequestedAt: new Date() });
       setMatchPhase('holding');
       setMatchStatus('참가비를 자동으로 홀딩하는 중입니다...');
     } catch (error) {
-      setMatchStatus(error instanceof Error ? error.message : '자동 게임 시작 신호를 저장하지 못했습니다.');
+      setMatchStatus(gameErrorMessage(error, '자동 게임 시작 신호를 저장하지 못했습니다.'));
     }
   };
 
@@ -809,7 +839,7 @@ export default function GamesPage() {
     const token = getSessionToken();
     if (!token) return;
     let stopped = false;
-    const profile: TetrisQueueProfile = { id: user.id, name: user.name, image: user.image, country: user.country || 'Global' };
+    const profile: TetrisQueueProfile = { id: currentUserId, name: user.name, image: user.image, country: user.country || 'Global' };
     const applyMatch = (record: TetrisQueueRecord) => {
       if (stopped || !record.matchId || !record.role || !record.opponent) return;
       setMatchId(record.matchId);
@@ -832,14 +862,14 @@ export default function GamesPage() {
       if (stopped || queuePollingRef.current) return;
       queuePollingRef.current = true;
       try {
-        const own = await getDocument<TetrisQueueRecord>('tetrisQueue', user.id, token).catch(() => null);
+        const own = await getDocument<TetrisQueueRecord>('tetrisQueue', currentUserId, token).catch(() => null);
         if (own?.status === 'matched') {
           applyMatch(own);
           return;
         }
-        await mergeDocument('tetrisQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token).catch(() => undefined);
+        await mergeDocument('tetrisQueue', currentUserId, { lastSeenAt: new Date(), status: 'waiting' }, token).catch(() => undefined);
         const claimed = await claimTetrisMatch(profile, token).catch(() => null);
-        if (claimed) applyMatch({ ...profile, userId: user.id, status: 'matched', ...claimed, lastSeenAt: new Date() });
+        if (claimed) applyMatch({ ...profile, userId: currentUserId, status: 'matched', ...claimed, lastSeenAt: new Date() });
       } finally {
         queuePollingRef.current = false;
       }
@@ -861,8 +891,8 @@ export default function GamesPage() {
       invitePollingRef.current = true;
       try {
         const [received, sent] = await Promise.all([
-          queryDocuments<TetrisInvite>('tetrisInvites', 'recipientId', user.id, token),
-          queryDocuments<TetrisInvite>('tetrisInvites', 'senderId', user.id, token),
+          queryDocuments<TetrisInvite>('tetrisInvites', 'recipientId', currentUserId, token),
+          queryDocuments<TetrisInvite>('tetrisInvites', 'senderId', currentUserId, token),
         ]).catch(() => [[], []] as [TetrisInvite[], TetrisInvite[]]);
         const invites = [...received, ...sent];
         const accepted = invites
@@ -874,7 +904,9 @@ export default function GamesPage() {
           for (const invite of accepted.slice(0, 20)) {
             const room = await getDocument<TetrisRoom>('tetrisRooms', invite.matchId, token).catch(() => null);
             if (!room || room.phase === 'finished') continue;
-            const role = invite.senderId === user.id ? 'A' : 'B';
+            const lastActivity = new Date(String(room.updatedAt || invite.updatedAt || invite.createdAt)).getTime();
+            if (!Number.isFinite(lastActivity) || Date.now() - lastActivity > 30 * 60 * 1000) continue;
+            const role = invite.senderId === currentUserId ? 'A' : 'B';
             restoreMatch(invite, role, room);
             activeMatch = true;
             break;
@@ -883,7 +915,7 @@ export default function GamesPage() {
 
         const pending = !activeMatch
           ? invites
-            .filter((invite) => invite.recipientId === user.id && invite.status === 'pending' && !handledInviteIds.current.has(invite.id) && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
+            .filter((invite) => invite.recipientId === currentUserId && invite.status === 'pending' && !handledInviteIds.current.has(invite.id) && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
           : undefined;
         const currentInvite = incomingInvite ? invites.find((invite) => invite.id === incomingInvite.id) : null;
@@ -925,18 +957,18 @@ export default function GamesPage() {
       try {
         current = await getDocument<TetrisRoom>('tetrisRooms', matchId, token);
       } catch (error) {
-        setMatchStatus(error instanceof Error ? error.message : '대전 방을 확인하지 못했습니다.');
+        setMatchStatus(gameErrorMessage(error, '대전 방을 확인하지 못했습니다.'));
         return;
       }
       if (!current && roomSeenRef.current) {
-        if (stakeReserved) await refundGameStake(getSessionUserId() || user.id, matchId, token).catch(() => undefined);
+        if (stakeReserved) await refundGameStake(currentUserId, matchId, token).catch(() => undefined);
         resetBattleRoom('상대가 대전방을 종료했습니다.');
         const refreshed = await refreshStoredUser().catch(() => null);
         if (refreshed) setUser(refreshed);
         return;
       }
       if (current) roomSeenRef.current = true;
-      const sessionUserId = getSessionUserId() || user.id;
+      const sessionUserId = currentUserId;
       const profile: TetrisProfile = { id: sessionUserId, name: user.name, image: user.image, country: user.country || 'Global' };
       const ownPatch = {
         matchId,
@@ -955,7 +987,7 @@ export default function GamesPage() {
       try {
         await mergeDocument('tetrisRooms', matchId, ownPatch, token);
       } catch (error) {
-        setMatchStatus(error instanceof Error ? error.message : '대전 방을 만들지 못했습니다.');
+        setMatchStatus(gameErrorMessage(error, '대전 방을 만들지 못했습니다.'));
         return;
       }
        const room = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
@@ -964,7 +996,10 @@ export default function GamesPage() {
        const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
        const nextState = matchRole === 'A' ? room.playerBState : room.playerAState;
        const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
-        if (room.betAmount && room.betAmount !== betAmount) setBetAmount(room.betAmount);
+         if (room.betAmount) {
+           setBetAmount(room.betAmount);
+           setRoomBetConfigured(true);
+         }
        setOpponentReady(nextReady);
        if (nextOpponent) setOpponent(nextOpponent);
         const ownStakeHeld = matchRole === 'A' ? Boolean(room.stakeHeldA) : Boolean(room.stakeHeldB);
@@ -977,7 +1012,7 @@ export default function GamesPage() {
          if (room.startRequestedBy && !ownStakeHeld && !holdRequestedRef.current) {
           holdRequestedRef.current = true;
           const amount = Number(room.betAmount || betAmount);
-             void reserveGameStake(getSessionUserId() || user.id, matchId, amount, token)
+              void reserveGameStake(currentUserId, matchId, amount, token)
             .then(async () => {
               setStakeReserved(true);
               const refreshed = await refreshStoredUser().catch(() => null);
@@ -986,7 +1021,7 @@ export default function GamesPage() {
             })
             .catch((error) => {
               holdRequestedRef.current = false;
-              setMatchStatus(error instanceof Error ? error.message : '참가비 홀딩에 실패했습니다. 다시 시도해주세요.');
+               setMatchStatus(gameErrorMessage(error, '참가비 홀딩에 실패했습니다. 다시 시도해주세요.'));
              });
          }
           const bothReady = Boolean(room.readyA && room.readyB);
@@ -1035,7 +1070,7 @@ export default function GamesPage() {
          if (room.payoutStatus !== 'PAID' && !settlementRequestedRef.current && nextOpponent) {
            settlementRequestedRef.current = true;
            const amount = Number(room.betAmount || betAmount);
-           void settleTetrisMatch(matchId, user.id, nextOpponent.id, amount, token)
+            void settleTetrisMatch(matchId, currentUserId, nextOpponent.id, amount, token)
               .then(() => updateRoom({ payoutStatus: 'PAID', payoutAmount: amount * 2 }))
               .then(() => {
                 const notice = `승리 정산 완료 · ${formatUsdt(amount * 2)} USDT 지급`;
@@ -1098,7 +1133,7 @@ export default function GamesPage() {
     if (!user || !chatInput.trim()) return;
     const token = getSessionToken();
     if (!token) return;
-    const message = { authorId: user.id, user: user.name, country: user.country || 'Global', text: chatInput.trim(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60 * 1000) };
+    const message = { authorId: currentUserId, user: user.name, country: user.country || 'Global', text: chatInput.trim(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60 * 1000) };
     try {
       const id = crypto.randomUUID();
       await createDocument('tetrisChatMessages', id, message, token);
