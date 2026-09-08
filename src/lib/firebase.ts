@@ -582,7 +582,6 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   if (!Number.isFinite(amount) || amount <= 0) return;
   const authUserId = getTokenUserId(token) || userId;
   const stakeId = `game-${matchId}-${authUserId}`;
-  if (await getRawDocument('gameStakes', stakeId, token)) return;
   const profileDocument = await getRawDocument('profiles', authUserId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
@@ -605,9 +604,43 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
     }),
   }, token);
   if (!response.ok) {
-    if (await getRawDocument('gameStakes', stakeId, token)) return;
-    throw new Error('게임 참가비 예약에 실패했습니다. 다시 시도해주세요.');
+    const error = await response.text();
+    if (error.includes('ALREADY_EXISTS')) return;
+    throw new Error('게임 참가비 예약 권한을 확인하지 못했습니다. 다시 로그인해주세요.');
   }
+}
+
+export async function startTetrisCountdown(matchId: string, token?: string): Promise<string | null> {
+  const roomDocument = await getRawDocument('tetrisRooms', matchId, token).catch(() => null);
+  if (!roomDocument?.name || !roomDocument.updateTime) return null;
+  const room = decodeDocument<{
+    phase?: string;
+    readyA?: boolean;
+    readyB?: boolean;
+    stakeHeldA?: boolean;
+    stakeHeldB?: boolean;
+    startAt?: string;
+  }>(roomDocument);
+  if (room.startAt) return room.startAt;
+  if (room.phase === 'finished' || !room.readyA || !room.readyB || !room.stakeHeldA || !room.stakeHeldB) return null;
+
+  const startAt = new Date(Date.now() + 5000).toISOString();
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [{
+        update: {
+          name: roomDocument.name,
+          fields: { ...(roomDocument.fields || {}), ...encodeFields({ phase: 'countdown', startAt, updatedAt: new Date() }) },
+        },
+        currentDocument: { updateTime: roomDocument.updateTime },
+      }],
+    }),
+  }, token);
+  if (response.ok) return startAt;
+  const current = await getRawDocument('tetrisRooms', matchId, token).catch(() => null);
+  return current ? String(fromFirestoreValue(current.fields?.startAt) || '') || null : null;
 }
 
 export async function settleTetrisMatch(
@@ -1106,4 +1139,3 @@ declare global {
     };
   }
 }
-
