@@ -53,6 +53,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .header-mobile-menu a { border-radius: .75rem; padding: .7rem .75rem; background: rgba(255, 255, 255, .05); }
 .touch-control { border: 1px solid rgba(45, 212, 191, .24); border-radius: .75rem; background: rgba(45, 212, 191, .1); padding: .6rem .35rem; font-size: .72rem; font-weight: 900; color: #ccfbf1; }
 .touch-control:disabled { opacity: .35; }
+.games-layout button.bg-emerald-300 { display: none; }
 
 @media (min-width: 1024px) {
   .webrtc-page { margin-right: -20rem; }
