@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createDocument, deleteDocument, getSessionToken, listDocuments, mergeDocument } from '@/lib/firebase';
+import { CONTENT_SOURCES, sourceItemId } from '@/lib/contentSources';
+import { fetchSourceCategory } from '@/lib/sourcepreview';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type Post = {
@@ -20,6 +22,8 @@ type Post = {
   image?: string;
   images?: string[];
   sourceUrl?: string;
+  sourceId?: string;
+  sourceCategory?: string;
   sourceName?: string;
   sourceContentId?: string;
 };
@@ -39,8 +43,21 @@ export default function CommunityPage() {
 
   const loadPosts = async () => {
     try {
-      const data = await listDocuments<Omit<Post, 'id'>>('posts', getSessionToken());
-       setPosts(data.filter((post) => post.authorId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      const sources = CONTENT_SOURCES.filter((source) => source.categories.includes('community') && (selectedCountry === 'Global' || source.region === selectedCountry || source.region === 'Global'));
+      const [data, sourceResults] = await Promise.all([
+        listDocuments<Omit<Post, 'id'>>('posts', getSessionToken()),
+        Promise.all(sources.map((source) => fetchSourceCategory(source.id, 'community').then((result) => ({ source, result })))),
+      ]);
+      const sourcePosts = sourceResults.flatMap(({ source, result }) => {
+        if (!result) return [];
+        return result.items.map((item) => {
+          const id = sourceItemId(source.id, 'community', item.url);
+          return { id, type: 'news' as const, title: item.title, body: item.body || item.description || '', authorId: 'source', author: source.name, country: source.region, createdAt: item.publishedAt || result.fetchedAt, image: item.image, images: item.images, sourceId: source.id, sourceCategory: 'community', sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
+        });
+      });
+      const merged = new Map<string, Post>();
+      [...data, ...sourcePosts].filter((post) => post.authorId).forEach((post) => merged.set(post.sourceUrl || post.id, post as Post));
+      setPosts([...merged.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       } catch {
         setPosts([]);
     } finally {
@@ -50,7 +67,7 @@ export default function CommunityPage() {
 
   useEffect(() => {
     void loadPosts();
-  }, []);
+  }, [selectedCountry]);
 
   const openWrite = (post?: Post) => {
     setEditingId(post?.id || null);
@@ -127,7 +144,7 @@ export default function CommunityPage() {
           {!loading && filteredPosts.length === 0 && <div className="text-center py-20 text-gray-500">아직 게시글이 없습니다. 첫 글을 남겨보세요.</div>}
           {filteredPosts.map((post) => (
              <div key={post.id} className="relative hover:bg-blue-50/50 transition-colors">
-              <Link href={post.sourceContentId ? `/content/${post.sourceContentId}` : `/community/${post.id}`} className="block">
+              <Link href={post.sourceContentId ? `/content/${post.sourceContentId}?source=${encodeURIComponent(post.sourceId || '')}&category=${encodeURIComponent(post.sourceCategory || 'community')}&url=${encodeURIComponent(post.sourceUrl || '')}` : `/community/${post.id}`} className="block">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center">
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center">
                   <span className={post.type === 'notice' ? 'text-red-500' : post.type === 'news' ? 'text-blue-500' : 'text-gray-400'}>
@@ -136,8 +153,7 @@ export default function CommunityPage() {
                 </div>
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center"><span className="bg-gray-100 px-2 py-1 rounded text-gray-600">{post.country}</span></div>
                  <div className="col-span-1 md:col-span-5">
-                    {post.image && <img src={post.image} alt="" className="mb-2 h-16 w-24 rounded-lg object-cover" />}
-                    <h3 className="text-base md:text-lg truncate font-bold text-gray-800">{post.title}</h3>
+                     <div className="flex items-center gap-3">{post.image && <img src={post.image} alt="" className="h-12 w-16 shrink-0 rounded-lg object-cover" />}<div className="min-w-0"><h3 className="truncate text-base font-bold text-gray-800">{post.title}</h3><p className="mt-1 line-clamp-1 text-xs text-gray-500">{post.body}</p></div></div>
                    {post.sourceName && <div className="text-xs text-blue-500">출처: {post.sourceName}</div>}
                   {!!post.comments && <span className="text-blue-500 text-sm font-bold">[{post.comments}]</span>}
                 </div>
