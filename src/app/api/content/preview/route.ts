@@ -40,10 +40,9 @@ async function fetchMarketAsset(asset: MarketAsset) {
 }
 
 async function fetchMarket() {
-  type CryptoQuote = Record<string, { usd?: number; usd_24h_change?: number }>;
   const [ratesResult, cryptoResult, equityResults] = await Promise.all([
-    marketJson<{ rates?: Record<string, number> }>('https://api.frankfurter.app/latest?from=USD&to=KRW,EUR,JPY,BRL,CAD,GBP').catch(() => ({ rates: {} as Record<string, number> })),
-    marketJson<CryptoQuote>('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple,solana&vs_currencies=usd&include_24hr_change=true').catch(() => ({} as CryptoQuote)),
+    marketJson<{ rates?: Record<string, number> }>('https://api.frankfurter.app/latest?from=USD&to=KRW,EUR,JPY,BRL,CAD,GBP').catch(() => ({ rates: {} })),
+    marketJson<Record<string, { usd?: number; usd_24h_change?: number }>>('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple,solana&vs_currencies=usd&include_24hr_change=true').catch(() => ({})),
     Promise.all(marketAssets.slice(4).map(fetchMarketAsset)),
   ]);
   const cryptoAssets = marketAssets.slice(0, 4).map((asset) => ({ key: asset.key, label: asset.label, value: cryptoResult[asset.symbol]?.usd ?? null, change: cryptoResult[asset.symbol]?.usd_24h_change ?? null, currency: asset.currency }));
