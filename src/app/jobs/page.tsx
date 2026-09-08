@@ -37,6 +37,29 @@ export default function JobsPage() {
 
   useEffect(() => { void loadJobs(); }, [selectedCountry]);
 
+  // Keep the verified primary source visible even when another source is slow.
+  useEffect(() => {
+    let active = true;
+    const source = CONTENT_SOURCES.find((item) => item.id === 'hanintoday-brazil');
+    if (!source || (selectedCountry !== 'Global' && selectedCountry !== source.region)) return () => { active = false; };
+    void fetch('/api/content/preview?source=hanintoday-brazil&category=jobs')
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: { items?: Array<{ title: string; url: string; company?: string; location?: string; salary?: string; tag?: string; image?: string; images?: string[]; publishedAt?: string }> } | null) => {
+        if (!active || !payload?.items?.length) return;
+        const liveJobs = payload.items.map((item) => {
+          const id = sourceItemId(source.id, 'jobs', item.url);
+          return { id, title: item.title, company: item.company || source.name, location: item.location || source.region, salary: item.salary || '상세 내용 참조', tag: item.tag || '출처 자동수집', country: source.region, authorId: 'source', createdAt: item.publishedAt || new Date().toISOString(), image: item.image, images: item.images, sourceId: source.id, sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
+        });
+        setJobs((current) => {
+          const merged = new Map<string, Job>();
+          [...current, ...liveJobs].forEach((job) => merged.set(job.sourceUrl || job.id, job));
+          return [...merged.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        });
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [selectedCountry]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!user) return window.alert('로그인 후 공고를 등록할 수 있습니다.');
