@@ -520,7 +520,187 @@ export type TetrisQueueProfile = {
   isSubscribed?: boolean;
 };
 export type TetrisMatchClaim = { matchId: string; role: 'A' | 'B'; opponent: TetrisQueueProfile };
+export type TetrisLobbyRoom = {
+  roomNumber?: number;
+  status?: 'idle' | 'waiting' | 'occupied';
+  activeMatchId?: string;
+  waitingUserId?: string;
+  waitingUser?: TetrisQueueProfile;
+  playerAId?: string;
+  playerA?: TetrisQueueProfile;
+  playerBId?: string;
+  playerB?: TetrisQueueProfile;
+  updatedAt?: string;
+};
+export type TetrisLobbyClaim = { roomNumber: number; matchId: string; role: 'A' | 'B'; opponent?: TetrisQueueProfile };
 export type WebrtcMatchClaim = { callId: string; opponent: TetrisQueueProfile; initiator: boolean };
+
+const TETRIS_LOBBY_ROOM_COUNT = 10;
+const TETRIS_LOBBY_STALE_MS = 30_000;
+
+function tetrisLobbyId(roomNumber: number) {
+  return `room-${roomNumber}`;
+}
+
+function tetrisProfile(profile: TetrisQueueProfile): TetrisQueueProfile {
+  return { id: profile.id, name: profile.name, image: profile.image, country: profile.country || 'Global' };
+}
+
+function isFreshTetrisLobbyRoom(room: TetrisLobbyRoom | null): boolean {
+  if (!room?.updatedAt) return false;
+  const timestamp = new Date(room.updatedAt).getTime();
+  return Number.isFinite(timestamp) && timestamp > Date.now() - TETRIS_LOBBY_STALE_MS;
+}
+
+async function compareAndMergeTetrisLobbyRoom(
+  roomNumber: number,
+  data: Record<string, unknown>,
+  token: string | undefined,
+  updateTime?: string,
+): Promise<boolean> {
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [{
+        update: { name: firestoreDocumentName('tetrisLobby', tetrisLobbyId(roomNumber)), fields: encodeFields(data) },
+        updateMask: { fieldPaths: Object.keys(data) },
+        currentDocument: updateTime ? { updateTime } : { exists: false },
+      }],
+    }),
+  }, token);
+  return response.ok;
+}
+
+function waitingLobbyData(roomNumber: number, matchId: string, profile: TetrisQueueProfile): Record<string, unknown> {
+  const member = tetrisProfile(profile);
+  return {
+    roomNumber,
+    status: 'waiting',
+    activeMatchId: matchId,
+    waitingUserId: member.id,
+    waitingUser: member,
+    playerAId: member.id,
+    playerA: member,
+    playerBId: null,
+    playerB: null,
+    updatedAt: new Date(),
+  };
+}
+
+export async function claimTetrisLobbyRoom(profile: TetrisQueueProfile, token?: string): Promise<TetrisLobbyClaim | null> {
+  const member = tetrisProfile(profile);
+  for (let roomNumber = 1; roomNumber <= TETRIS_LOBBY_ROOM_COUNT; roomNumber += 1) {
+    const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
+    const room = document ? decodeDocument<TetrisLobbyRoom>(document) : null;
+    if (room?.status === 'occupied') {
+      if (room.playerAId === member.id && room.activeMatchId) return { roomNumber, matchId: room.activeMatchId, role: 'A', opponent: room.playerB };
+      if (room.playerBId === member.id && room.activeMatchId) return { roomNumber, matchId: room.activeMatchId, role: 'B', opponent: room.playerA };
+      continue;
+    }
+    if (room?.status === 'waiting' && room.waitingUserId === member.id && room.activeMatchId) {
+      await compareAndMergeTetrisLobbyRoom(roomNumber, { updatedAt: new Date() }, token, document?.updateTime);
+      return { roomNumber, matchId: room.activeMatchId, role: 'A' };
+    }
+    if (room?.status === 'waiting' && room.waitingUserId && isFreshTetrisLobbyRoom(room)) {
+      const matchId = room.activeMatchId || `tetris-room-${roomNumber}-${crypto.randomUUID()}`;
+      const joined = await compareAndMergeTetrisLobbyRoom(roomNumber, {
+        roomNumber,
+        status: 'occupied',
+        activeMatchId: matchId,
+        waitingUserId: null,
+        waitingUser: null,
+        playerAId: room.playerAId || room.waitingUserId,
+        playerA: room.playerA || room.waitingUser,
+        playerBId: member.id,
+        playerB: member,
+        updatedAt: new Date(),
+      }, token, document?.updateTime);
+      if (joined) return { roomNumber, matchId, role: 'B', opponent: room.playerA || room.waitingUser };
+      continue;
+    }
+    const matchId = `tetris-room-${roomNumber}-${crypto.randomUUID()}`;
+    const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member), token, document?.updateTime);
+    if (claimed) return { roomNumber, matchId, role: 'A' };
+  }
+  return null;
+}
+
+export async function reserveTetrisLobbyRoom(profile: TetrisQueueProfile, matchId: string, token?: string): Promise<number | null> {
+  const member = tetrisProfile(profile);
+  for (let roomNumber = 1; roomNumber <= TETRIS_LOBBY_ROOM_COUNT; roomNumber += 1) {
+    const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
+    const room = document ? decodeDocument<TetrisLobbyRoom>(document) : null;
+    if (room?.status === 'occupied' || (room?.status === 'waiting' && isFreshTetrisLobbyRoom(room) && room.waitingUserId !== member.id)) continue;
+    const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member), token, document?.updateTime);
+    if (claimed) return roomNumber;
+  }
+  return null;
+}
+
+export async function joinTetrisLobbyRoom(roomNumber: number, matchId: string, profile: TetrisQueueProfile, token?: string): Promise<boolean> {
+  const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
+  if (!document) return false;
+  const room = decodeDocument<TetrisLobbyRoom>(document);
+  if (room.status !== 'waiting' || room.activeMatchId !== matchId || !room.waitingUserId || !isFreshTetrisLobbyRoom(room)) return false;
+  const member = tetrisProfile(profile);
+  return compareAndMergeTetrisLobbyRoom(roomNumber, {
+    roomNumber,
+    status: 'occupied',
+    activeMatchId: matchId,
+    waitingUserId: null,
+    waitingUser: null,
+    playerAId: room.playerAId || room.waitingUserId,
+    playerA: room.playerA || room.waitingUser,
+    playerBId: member.id,
+    playerB: member,
+    updatedAt: new Date(),
+  }, token, document.updateTime);
+}
+
+export async function heartbeatTetrisLobbyRoom(
+  roomNumber: number,
+  matchId: string,
+  profile: TetrisQueueProfile,
+  role: 'A' | 'B',
+  token?: string,
+): Promise<boolean> {
+  const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
+  if (!document) return false;
+  const room = decodeDocument<TetrisLobbyRoom>(document);
+  if (room.activeMatchId !== matchId) return false;
+  const member = tetrisProfile(profile);
+  return compareAndMergeTetrisLobbyRoom(roomNumber, {
+    updatedAt: new Date(),
+    ...(role === 'A' ? { playerAId: member.id, playerA: member, ...(room.status === 'waiting' ? { waitingUserId: member.id, waitingUser: member } : {}) } : { playerBId: member.id, playerB: member }),
+  }, token, document.updateTime);
+}
+
+export async function releaseTetrisLobbyRoom(roomNumber: number, matchId: string, role: 'A' | 'B', token?: string, keepRemaining = true): Promise<string | null> {
+  const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
+  if (!document) return null;
+  const room = decodeDocument<TetrisLobbyRoom>(document);
+  if (room.activeMatchId !== matchId) return null;
+  const remaining = role === 'A' ? room.playerB : room.playerA;
+  if (keepRemaining && remaining?.id) {
+    const nextMatchId = `tetris-room-${roomNumber}-${crypto.randomUUID()}`;
+    const released = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, nextMatchId, remaining), token, document.updateTime);
+    return released ? nextMatchId : null;
+  }
+  const released = await compareAndMergeTetrisLobbyRoom(roomNumber, {
+    roomNumber,
+    status: 'idle',
+    activeMatchId: null,
+    waitingUserId: null,
+    waitingUser: null,
+    playerAId: null,
+    playerA: null,
+    playerBId: null,
+    playerB: null,
+    updatedAt: new Date(),
+  }, token, document.updateTime);
+  return released ? '' : null;
+}
 
 async function getWaitingQueueDocuments(collection: string, token?: string): Promise<FirestoreDocument[]> {
   try {
