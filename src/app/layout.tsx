@@ -7,6 +7,7 @@ import GlobalChat from '@/components/layout/GlobalChat';
 import PortalSidebar from '@/components/layout/PortalSidebar';
 import PortalFrame from '@/components/layout/PortalFrame';
 import MarketTicker from '@/components/layout/MarketTicker';
+import MusicPlayer from '@/components/layout/MusicPlayer';
 import AppRuntime from '@/components/layout/AppRuntime';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
@@ -42,6 +43,7 @@ export default function RootLayout({
           <AdSenseScript />
           <Header />
           <MarketTicker />
+          <MusicPlayer />
           <PortalSidebar />
           <GlobalChat />
 
