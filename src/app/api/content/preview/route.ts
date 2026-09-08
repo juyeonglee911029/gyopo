@@ -1,53 +1,7 @@
 import { CONTENT_SOURCES } from '@/lib/contentSources';
-import type { ContentCategory, ContentSource } from '@/lib/contentSources';
-import { curateSourceItems, normalizeSourceBody, normalizeSourceText, normalizeSourceTitle, normalizeSourceUrl } from '@/lib/sourcepreview';
-import type { LiveSourceItem } from '@/lib/sourcepreview';
+import type { ContentCategory } from '@/lib/contentSources';
 
 export const runtime = 'edge';
-
-type MarketAsset = { key: string; label: string; symbol: string; currency: string };
-type YahooChart = { meta?: { regularMarketPrice?: number; chartPreviousClose?: number; currency?: string } };
-
-const marketAssets: MarketAsset[] = [
-  { key: 'bitcoin', label: 'BTC', symbol: 'bitcoin', currency: 'USD' },
-  { key: 'ethereum', label: 'ETH', symbol: 'ethereum', currency: 'USD' },
-  { key: 'ripple', label: 'XRP', symbol: 'ripple', currency: 'USD' },
-  { key: 'solana', label: 'SOL', symbol: 'solana', currency: 'USD' },
-  { key: 'hynix', label: 'SK Hynix', symbol: '000660.KS', currency: 'KRW' },
-  { key: 'samsung', label: 'Samsung', symbol: '005930.KS', currency: 'KRW' },
-  { key: 'nvidia', label: 'NVIDIA', symbol: 'NVDA', currency: 'USD' },
-  { key: 'apple', label: 'Apple', symbol: 'AAPL', currency: 'USD' },
-  { key: 'kospi', label: 'KOSPI', symbol: '^KS11', currency: 'KRW' },
-  { key: 'nasdaq', label: 'NASDAQ', symbol: '^IXIC', currency: 'USD' },
-];
-
-async function marketJson<T>(url: string) {
-  const response = await fetch(url, { headers: { 'User-Agent': 'GYOPO-Market/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
-  if (!response.ok) throw new Error(`시세 출처 응답 ${response.status}`);
-  return response.json() as Promise<T>;
-}
-
-async function fetchMarketAsset(asset: MarketAsset) {
-  try {
-    const result = await marketJson<{ chart?: { result?: YahooChart[] } }>(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}?range=1d&interval=1d&includePrePost=false`);
-    const meta = result.chart?.result?.[0]?.meta;
-    const value = typeof meta?.regularMarketPrice === 'number' ? meta.regularMarketPrice : null;
-    const previous = typeof meta?.chartPreviousClose === 'number' ? meta.chartPreviousClose : null;
-    return { key: asset.key, label: asset.label, value, change: value !== null && previous ? ((value - previous) / previous) * 100 : null, currency: meta?.currency || asset.currency };
-  } catch {
-    return { key: asset.key, label: asset.label, value: null, change: null, currency: asset.currency };
-  }
-}
-
-async function fetchMarket() {
-  const [ratesResult, cryptoResult, equityResults] = await Promise.all([
-    marketJson<{ rates?: Record<string, number> }>('https://api.frankfurter.app/latest?from=USD&to=KRW,EUR,JPY,BRL,CAD,GBP').catch(() => ({ rates: {} })),
-    marketJson<Record<string, { usd?: number; usd_24h_change?: number }>>('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple,solana&vs_currencies=usd&include_24hr_change=true').catch(() => ({})),
-    Promise.all(marketAssets.slice(4).map(fetchMarketAsset)),
-  ]);
-  const cryptoAssets = marketAssets.slice(0, 4).map((asset) => ({ key: asset.key, label: asset.label, value: cryptoResult[asset.symbol]?.usd ?? null, change: cryptoResult[asset.symbol]?.usd_24h_change ?? null, currency: asset.currency }));
-  return { updatedAt: new Date().toISOString(), rates: ratesResult.rates || {}, assets: [...cryptoAssets, ...equityResults] };
-}
 
 function clean(value: string | undefined) {
   return (value || '')
@@ -96,7 +50,7 @@ function cleanArticleBody(value: string) {
     .slice(0, 16_000);
 }
 
-type CrawlItem = LiveSourceItem & { category: ContentCategory };
+type CrawlItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category: ContentCategory };
 type StructuredData = { headline?: string; description?: string; articleBody?: string; image?: string[]; datePublished?: string; url?: string };
 
 async function fetchHtml(url: string) {
@@ -108,202 +62,6 @@ async function fetchHtml(url: string) {
   return response.text();
 }
 
-function escapePattern(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function classValues(html: string, className: string) {
-  const values: string[] = [];
-  const pattern = new RegExp(`<[^>]+class=["'][^"']*${escapePattern(className)}[^"']*["'][^>]*>([\\s\\S]*?)<\\/[^>]+>`, 'gi');
-  for (const match of html.matchAll(pattern)) values.push(clean(match[1]));
-  return values.filter(Boolean);
-}
-
-function classBlock(html: string, className: string, endMarkers: string[]) {
-  const start = html.search(new RegExp(`<[^>]+class=["'][^"']*${escapePattern(className)}[^"']*["']`, 'i'));
-  if (start < 0) return '';
-  const ends = endMarkers.map((marker) => html.indexOf(marker, start + 1)).filter((index) => index > start);
-  return html.slice(start, ends.length ? Math.min(...ends) : Math.min(html.length, start + 24_000));
-}
-
-function bodyFromBlock(value: string) {
-  return normalizeSourceBody(value
-    .replace(/<(script|style|noscript|nav|header|footer)\b[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/<\/(p|div|li|h[1-6]|tr|td|table)>/gi, '\n'));
-}
-
-function publishedDate(value: string | undefined) {
-  const match = normalizeSourceText(value).match(/(20\d{2})\D+(\d{1,2})\D+(\d{1,2})(?:\D+(\d{1,2})\D+(\d{1,2}))?/);
-  if (!match) return undefined;
-  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4] || 0), Number(match[5] || 0))).toISOString();
-}
-
-const countryIds: Record<string, string> = {
-  독일: 'Germany', 네덜란드: 'Netherlands', 헝가리: 'Hungary', 스페인: 'Spain', 포르투갈: 'Portugal', 루마니아: 'Romania', 몰타: 'Malta', 벨기에: 'Belgium', 폴란드: 'Poland', 프랑스: 'France', 체코: 'Czechia', 슬로바키아: 'Slovakia', 오스트리아: 'Austria', 이탈리아: 'Italy', 태국: 'Thailand', 브라질: 'Brazil',
-};
-
-function titleCountry(title: string) {
-  const label = title.match(/^\s*\[([^\]]+)]/)?.[1]?.trim();
-  return { country: label ? countryIds[label] || label : undefined, location: label };
-}
-
-function kbaCompany(title: string) {
-  const value = normalizeSourceTitle(title).replace(/^\[[^\]]+]\s*/, '');
-  const named = value.match(/^(.+?(?:법인|사무소|무역관|지사|센터|SRL|GmbH|Co\.,?\s*Ltd\.?))/i)?.[1];
-  return normalizeSourceText(named || value.split(/[,，]|에서\s/)[0] || 'KBA Europe 등록 기업').replace(/\([^)]*근무[^)]*\)/g, '').trim();
-}
-
-function fieldValue(body: string, labels: string[]) {
-  const labelPattern = labels.map(escapePattern).join('|');
-  const nextField = '(?:회사명|업체명|업종|소재지|근무지|지역|\\[?구인\\s*정보\\]?|주요\\s*업무|필수사항|우대사항|모집(?:직무|인원)?|지원(?:자격|방법)?|급여|연봉|월급|시급|제출|문의|연락처)';
-  return normalizeSourceText(body.match(new RegExp(`(?:${labelPattern})\\s*[:：]\\s*([\\s\\S]{2,160}?)(?=${nextField}\\s*[:：-]?|$)`, 'i'))?.[1]);
-}
-
-function extractKbaJobs(html: string, pageUrl: string): CrawlItem[] {
-  const items: CrawlItem[] = [];
-  const seen = new Set<string>();
-  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    try {
-      const url = new URL(clean(match[1]), pageUrl);
-      if (url.pathname !== '/member/eu-job-search/' || url.searchParams.get('mod') !== 'document' || !url.searchParams.get('uid')) continue;
-      const title = normalizeSourceTitle(match[2]);
-      if (!title || seen.has(url.searchParams.get('uid')!)) continue;
-      seen.add(url.searchParams.get('uid')!);
-      const place = titleCountry(title);
-      items.push({ title, url: normalizeSourceUrl(url.href), category: 'jobs', company: kbaCompany(title), location: place.location || '유럽', country: place.country || 'Global', salary: '원문 확인', tag: normalizeSourceText(title.match(/(?:정규직|계약직|임시직|인턴|경력직|현지\s*채용)/)?.[0] || '채용') });
-      if (items.length >= 12) break;
-    } catch {
-      // Ignore malformed board links.
-    }
-  }
-  return items;
-}
-
-async function enrichKbaJobs(items: CrawlItem[]) {
-  const enriched = await Promise.all(items.map(async (item) => {
-    try {
-      const html = await fetchHtml(item.url);
-      const bodyHtml = classBlock(html, 'content-view', ['kboard-document-action', 'kboard-attach']);
-      const body = bodyFromBlock(bodyHtml);
-      const images = extractImages(bodyHtml, item.url);
-      const detailValues = classValues(classBlock(html, 'kboard-detail', ['kboard-content']), 'detail-value');
-      return { ...item, body, description: body.slice(0, 320), image: images[0], images, publishedAt: publishedDate(detailValues.find((value) => /^20\d{2}/.test(value))) };
-    } catch {
-      return item;
-    }
-  }));
-  return curateSourceItems(enriched, 'jobs');
-}
-
-function extractHanasiaList(html: string, pageUrl: string, category: ContentCategory): CrawlItem[] {
-  const records = new Map<string, { index: number; texts: string[] }>();
-  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']*\/forum\/view\/(\d+))[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const text = normalizeSourceTitle(match[3]);
-    if (!text) continue;
-    const record = records.get(match[2]) || { index: match.index || 0, texts: [] };
-    if (!record.texts.includes(text)) record.texts.push(text);
-    records.set(match[2], record);
-  }
-  return [...records.entries()].map(([id, record]) => {
-    const title = record.texts[0];
-    const description = [...record.texts].sort((a, b) => b.length - a.length).find((value) => value !== title && value.length > title.length + 20);
-    const before = html.slice(Math.max(0, record.index - 2_000), record.index);
-    const after = html.slice(record.index, record.index + 4_000);
-    const boardCategory = classValues(before, 'tpl-forum-list-category').at(-1) || '';
-    return {
-      title,
-      url: new URL(`/forum/view/${id}`, pageUrl).href,
-      description,
-      body: description,
-      category,
-      tag: boardCategory,
-      author: classValues(after, 'tpl-forum-list-name')[0],
-      publishedAt: publishedDate(classValues(after, 'tpl-forum-list-date')[0]),
-      country: 'Thailand',
-      location: '태국',
-    };
-  }).filter((item) => item.title.length >= 4).slice(0, 12);
-}
-
-async function enrichHanasiaItems(items: CrawlItem[], category: ContentCategory) {
-  const enriched = await Promise.all(items.map(async (item) => {
-    try {
-      const html = await fetchHtml(item.url);
-      const bodyHtml = classBlock(html, 'tpl-forum-content', ['tpl-forum-list-footer', 'tpl-forum-pn-row', 'page-comments']);
-      const body = bodyFromBlock(bodyHtml) || normalizeSourceBody(meta(html, 'description')) || item.body || '';
-      const images = extractImages(bodyHtml, item.url);
-      const boardCategory = category === 'jobs' ? classValues(html, 'tpl-forum-category')[0] || item.tag : 'community';
-      const author = classValues(html, 'tpl-forum-name')[0] || item.author;
-      const titleCompany = normalizeSourceTitle(item.title).match(/^(.+?)(?=\s*(?:한국인\s*)?(?:직원|인재)?\s*(?:채용|구인|모집))/)?.[1];
-      const company = category === 'jobs' ? fieldValue(body, ['회사명', '업체명']) || (boardCategory === '구인' ? titleCompany || author : `구직자 · ${author || '한아시아 회원'}`) : undefined;
-      const location = category === 'jobs' ? fieldValue(body, ['근무지', '소재지', '지역']) || '태국' : undefined;
-      const salary = category === 'jobs' ? fieldValue(body, ['급여', '연봉', '월급', '시급']) || '원문 확인' : undefined;
-      return {
-        ...item,
-        title: classValues(html, 'tpl-forum-title')[0] || item.title,
-        body,
-        description: body.slice(0, 320),
-        author,
-        company,
-        location,
-        salary,
-        tag: boardCategory || (category === 'jobs' ? '구인구직' : '커뮤니티'),
-        publishedAt: publishedDate(classValues(html, 'tpl-forum-date')[0]) || item.publishedAt,
-        image: images[0],
-        images,
-      };
-    } catch {
-      return item;
-    }
-  }));
-  return curateSourceItems(enriched, category);
-}
-
-async function fetchKbaSource(source: ContentSource) {
-  const items = await enrichKbaJobs(extractKbaJobs(await fetchHtml(source.url), source.url));
-  return { sourceId: source.id, sourceName: source.name, region: source.region, url: source.url, title: 'KBA Europe EU 채용 공고', description: '유럽한국기업연합회가 게시한 유럽 현지 채용 공고입니다.', items, sections: [{ category: 'jobs' as ContentCategory, label: 'EU 구인구직', url: source.url, items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['유효한 채용 공고를 찾지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
-}
-
-async function fetchHanasiaSource(source: ContentSource, requestedCategory: ContentCategory | null) {
-  const paths: Array<{ category: ContentCategory; label: string; path: string }> = requestedCategory
-    ? [{ category: requestedCategory, label: requestedCategory === 'jobs' ? '구인구직' : '게시판', path: requestedCategory === 'jobs' ? '/구인구직' : '/게시판' }]
-    : [{ category: 'jobs', label: '구인구직', path: '/구인구직' }, { category: 'community', label: '게시판', path: '/게시판' }];
-  const sections = await Promise.all(paths.map(async ({ category, label, path }) => {
-    const url = new URL(path, source.url).href;
-    const list = extractHanasiaList(await fetchHtml(url), url, category);
-    return { category, label, url, items: await enrichHanasiaItems(list, category) };
-  }));
-  const items = requestedCategory ? sections[0]?.items || [] : [];
-  const count = sections.reduce((sum, section) => sum + section.items.length, 0);
-  return { sourceId: source.id, sourceName: source.name, region: source.region, url: source.url, title: '한아시아 태국 교민 게시판', description: '한아시아 회원이 작성한 실제 구인구직과 선별된 생활 커뮤니티 글입니다.', items, sections, status: count ? 'ready' : 'unavailable', warnings: count ? [] : ['조건에 맞는 게시물을 찾지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
-}
-
-async function fetchHaninCommunity(source: ContentSource) {
-  const response = await fetch('https://hanintoday.com.br/api/community/posts', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
-  if (!response.ok) throw new Error(`한인광장 API 응답 ${response.status}`);
-  const payload = await response.json() as { posts?: Array<{ id?: string; slug?: string; title?: string; body?: string; imageUrls?: string[]; status?: string; moderationReason?: string | null; createdAt?: string; authorName?: string; category?: { slug?: string; nameKo?: string } }> };
-  const candidates = (payload.posts || []).filter((post) => post.id && post.slug && post.title && post.status === 'published' && !post.moderationReason).map((post) => {
-    const body = normalizeSourceBody(post.body);
-    return {
-      title: normalizeSourceTitle(post.title),
-      url: `https://hanintoday.com.br/community/${post.slug}`,
-      description: body.slice(0, 320),
-      body,
-      image: post.imageUrls?.[0],
-      images: post.imageUrls || [],
-      publishedAt: post.createdAt,
-      category: 'community' as ContentCategory,
-      tag: post.category?.slug || post.category?.nameKo || 'community',
-      author: normalizeSourceText(post.authorName || '한인광장 회원'),
-      country: 'Brazil',
-    };
-  });
-  const items = curateSourceItems(candidates, 'community');
-  const url = 'https://hanintoday.com.br/community';
-  return { sourceId: source.id, sourceName: source.name, region: source.region, url, title: '한인투데이 · 한인광장', description: '브라질 한인 회원이 작성한 생활 질문, 정보 공유, 경험담과 유머 글입니다.', items, sections: [{ category: 'community' as ContentCategory, label: '한인광장', url, items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['조건에 맞는 한인광장 글을 찾지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
-}
-
 function extractLinks(html: string, pageUrl: string, pathPrefix: string, category: ContentCategory): CrawlItem[] {
   const items: CrawlItem[] = [];
   const seen = new Set<string>();
@@ -311,7 +69,7 @@ function extractLinks(html: string, pageUrl: string, pathPrefix: string, categor
   for (const match of html.matchAll(anchorPattern)) {
     let url: URL;
     try {
-      url = new URL(clean(match[1]), pageUrl);
+      url = new URL(match[1], pageUrl);
     } catch {
       continue;
     }
@@ -456,7 +214,6 @@ async function enrichItems(items: CrawlItem[]) {
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  if (params.get('source') === 'market') return Response.json(await fetchMarket(), { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=120' } });
   const region = params.get('region');
   if (region) {
     try {
@@ -469,29 +226,24 @@ export async function GET(request: Request) {
   const requestedCategory = params.get('category') as ContentCategory | null;
   const source = CONTENT_SOURCES.find((item) => item.id === id);
   if (!source) return Response.json({ error: '등록되지 않은 출처입니다.' }, { status: 404 });
-  if (requestedCategory && !source.categories.includes(requestedCategory)) return Response.json({ error: '이 출처에서 지원하지 않는 카테고리입니다.' }, { status: 400 });
 
   try {
-    if (source.id === 'kba-europe-jobs') return Response.json(await fetchKbaSource(source));
-    if (source.id === 'hanasia-thailand') return Response.json(await fetchHanasiaSource(source, requestedCategory));
-    if (source.id === 'hanintoday-brazil' && requestedCategory === 'community') return Response.json(await fetchHaninCommunity(source));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'jobs') {
       const response = await fetch('https://hanintoday.com.br/api/jobs', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
       if (!response.ok) throw new Error(`구인 API 응답 ${response.status}`);
       const payload = await response.json() as { jobs?: Array<{ id?: string; title?: string; company?: string; area?: string; category?: string; employmentType?: string; salaryType?: string; salary?: number; description?: string; requirements?: string; contact?: string; createdAt?: string; details?: { workplaceAddress?: string; salaryConditions?: string } }> };
-      const items = curateSourceItems((payload.jobs || []).filter((job) => job.id && job.title).slice(0, 50).map((job) => ({
+      const items = (payload.jobs || []).filter((job) => job.id && job.title).slice(0, 50).map((job) => ({
         title: clean(job.title),
         url: `https://hanintoday.com.br/jobs/${job.id}`,
         description: clean(job.description || ''),
-        body: normalizeSourceBody([job.description, job.requirements, job.details?.workplaceAddress, job.details?.salaryConditions, job.contact].filter(Boolean).join('\n\n')),
+        body: clean([job.description, job.requirements, job.details?.workplaceAddress, job.details?.salaryConditions, job.contact].filter(Boolean).join('\n\n')),
         publishedAt: job.createdAt,
         category: 'jobs' as ContentCategory,
         company: clean(job.company || ''),
         location: clean(job.area || ''),
         salary: job.details?.salaryConditions || (job.salary ? `${job.salary} · ${job.salaryType || ''}` : '상세 내용 참조'),
         tag: clean(job.category || job.employmentType || '구인구직'),
-        country: 'Brazil',
-      })), 'jobs');
+      }));
       return Response.json({ sourceId: source.id, sourceName: source.name, region: source.region, url: 'https://hanintoday.com.br/jobs', title: '한인투데이 구인구직', description: '한인투데이에서 확인된 최신 구인구직 공고입니다.', items, sections: [{ category: 'jobs', label: '구인구직', url: 'https://hanintoday.com.br/jobs', items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['구인구직 공고가 없습니다.'], fetchedAt: new Date().toISOString(), verified: true });
     }
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'directory') {
@@ -499,7 +251,7 @@ export async function GET(request: Request) {
       if (!response.ok) throw new Error(`업소 API 응답 ${response.status}`);
       const payload = await response.json() as { businesses?: Array<{ id?: string; tradeName?: string; entityType?: string; category?: string; phone?: string; whatsapp?: string; area?: string; address?: string; description?: string; logoUrl?: string; coverImageUrl?: string; latitude?: number; longitude?: number }> };
       const categoryLabels: Record<string, string> = { health_clinic: '병원·의료', grocery_market: '마트·식품', restaurant_cafe: '음식점·카페', it_services: 'IT·서비스', buddhist_temple: '종교·단체', consulate_organization: '공공기관·단체' };
-      const items = curateSourceItems((payload.businesses || []).filter((business) => business.id && business.tradeName && business.entityType !== 'job').slice(0, 100).map((business) => ({
+      const items = (payload.businesses || []).filter((business) => business.id && business.tradeName && business.entityType !== 'job').slice(0, 100).map((business) => ({
         title: clean(business.tradeName),
         url: `https://hanintoday.com.br/businesses/${business.id}`,
         description: clean(business.description || `${categoryLabels[business.category || ''] || '한인 업소'} · ${business.area || ''}`),
@@ -513,8 +265,7 @@ export async function GET(request: Request) {
         images: [business.coverImageUrl, business.logoUrl].filter(Boolean) as string[],
         lat: business.latitude,
         lng: business.longitude,
-        country: 'Brazil',
-      })), 'directory');
+      }));
       return Response.json({ sourceId: source.id, sourceName: source.name, region: source.region, url: 'https://hanintoday.com.br/businesses', title: '한인투데이 업소록', description: '한인투데이에서 확인된 실제 업소 정보입니다.', items, sections: [{ category: 'directory', label: '업소', url: 'https://hanintoday.com.br/businesses', items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['업소 정보가 없습니다.'], fetchedAt: new Date().toISOString(), verified: true });
     }
     const html = await fetchHtml(source.url);
@@ -534,13 +285,13 @@ export async function GET(request: Request) {
       if (feedResponse?.ok) {
         const feed = await feedResponse.text();
         const blocks = feed.match(/<item[\s>][\s\S]*?<\/item>/gi) || feed.match(/<entry[\s>][\s\S]*?<\/entry>/gi) || [];
-        items = curateSourceItems(await enrichItems(blocks.slice(0, 8).map((block) => ({
+        items = await enrichItems(blocks.slice(0, 8).map((block) => ({
           title: tag(block, 'title'),
           url: tag(block, 'link') || block.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] || canonical,
           description: tag(block, 'description') || tag(block, 'summary'),
           publishedAt: tag(block, 'pubDate') || tag(block, 'published') || tag(block, 'updated') || undefined,
           category: 'news' as ContentCategory,
-        })).filter((item) => item.title)), 'news').map((item) => ({ ...item, category: 'news' as ContentCategory }));
+        })).filter((item) => item.title));
       }
     }
     const crawlPaths = source.crawlPaths?.filter((crawlPath) => !requestedCategory || crawlPath.category === requestedCategory) || [];
@@ -550,21 +301,18 @@ export async function GET(request: Request) {
           const url = new URL(crawlPath.path, source.url).href;
           const page = await fetchHtml(url);
            const extracted = extractLinks(page, url, crawlPath.path, crawlPath.category);
-           const enriched = curateSourceItems(await enrichItems(extracted), crawlPath.category);
-           const fallback = source.categories.includes(crawlPath.category) && enriched.length === 0 && !['jobs', 'community'].includes(crawlPath.category)
-              ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}`, url: canonical }]
-              : [];
-            return { category: crawlPath.category, label: crawlPath.label, url, items: curateSourceItems(enriched.length ? enriched : fallback, crawlPath.category) };
+           const enriched = await enrichItems(extracted);
+           const fallback = source.categories.includes(crawlPath.category) && enriched.length === 0
+             ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}`, url: canonical }]
+             : [];
+           return { category: crawlPath.category, label: crawlPath.label, url, items: enriched.length ? enriched : fallback };
         } catch (error) {
           warnings.push(`${crawlPath.label}: ${error instanceof Error ? error.message : '목록을 읽지 못했습니다.'}`);
-          const fallback = source.categories.includes(crawlPath.category) && !['jobs', 'community'].includes(crawlPath.category) ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}` }] : [];
-          return { category: crawlPath.category, label: crawlPath.label, url: new URL(crawlPath.path, source.url).href, items: curateSourceItems(fallback, crawlPath.category) };
+          return { category: crawlPath.category, label: crawlPath.label, url: new URL(crawlPath.path, source.url).href, items: source.categories.includes(crawlPath.category) ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}` }] : [] };
         }
       }))
       : [];
-    if (!source.crawlPaths?.length || (requestedCategory && !crawlPaths.length)) items = curateSourceItems([sourceItem], requestedCategory || source.categories[0] || 'news').map((item) => ({ ...item, category: requestedCategory || source.categories[0] || 'news' }));
-    const contentCount = items.length + sections.reduce((sum, section) => sum + section.items.length, 0);
-    if (requestedCategory && contentCount === 0) warnings.push('카테고리 기준을 충족하는 실제 콘텐츠가 없습니다.');
+    if (!source.crawlPaths?.length || (requestedCategory && !crawlPaths.length)) items = [sourceItem];
     return Response.json({
       sourceId: source.id,
       sourceName: source.name,
@@ -576,7 +324,7 @@ export async function GET(request: Request) {
       sections,
       image: pageImages[0],
       images: pageImages,
-      status: contentCount ? (warnings.length ? 'partial' : 'ready') : 'unavailable',
+      status: warnings.length ? 'partial' : 'ready',
       warnings,
       fetchedAt: new Date().toISOString(),
       verified: source.trust === 'official' || source.trust === 'verified',
