@@ -4,7 +4,7 @@
 'use client';
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type TouchEvent, type CSSProperties } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Swords, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Swords, Users, X } from 'lucide-react';
 import { claimTetrisLobbyRoom, claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, heartbeatTetrisLobbyRoom, joinTetrisLobbyRoom, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, releaseTetrisLobbyRoom, reserveGameStake, reserveTetrisLobbyRoom, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisLobbyRoom, type TetrisQueueProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
@@ -1296,6 +1296,68 @@ export default function GamesPage() {
 
   const visual = buildVisual(game);
   const opponentVisual = opponentState ? buildVisual(opponentState) : emptyBoard();
+  const videoRoomActive = Boolean(matchId && opponent && ['countdown', 'playing'].includes(matchPhase));
+  const videoRoomUrl = videoRoomActive && matchId && opponent
+    ? `/webrtc?friend=${encodeURIComponent(opponent.id)}&auto=1&compact=1&gameRoom=${encodeURIComponent(matchId)}`
+    : '';
+
+  if (true) {
+    return (
+      <div className="games-page h-[calc(100dvh-6rem)] min-h-0 overflow-hidden bg-[#070b17] px-2 py-2 text-white sm:px-3 md:px-4">
+        <div className="mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-2">
+          <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-3 py-2 shadow-xl sm:px-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300"><Gamepad2 size={13} /> Arcade / Live battle</div>
+              <h1 className="truncate text-xl font-black tracking-[-0.04em] sm:text-2xl md:text-3xl">GLOBAL TETRIS</h1>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 text-right text-[10px] sm:gap-3 sm:text-xs"><span className="hidden text-slate-400 sm:inline">{matchStatus}</span><span className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.08] px-2 py-1.5 font-black text-emerald-200">{matchPhase.toUpperCase()}</span></div>
+          </header>
+
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(148px,.72fr)] gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)] lg:gap-3">
+            <section className="min-h-0 overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#0d1526] p-2 shadow-2xl sm:rounded-[1.5rem] sm:p-3">
+              <div className="grid min-h-0 h-full grid-rows-[minmax(0,1fr)_auto] gap-2">
+                <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(58px,112px)] gap-2">
+                  <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#050914] p-1.5 sm:p-2">
+                    <div className="h-full max-h-full aspect-[1/2] max-w-full">
+                      <div className="relative h-full w-full">
+                        <BoardGrid cells={visual} />
+                        {countdown && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-black/45"><span className="text-3xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)] sm:text-5xl">{countdown}</span></div>}
+                        {matchResult && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-black/45"><span className={`text-3xl font-black tracking-widest sm:text-5xl ${matchResult === 'WIN' ? 'text-emerald-300' : 'text-rose-300'}`}>{matchResult}</span></div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2">
+                    <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5 sm:p-2"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><NextBlock piece={game.nextPiece} compact /></div>
+                    <div className="rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5 sm:p-2"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div></div>
+                    <div className="grid min-h-0 grid-rows-4 gap-1 text-center text-[9px] sm:text-[10px]"><div className="rounded-lg bg-cyan-300/[0.08] p-1.5"><b className="block text-cyan-200">{game.score.toLocaleString()}</b><span className="text-slate-500">점수</span></div><div className="rounded-lg bg-emerald-300/[0.08] p-1.5"><b className="block text-emerald-200">{game.lines}</b><span className="text-slate-500">라인</span></div><div className="rounded-lg bg-amber-300/[0.08] p-1.5"><b className="block text-amber-200">{game.attackTotal}</b><span className="text-slate-500">공격</span></div><div className="rounded-lg bg-rose-300/[0.08] p-1.5"><b className="block text-rose-200">{game.garbageReceived}</b><span className="text-slate-500">받음</span></div></div>
+                  </div>
+                </div>
+
+                <div className="grid shrink-0 grid-cols-4 gap-1.5 sm:gap-2">
+                  <button type="button" onClick={practiceStart} disabled={matchPhase === 'countdown' || matchPhase === 'playing'} className="flex min-h-9 items-center justify-center gap-1 rounded-xl bg-cyan-400 px-1 text-[10px] font-black text-slate-950 disabled:opacity-40 sm:text-xs"><Play size={13} />연습</button>
+                  <button type="button" onClick={matchPhase === 'waiting' ? () => void cancelMatch() : () => void findMatch()} disabled={['betting', 'countdown', 'playing'].includes(matchPhase)} className="min-h-9 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40 sm:text-xs">{matchPhase === 'waiting' ? '취소' : '매칭'}</button>
+                  <button type="button" onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="flex min-h-9 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-1 text-[10px] font-bold disabled:opacity-30 sm:text-xs">{game.paused ? <Play size={13} /> : <Pause size={13} />}{game.paused ? '계속' : '일시정지'}</button>
+                  <button type="button" onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="flex min-h-9 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-1 text-[10px] font-bold disabled:opacity-30 sm:text-xs"><RotateCw size={13} />회전</button>
+                </div>
+              </div>
+            </section>
+
+            <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-emerald-300/15 bg-[#0d1526] shadow-2xl sm:rounded-[1.5rem]">
+              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2 sm:px-3"><div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200"><MessageCircle size={13} /> Voice + Video</div><span className="text-[9px] font-bold text-slate-500">게임 시작 시 자동 연결</span></div>
+              <div className="min-h-0 flex-1 overflow-hidden p-1.5 sm:p-2">
+                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-[#050914]" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-[#050914] p-4 text-center"><div><Camera size={26} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
+              </div>
+              <div className="grid h-20 shrink-0 grid-rows-[minmax(0,1fr)_auto] gap-1 border-t border-white/10 p-1.5 sm:h-24 sm:p-2">
+                <div className="min-h-0 overflow-hidden text-[10px] text-slate-400">{messages.length === 0 ? <div className="py-1 text-center text-slate-600">게임 채팅 대기 중</div> : messages.slice(-2).map((message) => <div key={message.id} className="truncate"><b className="text-cyan-200">{message.user}</b> {message.text}</div>)}</div>
+                <form onSubmit={sendMessage} className="flex gap-1"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="게임 채팅" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-white outline-none" /><button aria-label="게임 채팅 보내기" className="rounded-lg bg-cyan-400 px-2 text-[10px] font-black text-slate-950"><Send size={13} /></button></form>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="games-page min-h-[calc(100vh-96px)] bg-[#070b17] px-4 py-8 text-white">
