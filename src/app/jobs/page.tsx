@@ -27,7 +27,7 @@ export default function JobsPage() {
         if (!result) return [];
         return result.items.map((item) => {
         const id = sourceItemId(source.id, 'jobs', item.url);
-        return { id, title: item.title, company: source.name, location: source.region, salary: '상세 내용 참조', tag: '출처 자동수집', country: source.region, authorId: 'source', createdAt: item.publishedAt || result.fetchedAt, image: item.image, images: item.images, sourceId: source.id, sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
+        return { id, title: item.title, company: item.company || source.name, location: item.location || source.region, salary: item.salary || '상세 내용 참조', tag: item.tag || '출처 자동수집', country: source.region, authorId: 'source', createdAt: item.publishedAt || result.fetchedAt, image: item.image, images: item.images, sourceId: source.id, sourceName: source.name, sourceUrl: item.url, sourceContentId: id };
         });
       });
       const merged = new Map<string, Job>();
