@@ -1131,9 +1131,14 @@ export default function GamesPage() {
            setBetAmount(room.betAmount);
            setRoomBetConfigured(true);
          }
-       setOpponentReady(nextReady);
-       if (nextOpponent) setOpponent(nextOpponent);
-        const ownStakeHeld = matchRole === 'A' ? Boolean(room.stakeHeldA) : Boolean(room.stakeHeldB);
+        setOpponentReady(nextReady);
+        if (nextOpponent) setOpponent(nextOpponent);
+        if (nextOpponent && matchPhase === 'waiting' && room.phase !== 'playing' && room.phase !== 'countdown' && room.phase !== 'finished') {
+          setMatchPhase(room.startRequestedBy || room.phase === 'holding' ? 'holding' : 'betting');
+          setMatchStatus(room.startRequestedBy ? '참가비를 자동으로 홀딩하는 중입니다...' : '상대 입장 완료 · 배팅금액을 설정해주세요');
+          setInviteStatus('상대가 방에 입장했습니다. 양쪽 모두 배팅금액을 확정하면 자동으로 시작합니다.');
+        }
+         const ownStakeHeld = matchRole === 'A' ? Boolean(room.stakeHeldA) : Boolean(room.stakeHeldB);
         const bothStakesHeld = Boolean(room.stakeHeldA && room.stakeHeldB);
         if (ownStakeHeld && !stakeReserved) setStakeReserved(true);
         if (room.startRequestedBy && !room.startAt && room.phase !== 'finished') {
