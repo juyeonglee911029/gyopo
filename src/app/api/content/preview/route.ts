@@ -67,7 +67,12 @@ function extractLinks(html: string, pageUrl: string, pathPrefix: string, categor
   const seen = new Set<string>();
   const anchorPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchorPattern)) {
-    const url = new URL(match[1], pageUrl);
+    let url: URL;
+    try {
+      url = new URL(match[1], pageUrl);
+    } catch {
+      continue;
+    }
     const heading = match[2].match(/<(h[1-6]|strong|b)[^>]*>([\s\S]*?)<\/\1>/i)?.[2];
     const title = clean(heading || match[2]);
     if (url.origin !== new URL(pageUrl).origin || !url.pathname.startsWith(pathPrefix) || url.pathname === pathPrefix || url.hash || title.length < 4 || title.length > 280) continue;
@@ -218,6 +223,7 @@ export async function GET(request: Request) {
     }
   }
   const id = params.get('source');
+  const requestedCategory = params.get('category') as ContentCategory | null;
   const source = CONTENT_SOURCES.find((item) => item.id === id);
   if (!source) return Response.json({ error: '등록되지 않은 출처입니다.' }, { status: 404 });
 
@@ -231,7 +237,7 @@ export async function GET(request: Request) {
     const pageImages = extractImages(html, source.url, pageData);
     const pageBody = extractBody(html, pageData);
     const feedHref = html.match(/<link[^>]+type=["']application\/(?:rss\+xml|atom\+xml)["'][^>]+href=["']([^"']+)["'][^>]*>/i)?.[1];
-    const sourceItem = fallbackItem(source.name, canonical, source.categories[0] || 'news', title, description, pageBody, pageImages[0], pageImages);
+    const sourceItem = fallbackItem(source.name, canonical, requestedCategory || source.categories[0] || 'news', title, description, pageBody, pageImages[0], pageImages);
     const warnings: string[] = [];
     let items: CrawlItem[] = [];
     if (feedHref) {
@@ -248,8 +254,9 @@ export async function GET(request: Request) {
         })).filter((item) => item.title));
       }
     }
+    const crawlPaths = source.crawlPaths?.filter((crawlPath) => !requestedCategory || crawlPath.category === requestedCategory) || [];
     const sections = source.crawlPaths
-      ? await Promise.all(source.crawlPaths.map(async (crawlPath) => {
+      ? await Promise.all(crawlPaths.map(async (crawlPath) => {
         try {
           const url = new URL(crawlPath.path, source.url).href;
           const page = await fetchHtml(url);
@@ -265,7 +272,7 @@ export async function GET(request: Request) {
         }
       }))
       : [];
-    if (!source.crawlPaths?.length) items = [sourceItem];
+    if (!source.crawlPaths?.length || (requestedCategory && !crawlPaths.length)) items = [sourceItem];
     return Response.json({
       sourceId: source.id,
       sourceName: source.name,
