@@ -84,6 +84,8 @@ export default function WebRTCPage() {
   const [chatError, setChatError] = useState('');
   const [genderPreference, setGenderPreference] = useState<GenderPreference>(user?.genderPreference || 'any');
   const [targetUserId, setTargetUserId] = useState('');
+  const [compactMode, setCompactMode] = useState(false);
+  const [autoStart, setAutoStart] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const sidebarVideoRef = useRef<HTMLVideoElement>(null);
@@ -105,6 +107,7 @@ export default function WebRTCPage() {
   const outgoingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoSenderRef = useRef<RTCRtpSender | null>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const autoStartRef = useRef(false);
 
   const resetSignalingState = () => {
     appliedCandidates.current.clear();
@@ -117,7 +120,10 @@ export default function WebRTCPage() {
   }, [flip]);
 
   useEffect(() => {
-    setTargetUserId(new URLSearchParams(window.location.search).get('friend') || '');
+    const params = new URLSearchParams(window.location.search);
+    setTargetUserId(params.get('friend') || '');
+    setCompactMode(params.get('compact') === '1');
+    setAutoStart(params.get('auto') === '1');
   }, []);
 
   useEffect(() => {
@@ -337,6 +343,12 @@ export default function WebRTCPage() {
       return;
     }
   };
+
+  useEffect(() => {
+    if (!autoStart || !targetUserId || !user || active || autoStartRef.current) return;
+    autoStartRef.current = true;
+    void startMatch();
+  }, [autoStart, targetUserId, user?.id, active]);
 
   const endMatch = async () => {
     const token = getSessionToken();
@@ -643,6 +655,36 @@ export default function WebRTCPage() {
       setChatError(error instanceof Error ? error.message : 'AI 답변을 가져오지 못했습니다.');
     }
   };
+
+  if (compactMode) {
+    return (
+      <div className="h-full min-h-0 w-full overflow-hidden bg-[#050914] text-white">
+        <div className="relative flex h-full min-h-0 flex-col">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#10182b] px-3 py-2">
+            <div className="min-w-0">
+              <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">GAME VOICE + VIDEO</div>
+              <div className="truncate text-xs font-bold text-slate-300">{peer?.name || '상대방 연결 대기'}</div>
+            </div>
+            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${isConnected ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>{isConnected ? 'CONNECTED' : active ? 'CONNECTING' : 'READY'}</span>
+          </div>
+
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
+            <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`} />
+            {!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,#172b50,#050914_72%)] p-4 text-center"><div><Camera size={26} className="mx-auto mb-2 text-cyan-200" /><p className="text-xs font-black">{active ? status : '카메라·마이크 준비 중'}</p><p className="mt-1 text-[10px] text-slate-500">게임방 영상 연결</p></div></div>}
+            <div className="absolute bottom-2 right-2 w-[32%] min-w-[64px] overflow-hidden rounded-xl border border-white/70 bg-black shadow-xl">
+              <video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-cover ${flip ? 'scale-x-[-1]' : ''}`} />
+            </div>
+          </div>
+
+          <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-white/10 bg-[#10182b] p-2">
+            <button type="button" onClick={toggleMicrophone} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 text-[10px] font-black disabled:opacity-40">{audioEnabled ? <Mic size={13} /> : <MicOff size={13} />}{audioEnabled ? '마이크' : '음소거'}</button>
+            <span className="flex min-h-9 items-center justify-center rounded-lg border border-white/10 px-1 text-[10px] font-bold text-slate-400">{status}</span>
+            <button type="button" onClick={() => void endMatch()} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg bg-rose-500/90 px-1 text-[10px] font-black text-white disabled:opacity-40"><VideoOff size={13} />종료</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="webrtc-page min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
