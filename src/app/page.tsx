@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import BannerAd from '@/components/ads/BannerAd';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { ArrowUpRight, BriefcaseBusiness, CircleDollarSign, Globe2, Megaphone, Newspaper, PlayCircle, ShoppingBag, Sparkles, Store, UsersRound, Video } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, CircleDollarSign, Globe2, Megaphone, MessageCircle, Newspaper, PlayCircle, ShoppingBag, Sparkles, Store, UsersRound, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { listDocuments } from '@/lib/firebase';
 import WorldClock from '@/components/layout/WorldClock';
@@ -59,6 +59,9 @@ export default function Home() {
               <Link href="/games" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-5 py-3.5 text-sm font-bold text-slate-200 transition hover:border-teal-300/40 hover:bg-teal-300/10 hover:text-teal-200">
                 <PlayCircle size={17} /> 테트리스 대전
               </Link>
+              <button onClick={() => window.dispatchEvent(new Event('gyopo-open-global-chat'))} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-5 py-3.5 text-sm font-bold text-cyan-100 transition hover:border-cyan-200/50 hover:bg-cyan-300/20">
+                <MessageCircle size={17} /> 라이브 채팅 열기
+              </button>
             </div>
             <WorldClock />
           </div>
