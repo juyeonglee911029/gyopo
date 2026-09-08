@@ -29,6 +29,11 @@ export default function GlobalChat() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
 
+  const setDesktopLounge = (open: boolean) => {
+    setDesktopOpen(open);
+    window.dispatchEvent(new CustomEvent('gyopo-lounge-change', { detail: { open } }));
+  };
+
   useEffect(() => {
     let active = true;
     let lastCleanupAt = 0;
@@ -92,7 +97,7 @@ export default function GlobalChat() {
 
   return (
     <>
-    <aside id="global-lounge" className={`fixed bottom-0 right-0 top-16 z-40 hidden w-80 flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl transition-transform duration-200 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+     <aside id="global-lounge" className={`fixed bottom-0 right-0 top-24 z-40 hidden w-80 flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl transition-transform duration-300 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-full'}`}>
        <div className="border-b border-white/8 bg-[#0d1628] p-3">
          <div className="flex items-center justify-between gap-3">
            <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> 실시간 라운지</div><p className="mt-1 text-[11px] text-slate-500">지역에 관계없이 연결된 교민들</p></div>
@@ -138,7 +143,7 @@ export default function GlobalChat() {
         )}
       </div>
     </aside>
-      <button onClick={() => setDesktopOpen((open) => !open)} aria-label={desktopOpen ? '글로벌 라운지 닫기' : '글로벌 라운지 열기'} className={`fixed bottom-4 right-0 z-50 hidden items-center gap-2 rounded-l-2xl border border-white/10 bg-[#10182b] px-3 py-3 text-xs font-black text-white shadow-2xl transition-all lg:flex ${desktopOpen ? 'right-80' : 'right-0'}`}>
+       <button onClick={() => setDesktopLounge(!desktopOpen)} aria-label={desktopOpen ? '글로벌 라운지 닫기' : '글로벌 라운지 열기'} className={`fixed bottom-4 right-0 z-50 hidden items-center gap-2 rounded-l-2xl border border-white/10 bg-[#10182b] px-3 py-3 text-xs font-black text-white shadow-2xl transition-all lg:flex ${desktopOpen ? 'right-80' : 'right-0'}`}>
         {desktopOpen ? <PanelRightClose size={16} className="text-teal-300" /> : <PanelRightOpen size={16} className="text-teal-300" />}
         <span>{desktopOpen ? '닫기' : '라운지'}</span>
       </button>
