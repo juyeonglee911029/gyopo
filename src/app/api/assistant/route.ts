@@ -6,6 +6,8 @@ const systemPrompt = `당신은 GYOPO 글로벌 한인 포털의 정보 도우�
 한국어로 간결하고 정확하게 답하세요. 모르는 내용은 추측하지 말고 모른다고 말하세요.
 여행, 생활, 뉴스, 금융, 이민 질문에는 국가와 날짜를 확인하고, 금전·법률·의료 문제는 전문가 확인이 필요하다고 안내하세요.`;
 
+// Gemini is preferred when its Production secret is available.
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { messages?: ChatMessage[] } | null;
   const messages = body?.messages?.filter((message) => message.role && message.content?.trim()).slice(-12) || [];
