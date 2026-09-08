@@ -39,7 +39,7 @@ export default function MarketTicker() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const response = await fetch('/api/market', { cache: 'no-store' }).catch(() => null);
+      const response = await fetch('/api/content/preview?source=market', { cache: 'no-store' }).catch(() => null);
       if (!response?.ok) return;
       const next = await response.json().catch(() => null) as MarketPayload | null;
       if (active && next) setPayload(next);
