@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MessageCircle, Send, Users } from 'lucide-react';
+import { MessageCircle, PanelRightClose, PanelRightOpen, Send, Users } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { createDocument, deleteExpiredChatMessages, getOnlineCount, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
@@ -21,10 +22,12 @@ function formatTime(value: string) {
 
 export default function GlobalChat() {
   const { user, selectedCountry } = useGlobalStore();
+  const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [onlineCount, setOnlineCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +56,8 @@ export default function GlobalChat() {
     };
   }, [user?.id]);
 
+  if (pathname === '/webrtc') return null;
+
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!input.trim() || !user) return;
@@ -78,7 +83,7 @@ export default function GlobalChat() {
 
   return (
     <>
-    <aside className="fixed bottom-0 right-0 top-16 z-40 hidden w-80 flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl lg:flex">
+    <aside className={`fixed bottom-0 right-0 top-16 z-40 hidden w-80 flex-col border-l border-white/10 bg-[#0a1120] shadow-2xl transition-transform duration-200 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-full'}`}>
        <div className="border-b border-white/8 bg-[#0d1628] p-3">
          <div className="flex items-center justify-between gap-3">
            <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> 실시간 라운지</div><p className="mt-1 text-[11px] text-slate-500">지역에 관계없이 연결된 교민들</p></div>
@@ -124,7 +129,11 @@ export default function GlobalChat() {
         )}
       </div>
     </aside>
-     <div className="fixed bottom-3 left-3 right-3 z-40 lg:hidden">
+      <button onClick={() => setDesktopOpen((open) => !open)} aria-label={desktopOpen ? '글로벌 라운지 닫기' : '글로벌 라운지 열기'} className={`fixed right-0 top-1/2 z-50 hidden -translate-y-1/2 items-center gap-2 rounded-l-2xl border border-white/10 bg-[#10182b] px-3 py-3 text-xs font-black text-white shadow-2xl transition-all lg:flex ${desktopOpen ? 'right-80' : 'right-0'}`}>
+        {desktopOpen ? <PanelRightClose size={16} className="text-teal-300" /> : <PanelRightOpen size={16} className="text-teal-300" />}
+        <span>{desktopOpen ? '닫기' : '라운지'}</span>
+      </button>
+      <div className="fixed bottom-3 left-3 right-3 z-40 lg:hidden">
       {mobileOpen && <div className="mb-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#10182b]">
         <div className="flex max-h-56 flex-col gap-2 overflow-y-auto p-3">
           {messages.length === 0 && <p className="py-4 text-center text-xs text-slate-400">아직 대화가 없습니다.</p>}
