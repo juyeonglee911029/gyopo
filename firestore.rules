@@ -4,6 +4,95 @@ service cloud.firestore {
     function isMaster() {
       return request.auth != null && request.auth.token.email == 'juyeonglee911029@gmail.com';
     }
+    function hasValidGender(data) {
+      return data.keys().hasAny(['gender']) && (data.gender == 'male' || data.gender == 'female');
+    }
+    function hasValidCountry(data) {
+      return data.keys().hasAny(['country'])
+        && data.country is string
+        && data.country.size() > 0
+        && data.country.size() <= 80
+        && data.country.matches('.*[A-Za-z].*')
+        && data.country != 'Global';
+    }
+    function hasCompletedOnboarding(data) {
+      return hasValidGender(data) && hasValidCountry(data);
+    }
+    function hasNoOnboardingFields(data) {
+      return !data.keys().hasAny(['gender', 'country']);
+    }
+    function hasValidProfileState(data) {
+      return hasNoOnboardingFields(data) || hasCompletedOnboarding(data);
+    }
+    function hasImmutableOnboardingFields() {
+      return hasValidProfileState(request.resource.data)
+        && (!hasValidGender(resource.data) || request.resource.data.gender == resource.data.gender)
+        && (!hasValidCountry(resource.data) || request.resource.data.country == resource.data.country);
+    }
+    function isSafePublicProfile(data) {
+      return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'updatedAt'])
+        && data.keys().hasAll(['name', 'image', 'gender', 'country', 'isSubscribed', 'isPublic', 'updatedAt'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.image is string
+        && hasCompletedOnboarding(data)
+        && data.isPublic == true
+        && data.isSubscribed is bool
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['age']) || (data.age is int && data.age > 0 && data.age <= 130));
+    }
+    function publicProfileMatchesPrivate(userId) {
+      return request.resource.data.gender == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.gender
+        && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country;
+    }
+    function isSafePresence(data) {
+      return data.keys().hasOnly(['userId', 'name', 'image', 'gender', 'country', 'age', 'lastSeenAt', 'updatedAt'])
+        && data.keys().hasAll(['lastSeenAt', 'updatedAt'])
+        && data.lastSeenAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          !data.keys().hasAny(['userId'])
+          || (
+            data.keys().hasAll(['userId', 'name', 'image', 'gender', 'country', 'age'])
+            && data.userId is string
+            && data.name is string
+            && data.image is string
+            && hasCompletedOnboarding(data)
+            && data.age is int
+            && data.age >= 0
+            && data.age <= 130
+          )
+        );
+    }
+    function presenceMatchesPrivate(data) {
+      return data.gender == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.gender
+        && data.country == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.country;
+    }
+    function isValidEscrowOrder(data) {
+      return data.keys().hasOnly(['buyerId', 'sellerId', 'productId', 'amount', 'status', 'createdAt', 'updatedAt', 'timeline'])
+        && data.keys().hasAll(['buyerId', 'sellerId', 'productId', 'amount', 'status', 'createdAt', 'updatedAt', 'timeline'])
+        && data.buyerId is string
+        && data.sellerId is string
+        && data.buyerId != data.sellerId
+        && data.productId is string
+        && data.amount is number
+        && data.amount > 0
+        && data.status == 'PAYMENT_HELD'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.timeline is list;
+    }
+    function isAllowedEscrowTransition() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'timeline', 'updatedAt'])
+        && request.resource.data.timeline is list
+        && resource.data.timeline is list
+        && request.resource.data.timeline.size() == resource.data.timeline.size() + 1
+        && (
+          (request.auth.uid == resource.data.sellerId && resource.data.status == 'PAYMENT_HELD' && request.resource.data.status == 'SHIPPING')
+          || (request.auth.uid == resource.data.sellerId && resource.data.status == 'SHIPPING' && request.resource.data.status == 'IN_TRANSIT')
+          || (request.auth.uid == resource.data.buyerId && resource.data.status == 'IN_TRANSIT' && request.resource.data.status == 'DELIVERED')
+        );
+    }
     match /posts/{postId} {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
@@ -64,11 +153,18 @@ service cloud.firestore {
     }
     match /profiles/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
-      allow create, update, delete: if request.auth != null && (request.auth.uid == userId || isMaster());
+      allow create: if isMaster() || (request.auth != null && request.auth.uid == userId && hasValidProfileState(request.resource.data));
+      allow update: if isMaster() || (request.auth != null && request.auth.uid == userId && hasImmutableOnboardingFields());
+      allow delete: if isMaster();
     }
     match /publicProfiles/{userId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow read: if resource.data.isPublic == true;
+      allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && isSafePublicProfile(request.resource.data)
+        && publicProfileMatchesPrivate(userId);
+      allow delete: if false;
     }
     match /withdrawalRequests/{requestId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
@@ -83,9 +179,13 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /escrowOrders/{orderId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.buyerId == request.auth.uid;
-      allow update: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
+      allow read: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
+      allow create: if request.auth != null
+        && request.resource.data.buyerId == request.auth.uid
+        && isValidEscrowOrder(request.resource.data)
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.usdtBalance
+          == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.usdtBalance - request.resource.data.amount;
+      allow update: if isMaster() || (request.auth != null && isAllowedEscrowTransition());
       allow delete: if false;
     }
     match /adminSettings/{settingId} {
@@ -105,7 +205,19 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
     match /presence/{visitorId} {
-      allow read, create, update: if true;
+      allow read: if false;
+      allow create, update: if request.resource.data.keys().hasOnly(['lastSeenAt', 'updatedAt'])
+        && request.resource.data.lastSeenAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+    match /publicPresence/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid
+        && isSafePresence(request.resource.data)
+        && presenceMatchesPrivate(request.resource.data);
       allow delete: if false;
     }
     match /webrtcQueue/{userId} {
@@ -133,7 +245,12 @@ service cloud.firestore {
     match /gameStakes/{stakeId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0;
-      allow update, delete: if false;
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && resource.data.status == 'RESERVED'
+        && request.resource.data.status == 'REFUNDED'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'refundedAt']);
+      allow delete: if false;
     }
     match /gamePayouts/{payoutId} {
       allow read: if request.auth != null && (resource.data.winnerId == request.auth.uid || resource.data.loserId == request.auth.uid || isMaster());
@@ -169,4 +286,3 @@ service cloud.firestore {
      }
   }
 }
-
