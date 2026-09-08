@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ExternalLink, Image as ImageIcon, ShieldCheck } from 'lucide-react';
+import { Image as ImageIcon, ShieldCheck } from 'lucide-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getDocument, getSessionToken } from '@/lib/firebase';
@@ -39,7 +39,7 @@ function categoryLabel(category?: string) {
 async function findLiveContent(sourceId: string, category: string, sourceUrl: string) {
   const query = sourceId.startsWith('regional-')
     ? `region=${encodeURIComponent(sourceId.replace(/^regional-/, ''))}`
-    : `source=${encodeURIComponent(sourceId)}`;
+    : `source=${encodeURIComponent(sourceId)}&category=${encodeURIComponent(category)}`;
   const response = await fetch(`/api/content/preview?${query}`);
   if (!response.ok) return null;
   const snapshot = await response.json() as { sourceName?: string; region?: string; fetchedAt?: string; items?: SourceItem[]; sections?: Array<{ category: string; items: SourceItem[] }> };
@@ -100,7 +100,7 @@ export default function ContentDetailPage() {
 
           {description && description !== body && <p className="mt-5 rounded-2xl border border-teal-300/10 bg-teal-300/[.06] p-4 text-sm leading-7 text-teal-50">{description}</p>}
 
-          {(content.company || content.location || content.salary || content.price || content.address || content.tel) && (
+           {(content.company || content.location || content.salary || content.price || content.address || content.tel) && (
             <div className="mt-6 grid gap-2 rounded-2xl border border-white/8 bg-white/[.04] p-4 text-sm text-slate-300 sm:grid-cols-2">
               {content.company && <div><span className="text-slate-500">회사</span><strong className="ml-2">{content.company}</strong></div>}
               {content.location && <div><span className="text-slate-500">지역</span><strong className="ml-2">{content.location}</strong></div>}
@@ -111,9 +111,8 @@ export default function ContentDetailPage() {
             </div>
           )}
 
-           <section className="mx-auto mt-8 max-w-5xl"><h2 className="mb-3 text-xs font-black uppercase tracking-[.18em] text-slate-500">본문</h2>{body ? <div className="whitespace-pre-wrap text-[17px] leading-8 text-slate-200">{body}</div> : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm leading-6 text-slate-500">이 출처는 본문을 공개하지 않습니다. 아래 원문 링크에서 전체 내용을 확인할 수 있습니다.</p>}</section>
+            <section className="mx-auto mt-8 max-w-5xl"><h2 className="mb-3 text-xs font-black uppercase tracking-[.18em] text-slate-500">본문</h2>{body ? <div className="whitespace-pre-wrap text-[17px] leading-8 text-slate-200">{body}</div> : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm leading-6 text-slate-500">이 출처는 상세 본문을 제공하지 않습니다.</p>}</section>
            {images.length > 1 && <div className="mx-auto mt-8 grid max-w-5xl gap-3 sm:grid-cols-2"><div className="col-span-full mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-slate-500"><ImageIcon size={14} /> 원문 이미지 {images.length - 1}장</div>{images.slice(1).map((image) => <img key={image} src={image} alt={title} className="max-h-96 w-full rounded-2xl bg-black/20 object-contain" />)}</div>}
-          {content.sourceUrl && <a href={content.sourceUrl} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 rounded-xl border border-teal-300/20 bg-teal-300/10 px-4 py-3 text-sm font-black text-teal-200 hover:bg-teal-300/15">원문 출처 열기 <ExternalLink size={15} /></a>}
         </div>
       </div>
     </article>
