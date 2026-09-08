@@ -496,7 +496,6 @@ export default function GamesPage() {
     try {
       await mergeDocument('tetrisInvites', invite.id, { status: 'accepted', updatedAt: new Date() }, token);
     } catch {
-      handledInviteIds.current.delete(invite.id);
       setInviteStatus('수락 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
       return;
     }
@@ -528,8 +527,8 @@ export default function GamesPage() {
     if (token) {
       try {
         await mergeDocument('tetrisInvites', invite.id, { status: 'rejected', updatedAt: new Date() }, token);
+        setInviteStatus('대전 신청을 거절했습니다.');
       } catch {
-        handledInviteIds.current.delete(invite.id);
         setInviteStatus('거절 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
       }
     }
@@ -556,8 +555,7 @@ export default function GamesPage() {
        return;
     }
     try {
-      // Both players confirm the same amount first; funds are held only after Start.
-      await updateRoom({ betAmount: amount, phase: 'betting' });
+      // Both players confirm the same amount in one room update before auto-start.
       await updateRoom({
         betAmount: amount,
         phase: 'betting',
@@ -649,15 +647,22 @@ export default function GamesPage() {
         queryDocuments<TetrisInvite>('tetrisInvites', 'senderId', user.id, token),
       ]).catch(() => [[], []] as [TetrisInvite[], TetrisInvite[]]);
       const invites = [...received, ...sent];
-      const pending = invites
-         .filter((invite) => invite.recipientId === user.id && invite.status === 'pending' && !handledInviteIds.current.has(invite.id) && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-      if (pending && pending.id !== incomingInvite?.id) setIncomingInvite(pending);
+       const pending = invites
+          .filter((invite) => invite.recipientId === user.id && invite.status === 'pending' && !handledInviteIds.current.has(invite.id) && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
+         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+       const currentInvite = incomingInvite ? invites.find((invite) => invite.id === incomingInvite.id) : null;
+       if (currentInvite && currentInvite.status !== 'pending') setIncomingInvite(null);
+       if (pending && pending.id !== incomingInvite?.id) setIncomingInvite(pending);
        const accepted = invites.find((invite) => invite.id === sentInviteId && invite.status === 'accepted');
        const rejected = invites.find((invite) => invite.id === sentInviteId && invite.status === 'rejected');
-       if (rejected) {
-         setSentInviteId(null);
-         setMatchPhase('idle');
+        if (rejected) {
+          setSentInviteId(null);
+          setMatchId(null);
+          setMatchRole(null);
+          setOpponent(null);
+          setReadyForBattle(false);
+          setOpponentReady(false);
+          setMatchPhase('idle');
          setMatchStatus('상대방이 대전 신청을 거절했습니다.');
          setInviteStatus('다른 온라인 회원에게 대전 신청을 보낼 수 있습니다.');
        }
@@ -696,15 +701,13 @@ export default function GamesPage() {
         ...(matchRole === 'A' ? {
           playerAId: user.id,
           playerA: profile,
-          playerAState: state,
-          readyA: readyForBattle,
+           playerAState: state,
         } : {
           playerBId: user.id,
           playerB: profile,
-          playerBState: state,
-          readyB: readyForBattle,
+           playerBState: state,
         }),
-        phase: matchPhase === 'playing' ? 'playing' : current?.phase || 'betting',
+         ...(matchPhase === 'playing' ? { phase: 'playing' } : {}),
         updatedAt: new Date(),
       };
       await mergeDocument('tetrisRooms', matchId, ownPatch, token).catch(() => undefined);
