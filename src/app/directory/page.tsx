@@ -24,7 +24,7 @@ export default function DirectoryPage() {
   const loadDirectories = async () => {
     try {
       const [data, source] = await Promise.all([
-        listDocuments<Omit<Directory, 'id'>>('directories', getSessionToken()),
+        listDocuments<Omit<Directory, 'id'>>('directories', getSessionToken()).catch(() => []),
         selectedCountry === 'Brazil' || selectedCountry === 'Global' ? fetchSourceCategory('hanintoday-brazil', 'directory') : Promise.resolve(null),
       ]);
       const sourceDirectories = source?.items.map((item) => ({ id: sourceItemId('hanintoday-brazil', 'directory', item.url), name: item.title, category: item.tag || item.category || '한인 업소', desc: item.description || '출처 API에서 확인된 업소 정보입니다.', body: item.body, tel: item.phone || '', address: item.address || source.region, lat: item.lat, lng: item.lng, rating: 0, reviews: 0, country: source.region, image: item.image, images: item.images, authorId: 'source', createdAt: item.publishedAt || source.fetchedAt, sourceUrl: item.url, sourceName: source.sourceName, sourceContentId: sourceItemId('hanintoday-brazil', 'directory', item.url) })) || [];
