@@ -6,7 +6,7 @@ import BannerAd from '@/components/ads/BannerAd';
 import { createDocument, getSessionToken, listDocuments } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type Directory = { id: string; name: string; category: string; desc: string; tel: string; address?: string; rating?: number; reviews?: number; lat?: number; lng?: number; country: string; image?: string; authorId: string; createdAt: string; sourceUrl?: string; sourceName?: string; sourceContentId?: string };
+type Directory = { id: string; name: string; category: string; desc: string; body?: string; tel: string; address?: string; rating?: number; reviews?: number; lat?: number; lng?: number; country: string; image?: string; images?: string[]; authorId: string; createdAt: string; sourceUrl?: string; sourceName?: string; sourceContentId?: string };
 
 export default function DirectoryPage() {
   const { selectedCountry, user } = useGlobalStore();
