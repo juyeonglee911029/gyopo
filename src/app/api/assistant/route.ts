@@ -34,6 +34,7 @@ export async function POST(request: Request) {
         }),
       });
       const data = await response.json() as { content?: Array<{ text?: string }>; error?: { message?: string } };
+      if (response.status === 401) throw new Error('Anthropic API 키가 유효하지 않습니다. Cloudflare 환경변수의 키를 확인해주세요.');
       if (!response.ok) throw new Error(data.error?.message || 'AI 서비스가 응답하지 않았습니다.');
       return Response.json({ answer: data.content?.map((item) => item.text || '').join('\n').trim() || '답변을 만들지 못했습니다.' });
     }
