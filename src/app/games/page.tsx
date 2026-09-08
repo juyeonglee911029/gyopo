@@ -61,6 +61,8 @@ type TetrisProfile = { id: string; name: string; image: string; country?: string
 type TetrisLobby = { status?: 'waiting' | 'matched'; waitingUserId?: string; waitingUser?: TetrisProfile; matchId?: string; playerAId?: string; playerBId?: string; playerA?: TetrisProfile; playerB?: TetrisProfile; updatedAt?: string };
 type MatchPhase = 'idle' | 'waiting' | 'betting' | 'holding' | 'countdown' | 'playing' | 'finished';
 type TetrisInvite = { id: string; senderId: string; recipientId: string; sender: TetrisProfile; recipient: TetrisProfile; matchId: string; roomNumber?: number; status: 'pending' | 'accepted' | 'rejected'; createdAt: string; updatedAt?: string };
+type StoredPiece = Omit<Piece, 'shape'> & { shape: number[]; shapeRows: number; shapeColumns: number };
+type StoredGameState = Omit<GameState, 'board' | 'piece' | 'nextPiece'> & { board: number[]; piece: StoredPiece; nextPiece: StoredPiece };
 type TetrisQueueRecord = TetrisQueueProfile & { userId: string; status: 'waiting' | 'matched'; matchId?: string; role?: 'A' | 'B'; opponent?: TetrisProfile; lastSeenAt: string | Date };
 type TetrisRoom = TetrisLobby & {
   roomNumber?: number;
@@ -79,8 +81,8 @@ type TetrisRoom = TetrisLobby & {
   payoutAmount?: number;
   playerAResult?: 'win' | 'lose';
   playerBResult?: 'win' | 'lose';
-  playerAState?: GameState;
-  playerBState?: GameState;
+  playerAState?: GameState | StoredGameState;
+  playerBState?: GameState | StoredGameState;
 };
 type GameAction =
   | { type: 'START' }
@@ -95,6 +97,25 @@ type GameAction =
 const emptyBoard = () => Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(0));
 const cloneShape = (shape: number[][]) => shape.map((row) => [...row]);
 const clonePiece = (piece: Piece): Piece => ({ ...piece, shape: cloneShape(piece.shape) });
+const flattenShape = (shape: number[][]) => ({ shape: shape.flat(), shapeRows: shape.length, shapeColumns: shape[0]?.length || 0 });
+const expandShape = (shape: number[], rows: number, columns: number) => Array.from({ length: rows }, (_, row) => shape.slice(row * columns, (row + 1) * columns));
+const serializeGameState = (state: GameState): StoredGameState => ({
+  ...state,
+  board: state.board.flat(),
+  piece: { ...state.piece, ...flattenShape(state.piece.shape) },
+  nextPiece: { ...state.nextPiece, ...flattenShape(state.nextPiece.shape) },
+});
+function deserializeGameState(value: GameState | StoredGameState | null | undefined): GameState | null {
+  if (!value) return null;
+  if (Array.isArray(value.board[0])) return value as GameState;
+  const stored = value as StoredGameState;
+  return {
+    ...stored,
+    board: expandShape(stored.board, HEIGHT, WIDTH),
+    piece: { ...stored.piece, shape: expandShape(stored.piece.shape, stored.piece.shapeRows, stored.piece.shapeColumns) },
+    nextPiece: { ...stored.nextPiece, shape: expandShape(stored.nextPiece.shape, stored.nextPiece.shapeRows, stored.nextPiece.shapeColumns) },
+  };
+}
 const randomPiece = (): Piece => {
   const type = Math.floor(Math.random() * SHAPES.length);
   return { type, shape: cloneShape(SHAPES[type]), x: 3, y: 0 };
@@ -791,7 +812,7 @@ export default function GamesPage() {
     setRoomNumber(fixedRoomNumber || invite.roomNumber || room.roomNumber || null);
     setSentInviteId(role === 'A' ? invite.id : null);
     setOpponent(role === 'A' ? invite.recipient : invite.sender);
-    setOpponentState(role === 'A' ? room.playerBState || null : room.playerAState || null);
+    setOpponentState(deserializeGameState(role === 'A' ? room.playerBState : room.playerAState));
     setBetAmount(Number(room.betAmount || DEFAULT_ENTRY_FEE));
     setRoomBetConfigured(Boolean(room.betAmount));
     setReadyForBattle(ownReady);
@@ -1072,11 +1093,11 @@ export default function GamesPage() {
         ...(matchRole === 'A' ? {
           playerAId: sessionUserId,
           playerA: profile,
-           playerAState: state,
+           playerAState: serializeGameState(state),
         } : {
           playerBId: sessionUserId,
           playerB: profile,
-           playerBState: state,
+            playerBState: serializeGameState(state),
         }),
          ...(matchPhase === 'playing' ? { phase: 'playing' } : {}),
         updatedAt: new Date(),
@@ -1091,7 +1112,7 @@ export default function GamesPage() {
        if (!room) return;
        roomSeenRef.current = true;
        const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
-       const nextState = matchRole === 'A' ? room.playerBState : room.playerAState;
+       const nextState = deserializeGameState(matchRole === 'A' ? room.playerBState : room.playerAState);
        const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
          if (room.betAmount) {
            setBetAmount(room.betAmount);
