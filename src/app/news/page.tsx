@@ -6,11 +6,12 @@ import { ExternalLink, RefreshCcw, ShieldCheck } from 'lucide-react';
 import { listDocuments } from '@/lib/firebase';
 import { regionLabel } from '@/lib/regions';
 import { sourceItemId } from '@/lib/contentSources';
+import { CONTENT_SOURCES } from '@/lib/contentSources';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type SnapshotItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string };
 type SnapshotSection = { category: string; label: string; url: string; items: SnapshotItem[] };
-type Snapshot = { id: string; sourceId: string; sourceName: string; region: string; url: string; title: string; description?: string; image?: string; images?: string[]; fetchedAt: string; verified?: boolean; items?: SnapshotItem[]; sections?: SnapshotSection[]; sourceSnapshot?: boolean };
+type Snapshot = { id: string; sourceId: string; sourceName: string; region: string; url: string; title: string; description?: string; image?: string; images?: string[]; fetchedAt: string; verified?: boolean; status?: string; items?: SnapshotItem[]; sections?: SnapshotSection[]; sourceSnapshot?: boolean };
 
 function contentHref(sourceId: string, category: string, entry: SnapshotItem) {
   return `/content/${sourceItemId(sourceId, category, entry.url)}?source=${encodeURIComponent(sourceId)}&category=${encodeURIComponent(category)}&url=${encodeURIComponent(entry.url)}`;
@@ -20,7 +21,7 @@ export default function NewsPage() {
   const selectedCountry = useGlobalStore((state) => state.selectedCountry);
   const [items, setItems] = useState<Snapshot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [liveSource, setLiveSource] = useState<Snapshot | null>(null);
+  const [liveSources, setLiveSources] = useState<Snapshot[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -37,19 +38,28 @@ export default function NewsPage() {
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
-    if (selectedCountry !== 'Brazil' && selectedCountry !== 'Global') {
-      setLiveSource(null);
-      return;
-    }
     let active = true;
-    void fetch('/api/content/preview?source=hanintoday-brazil')
-      .then((response) => response.ok ? response.json() as Promise<Snapshot> : null)
-      .then((snapshot) => { if (active && snapshot) setLiveSource({ ...snapshot, id: snapshot.sourceId }); })
-      .catch(() => { if (active) setLiveSource(null); });
+    const loadLive = async () => {
+      const exactSources = selectedCountry === 'Global'
+        ? CONTENT_SOURCES.filter((source) => source.categories.includes('news')).slice(0, 10)
+        : CONTENT_SOURCES.filter((source) => source.region === selectedCountry && source.categories.includes('news'));
+      const direct = await Promise.all(exactSources.map(async (source) => {
+        const response = await fetch(`/api/content/preview?source=${encodeURIComponent(source.id)}`).catch(() => null);
+        if (!response?.ok) return null;
+        return response.json() as Promise<Snapshot>;
+      }));
+      const regionalResponse = await fetch(`/api/content/preview?region=${encodeURIComponent(selectedCountry)}`).catch(() => null);
+      const regional = regionalResponse?.ok ? await regionalResponse.json() as Snapshot : null;
+      const next = [...direct.filter((snapshot): snapshot is Snapshot => Boolean(snapshot && (snapshot.items?.length || snapshot.sections?.some((section) => section.items.length)))), ...(regional?.items?.length ? [regional] : [])]
+        .map((snapshot) => ({ ...snapshot, id: snapshot.id || snapshot.sourceId }));
+      if (active) setLiveSources(next);
+    };
+    void loadLive();
     return () => { active = false; };
   }, [selectedCountry]);
 
-  const visible = [...(liveSource ? [liveSource] : []), ...items.filter((item) => item.sourceId !== liveSource?.sourceId)].filter((item) => selectedCountry === 'Global' || item.region === selectedCountry || item.region === 'Global');
+  const liveIds = new Set(liveSources.map((item) => item.sourceId));
+  const visible = [...liveSources, ...items.filter((item) => !liveIds.has(item.sourceId))].filter((item) => selectedCountry === 'Global' || item.region === selectedCountry || item.region === 'Global');
 
   return <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
     <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -58,7 +68,7 @@ export default function NewsPage() {
     </header>
     {loading && <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">확인된 출처를 불러오는 중입니다...</div>}
     {!loading && visible.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">아직 운영자가 확인한 출처 정보가 없습니다.</div>}
-    <div className="grid gap-4 md:grid-cols-2">
+     <div className="grid gap-5 xl:grid-cols-2">
        {visible.map((item) => <article key={item.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#10182b]">
          {item.image && <img src={item.image} alt={item.title} className="h-48 w-full object-cover" />}
          <div className="p-5">
