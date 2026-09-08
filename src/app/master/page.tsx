@@ -11,7 +11,7 @@ type RequestRow = { id: string; userId: string; amount: number; status: string; 
 type WalletSettings = { depositAddress?: string; network?: string; updatedAt?: string };
 type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category?: string };
 type SourceSection = { category: string; label: string; url: string; items: SourceItem[] };
-type SourcePayload = { error?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
+type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
 
 async function retryPublish(action: () => Promise<void>) {
   let lastError: unknown;
@@ -90,6 +90,11 @@ export default function MasterPage() {
       const response = await fetch(`/api/content/preview?source=${encodeURIComponent(source.id)}`);
       const data = await response.json() as SourcePayload;
       if (!response.ok) throw new Error(String(data.error || '출처를 확인하지 못했습니다.'));
+      if (data.status === 'unavailable') {
+        setSourceStatus((current) => ({ ...current, [source.id]: '연결 불가' }));
+        setMessage(`${source.name}: 현재 원문 서버가 응답하지 않습니다. 원문 링크는 계속 열 수 있습니다.`);
+        return;
+      }
       const snapshot = { ...data, updatedAt: new Date() };
       try {
         await retryPublish(() => mergeDocument('contentSnapshots', source.id, snapshot, token));
@@ -109,11 +114,17 @@ export default function MasterPage() {
           sourceName: source.name,
           sections: data.sections || [],
           items: data.items || [],
+          image: data.image || '',
+          images: data.images || [],
           verified: data.verified !== false,
         }, token));
       }
       const publishErrors: string[] = [];
-      for (const section of data.sections || []) {
+      const sections = [...(data.sections || [])];
+      if (data.items?.length && source.categories[0]) {
+        sections.unshift({ category: source.categories[0], label: source.categories[0] === 'news' ? '뉴스' : '출처 정보', url: data.url || source.url, items: data.items });
+      }
+      for (const section of sections) {
         for (const item of section.items || []) {
           const createdAt = item.publishedAt || data.fetchedAt || new Date().toISOString();
           const id = sourceItemId(source.id, section.category, item.url);
@@ -132,8 +143,9 @@ export default function MasterPage() {
           }
         }
       }
-      setSourceStatus((current) => ({ ...current, [source.id]: publishErrors.length ? '부분 게시' : '게시 완료' }));
-      setMessage(`${source.name}: 출처 확인 후 사이트 카테고리에 게시했습니다${publishErrors.length ? ` (${publishErrors.length}건 재시도 필요)` : ''}.`);
+      const partial = publishErrors.length > 0 || data.status === 'partial';
+      setSourceStatus((current) => ({ ...current, [source.id]: partial ? '부분 확인' : '게시 완료' }));
+      setMessage(`${source.name}: 제목·본문·이미지를 분리해 카테고리별로 게시했습니다${partial ? ' 일부 목록은 원문 서버 제한으로 부분 확인 상태입니다.' : '.'}`);
     } catch (error) {
       setSourceStatus((current) => ({ ...current, [source.id]: '확인 실패' }));
       setMessage(error instanceof Error ? `${source.name}: ${error.message.slice(0, 140)}` : `${source.name}: 확인 실패`);
