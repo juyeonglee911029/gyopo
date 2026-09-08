@@ -246,6 +246,28 @@ export async function GET(request: Request) {
       }));
       return Response.json({ sourceId: source.id, sourceName: source.name, region: source.region, url: 'https://hanintoday.com.br/jobs', title: '한인투데이 구인구직', description: '한인투데이에서 확인된 최신 구인구직 공고입니다.', items, sections: [{ category: 'jobs', label: '구인구직', url: 'https://hanintoday.com.br/jobs', items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['구인구직 공고가 없습니다.'], fetchedAt: new Date().toISOString(), verified: true });
     }
+    if (source.id === 'hanintoday-brazil' && requestedCategory === 'directory') {
+      const response = await fetch('https://hanintoday.com.br/api/businesses', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+      if (!response.ok) throw new Error(`업소 API 응답 ${response.status}`);
+      const payload = await response.json() as { businesses?: Array<{ id?: string; tradeName?: string; entityType?: string; category?: string; phone?: string; whatsapp?: string; area?: string; address?: string; description?: string; logoUrl?: string; coverImageUrl?: string; latitude?: number; longitude?: number }> };
+      const categoryLabels: Record<string, string> = { health_clinic: '병원·의료', grocery_market: '마트·식품', restaurant_cafe: '음식점·카페', it_services: 'IT·서비스', buddhist_temple: '종교·단체', consulate_organization: '공공기관·단체' };
+      const items = (payload.businesses || []).filter((business) => business.id && business.tradeName && business.entityType !== 'job').slice(0, 100).map((business) => ({
+        title: clean(business.tradeName),
+        url: `https://hanintoday.com.br/businesses/${business.id}`,
+        description: clean(business.description || `${categoryLabels[business.category || ''] || '한인 업소'} · ${business.area || ''}`),
+        body: clean([business.description, business.address, business.phone || business.whatsapp].filter(Boolean).join('\n\n')),
+        category: 'directory' as ContentCategory,
+        company: clean(business.tradeName),
+        tag: categoryLabels[business.category || ''] || '한인 업소',
+        phone: clean(business.phone || business.whatsapp || ''),
+        address: clean([business.area, business.address].filter(Boolean).join(' · ')),
+        image: business.coverImageUrl || business.logoUrl,
+        images: [business.coverImageUrl, business.logoUrl].filter(Boolean) as string[],
+        lat: business.latitude,
+        lng: business.longitude,
+      }));
+      return Response.json({ sourceId: source.id, sourceName: source.name, region: source.region, url: 'https://hanintoday.com.br/businesses', title: '한인투데이 업소록', description: '한인투데이에서 확인된 실제 업소 정보입니다.', items, sections: [{ category: 'directory', label: '업소', url: 'https://hanintoday.com.br/businesses', items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['업소 정보가 없습니다.'], fetchedAt: new Date().toISOString(), verified: true });
+    }
     const html = await fetchHtml(source.url);
     const pageData = structuredData(html);
     const title = meta(html, 'og:title') || clean(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]) || pageData.headline || source.name;
