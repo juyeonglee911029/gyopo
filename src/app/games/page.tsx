@@ -20,6 +20,11 @@ function gameErrorMessage(error: unknown, fallback: string) {
   return message || fallback;
 }
 
+function isPermissionDenied(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  return message.includes('403') || message.includes('PERMISSION_DENIED');
+}
+
 const WIDTH = 10;
 const HEIGHT = 20;
 const SHAPES = [
@@ -957,8 +962,13 @@ export default function GamesPage() {
       try {
         current = await getDocument<TetrisRoom>('tetrisRooms', matchId, token);
       } catch (error) {
-        setMatchStatus(gameErrorMessage(error, '대전 방을 확인하지 못했습니다.'));
-        return;
+        // Firestore returns 403 for a missing room when its read rule references resource.data.
+        // Treat that first read as a create race; an existing unauthorized room still fails on write.
+        if (isPermissionDenied(error)) current = null;
+        else {
+          setMatchStatus(gameErrorMessage(error, '대전 방을 확인하지 못했습니다.'));
+          return;
+        }
       }
       if (!current && roomSeenRef.current) {
         if (stakeReserved) await refundGameStake(currentUserId, matchId, token).catch(() => undefined);
