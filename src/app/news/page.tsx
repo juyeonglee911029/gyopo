@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ExternalLink, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { RefreshCcw, ShieldCheck } from 'lucide-react';
 import { listDocuments } from '@/lib/firebase';
 import { regionLabel } from '@/lib/regions';
 import { sourceItemId } from '@/lib/contentSources';
@@ -68,16 +68,16 @@ export default function NewsPage() {
     </header>
     {loading && <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">확인된 출처를 불러오는 중입니다...</div>}
     {!loading && visible.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">아직 운영자가 확인한 출처 정보가 없습니다.</div>}
-     <div className="grid gap-5 xl:grid-cols-2">
+      <div className="space-y-3">
        {visible.map((item) => <article key={item.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#10182b]">
-         {item.image && <img src={item.image} alt={item.title} className="h-48 w-full object-cover" />}
+          {item.image && <img src={item.image} alt={item.title} className="h-32 w-full object-cover sm:h-40" />}
          <div className="p-5">
          <div className="flex items-center justify-between gap-3 text-xs"><span className="rounded-full bg-teal-50 px-2.5 py-1 font-bold text-teal-700 dark:bg-teal-300/10 dark:text-teal-200">{regionLabel(item.region)}</span>{item.verified && <span className="inline-flex items-center gap-1 font-bold text-emerald-600"><ShieldCheck size={14} /> 확인 출처</span>}</div>
         <h2 className="mt-4 text-xl font-black text-slate-950 dark:text-white">{item.title}</h2>
         {item.description && <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-500 dark:text-slate-400">{item.description}</p>}
-         {item.sections?.filter((section) => section.items.length).map((section) => <div key={`${item.id}-${section.category}`} className="mt-5 rounded-2xl border border-teal-100 bg-teal-50/60 p-3 dark:border-teal-300/10 dark:bg-teal-300/[.05]"><div className="flex items-center justify-between gap-2"><b className="text-xs font-black text-teal-800 dark:text-teal-200">{section.label}</b><a href={section.url} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-teal-600 hover:underline">원문 보기</a></div>{section.items.slice(0, 4).map((entry) => <Link key={`${item.id}-${section.category}-${entry.url}`} href={contentHref(item.sourceId, section.category, entry)} className="mt-2 block rounded-xl bg-white/80 p-2.5 text-sm hover:bg-white dark:bg-white/[.06] dark:hover:bg-white/10"><b className="line-clamp-2 text-slate-800 dark:text-slate-200">{entry.title}</b>{entry.description && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-500">{entry.description}</span>}</Link>)}</div>)}
+          {item.sections?.filter((section) => section.items.length).map((section) => <div key={`${item.id}-${section.category}`} className="mt-5 rounded-2xl border border-teal-100 bg-teal-50/60 p-3 dark:border-teal-300/10 dark:bg-teal-300/[.05]"><div className="flex items-center justify-between gap-2"><b className="text-xs font-black text-teal-800 dark:text-teal-200">{section.label}</b><span className="text-[10px] font-bold text-slate-400">{section.items.length}건</span></div>{section.items.slice(0, 6).map((entry) => <Link key={`${item.id}-${section.category}-${entry.url}`} href={contentHref(item.sourceId, section.category, entry)} className="mt-2 flex gap-3 rounded-xl bg-white/80 p-2.5 text-sm hover:bg-white dark:bg-white/[.06] dark:hover:bg-white/10">{entry.image && <img src={entry.image} alt="" className="h-12 w-16 shrink-0 rounded-lg object-cover" />}<span className="min-w-0"><b className="line-clamp-2 text-slate-800 dark:text-slate-200">{entry.title}</b>{entry.description && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-500">{entry.description}</span>}</span></Link>)}</div>)}
          {item.items?.slice(0, 3).map((entry) => <Link key={`${item.id}-${entry.url}`} href={contentHref(item.sourceId, 'news', entry)} className="mt-3 block rounded-xl bg-slate-50 p-3 text-sm hover:bg-teal-50 dark:bg-white/5 dark:hover:bg-teal-300/10"><b className="line-clamp-2 text-slate-800 dark:text-slate-200">{entry.title}</b>{entry.description && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-500">{entry.description}</span>}</Link>)}
-         <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-400 dark:border-white/10"><span>{item.sourceName} · {new Date(item.fetchedAt).toLocaleString('ko-KR')}</span><a href={item.url} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 font-bold text-teal-600 hover:underline">원문 <ExternalLink size={13} /></a></div>
+          <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs text-slate-400 dark:border-white/10"><span>{item.sourceName} · {new Date(item.fetchedAt).toLocaleString('ko-KR')}</span><span className="font-bold text-teal-600">포털 내 미러링 정보</span></div>
          </div>
        </article>)}
     </div>
