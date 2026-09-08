@@ -123,14 +123,19 @@ function structuredData(html: string): StructuredData {
 
 function extractImages(html: string, pageUrl: string, data: StructuredData = {}) {
   const images: string[] = [];
-  const candidates = [meta(html, 'og:image'), meta(html, 'twitter:image'), ...(data.image || [])];
+  const contentBlock = html.match(/<article\b[^>]*>[\s\S]*?<\/article>/i)?.[0]
+    || html.match(/<(?:main|div|section)\b[^>]*(?:articleBody|article-body|post-content|entry-content|article-content)[^>]*>[\s\S]*?<\/(?:main|div|section)>/i)?.[0]
+    || '';
+  const bodyCandidates: string[] = [];
   const imagePattern = /<(?:img|source)\b[^>]*(?:src|data-src|data-lazy-src|data-original|data-image|srcset|data-srcset)=["']([^"']+)["']/gi;
+  for (const match of contentBlock.matchAll(imagePattern)) bodyCandidates.push(...match[1].split(',').map((value) => value.trim().split(/\s+/)[0]));
+  const candidates = [...(data.image || []), ...bodyCandidates, meta(html, 'og:image'), meta(html, 'twitter:image')];
   for (const match of html.matchAll(imagePattern)) candidates.push(...match[1].split(',').map((value) => value.trim().split(/\s+/)[0]));
   for (const candidate of candidates) {
     if (!candidate || candidate.startsWith('data:')) continue;
     try {
       const url = new URL(candidate, pageUrl);
-      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || images.includes(url.href)) continue;
+      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || images.includes(url.href) || /(?:logo|favicon|sprite|placeholder|avatar|banner|advert|\/icon[/.])/i.test(url.pathname)) continue;
       images.push(url.href);
       if (images.length >= 8) break;
     } catch {
@@ -160,6 +165,25 @@ function fallbackItem(sourceName: string, sourceUrl: string, category: ContentCa
   return { title: title || sourceName, url: sourceUrl, description, body, image, images, category };
 }
 
+const regionNames: Record<string, string> = {
+  Global: '글로벌', USA: '미국', 'USA-LA': '로스앤젤레스', Brazil: '브라질', Argentina: '아르헨티나', Chile: '칠레', Colombia: '콜롬비아', Bolivia: '볼리비아', Paraguay: '파라과이', Panama: '파나마', Mexico: '멕시코', Portugal: '포르투갈', Spain: '스페인', Netherlands: '네덜란드', Germany: '독일', Romania: '루마니아', Hungary: '헝가리', Malta: '몰타', Thailand: '태국', Vietnam: '베트남',
+};
+
+async function fetchRegionalNews(region: string) {
+  const label = regionNames[region] || region;
+  const feedUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(`한인 ${label}`)}&hl=ko&gl=KR&ceid=KR:ko`;
+  const feed = await fetchHtml(feedUrl);
+  const blocks = feed.match(/<item[\s>][\s\S]*?<\/item>/gi) || [];
+  const items = blocks.slice(0, 12).map((block) => {
+    const title = tag(block, 'title');
+    const url = tag(block, 'link');
+    const description = textContent(tag(block, 'description') || '');
+    const image = block.match(/<(?:media:content|media:thumbnail)[^>]+url=["']([^"']+)["']/i)?.[1];
+    return { title, url, description, body: description, image, images: image ? [image] : [], publishedAt: tag(block, 'pubDate'), category: 'news' as ContentCategory };
+  }).filter((item) => item.title && item.url);
+  return { sourceId: `regional-${region}`, sourceName: `${label} 지역 뉴스 검색`, region, url: feedUrl, title: `${label} 오늘의 뉴스`, description: `${label} 관련 최신 공개 뉴스 피드입니다.`, items, sections: [], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['지역 뉴스 피드를 찾지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: false };
+}
+
 async function enrichItems(items: CrawlItem[]) {
   return Promise.all(items.map(async (item) => {
     try {
@@ -184,7 +208,16 @@ async function enrichItems(items: CrawlItem[]) {
 }
 
 export async function GET(request: Request) {
-  const id = new URL(request.url).searchParams.get('source');
+  const params = new URL(request.url).searchParams;
+  const region = params.get('region');
+  if (region) {
+    try {
+      return Response.json(await fetchRegionalNews(region));
+    } catch (error) {
+      return Response.json({ sourceId: `regional-${region}`, sourceName: `${region} 지역 뉴스 검색`, region, items: [], sections: [], status: 'unavailable', warnings: [error instanceof Error ? error.message : '지역 뉴스 피드를 확인하지 못했습니다.'], fetchedAt: new Date().toISOString() }, { status: 200 });
+    }
+  }
+  const id = params.get('source');
   const source = CONTENT_SOURCES.find((item) => item.id === id);
   if (!source) return Response.json({ error: '등록되지 않은 출처입니다.' }, { status: 404 });
 
