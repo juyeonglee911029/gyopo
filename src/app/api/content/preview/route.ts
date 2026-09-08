@@ -30,7 +30,9 @@ async function fetchMarketJson<T>(url: string) {
 
 async function fetchMarketData() {
   const rates = await fetchMarketJson<{ rates?: Record<string, number> }>('https://api.frankfurter.app/latest?from=USD&to=KRW,EUR,JPY,BRL,CAD,GBP');
-  const crypto = await fetchMarketJson<Record<string, { usd?: number; usd_24h_change?: number }>>('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple,solana&vs_currencies=usd&include_24hr_change=true');
+  const crypto = await fetchMarketJson<Array<{ symbol?: string; quotes?: { USD?: { price?: number; percent_change_24h?: number } } }>>('https://api.coinpaprika.com/v1/tickers?quotes=USD');
+  const cryptoBySymbol = Object.fromEntries((crypto || []).map((item) => [item.symbol?.toLowerCase(), item.quotes?.USD]));
+  const cryptoSymbolById: Record<string, string> = { bitcoin: 'btc', ethereum: 'eth', ripple: 'xrp', solana: 'sol' };
   const equities = await Promise.all(MARKET_ASSETS.slice(4).map(async (asset) => {
     const result = await fetchMarketJson<MarketYahooResult>('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(asset.symbol) + '?range=1d&interval=1d&includePrePost=false');
     const meta = result?.chart?.result?.[0]?.meta;
@@ -38,7 +40,7 @@ async function fetchMarketData() {
     const previous = typeof meta?.chartPreviousClose === 'number' ? meta.chartPreviousClose : null;
     return { key: asset.key, label: asset.label, value, change: value !== null && previous ? ((value - previous) / previous) * 100 : null, currency: meta?.currency || asset.currency };
   }));
-  const cryptoAssets = MARKET_ASSETS.slice(0, 4).map((asset) => ({ key: asset.key, label: asset.label, value: crypto?.[asset.symbol]?.usd ?? null, change: crypto?.[asset.symbol]?.usd_24h_change ?? null, currency: asset.currency }));
+  const cryptoAssets = MARKET_ASSETS.slice(0, 4).map((asset) => { const quote = cryptoBySymbol[cryptoSymbolById[asset.symbol]]; return { key: asset.key, label: asset.label, value: quote?.price ?? null, change: quote?.percent_change_24h ?? null, currency: asset.currency }; });
   return { updatedAt: new Date().toISOString(), rates: rates?.rates || {}, assets: [...cryptoAssets, ...equities] };
 }
 
