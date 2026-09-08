@@ -158,13 +158,15 @@ export default function WebRTCPage() {
   };
 
   const restoreCameraTrack = async () => {
+    const screenTrack = screenTrackRef.current;
+    screenTrackRef.current = null;
+    screenTrack?.stop();
     const cameraTrack = outgoingVideoTrackRef.current || streamRef.current?.getVideoTracks()[0] || null;
     if (videoSenderRef.current && cameraTrack) await videoSenderRef.current.replaceTrack(cameraTrack).catch(() => undefined);
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
       await videoRef.current.play().catch(() => undefined);
     }
-    screenTrackRef.current = null;
     setIsSharingScreen(false);
   };
 
@@ -238,6 +240,9 @@ export default function WebRTCPage() {
   const closeCallForRematch = (message: string) => {
     connectionRef.current?.close();
     connectionRef.current = null;
+    screenTrackRef.current?.stop();
+    screenTrackRef.current = null;
+    videoSenderRef.current = null;
     callRef.current = null;
     resetSignalingState();
     connectedRef.current = false;
