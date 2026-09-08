@@ -17,6 +17,8 @@ type Post = {
   views?: number;
   likes?: number;
   comments?: number;
+  image?: string;
+  images?: string[];
   sourceUrl?: string;
   sourceName?: string;
   sourceContentId?: string;
@@ -133,8 +135,9 @@ export default function CommunityPage() {
                   </span>
                 </div>
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center"><span className="bg-gray-100 px-2 py-1 rounded text-gray-600">{post.country}</span></div>
-                <div className="col-span-1 md:col-span-5">
-                   <h3 className="text-base md:text-lg truncate font-bold text-gray-800">{post.title}</h3>
+                 <div className="col-span-1 md:col-span-5">
+                    {post.image && <img src={post.image} alt="" className="mb-2 h-16 w-24 rounded-lg object-cover" />}
+                    <h3 className="text-base md:text-lg truncate font-bold text-gray-800">{post.title}</h3>
                    {post.sourceName && <div className="text-xs text-blue-500">출처: {post.sourceName}</div>}
                   {!!post.comments && <span className="text-blue-500 text-sm font-bold">[{post.comments}]</span>}
                 </div>
