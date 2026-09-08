@@ -384,8 +384,11 @@ export default function GamesPage() {
       dispatch({ type: 'DROP' });
       return;
     }
-    if (Math.abs(dx) > Math.abs(dy)) dispatch({ type: 'MOVE', dx: dx > 0 ? 1 : -1, dy: 0 });
-    else if (dy < 0) dispatch({ type: 'ROTATE' });
+    if (Math.abs(dx) > Math.abs(dy)) {
+      const steps = Math.min(4, Math.max(1, Math.floor(Math.abs(dx) / 48)));
+      for (let index = 0; index < steps; index += 1) dispatch({ type: 'MOVE', dx: dx > 0 ? 1 : -1, dy: 0 });
+    }
+    else if (dy < 0) dispatch({ type: 'SWAP_NEXT' });
     else dispatch({ type: 'MOVE', dx: 0, dy: 1 });
   };
 
@@ -1292,8 +1295,8 @@ export default function GamesPage() {
   const opponentVisual = opponentState ? buildVisual(opponentState) : emptyBoard();
 
   return (
-    <div className="games-page min-h-[calc(100vh-64px)] bg-[#070b17] px-4 py-8 text-white">
-      <div className="tetris-modern-shell mx-auto max-w-[1500px]">
+    <div className="games-page min-h-[calc(100vh-96px)] bg-[#070b17] px-4 py-8 text-white">
+      <div className={`tetris-modern-shell mx-auto max-w-[1500px] ${matchPhase === 'playing' ? 'tetris-live-mode' : ''}`}>
         <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.3em] text-cyan-300"><Gamepad2 size={15} /> Arcade / Live battle</div>
@@ -1323,16 +1326,17 @@ export default function GamesPage() {
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-right text-xs text-slate-400">{roomNumber ? `ROOM ${roomNumber} · FIXED` : matchId ? `ROOM ${matchId.slice(-8)}` : 'PRACTICE / QUEUE'}</div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(300px,1fr)_minmax(270px,.78fr)]">
+            <div className="tetris-battle-grid grid gap-4 lg:grid-cols-[minmax(300px,1fr)_minmax(270px,.78fr)]">
               <div className="rounded-[1.5rem] border border-cyan-300/20 bg-[#050914] p-3 md:p-4">
                 <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-200"><Shield size={15} /> 내 보드</div><span className="text-[10px] font-bold text-slate-500">{game.paused ? 'PAUSED' : game.running ? 'LIVE' : 'READY'}</span></div>
                 <div className="relative mx-auto w-full max-w-[430px]" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
                   <BoardGrid cells={visual} />
                   {toast && <div key={toast.id} className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-2xl border border-cyan-200/30 bg-slate-950/90 px-4 py-3 text-sm font-black text-cyan-100 shadow-2xl animate-[portal-toast_4.2s_ease-out_forwards]">{toast.text}</div>}
-                  {countdown && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-slate-950/45"><span className="text-6xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)]">{countdown}</span></div>}
-                  {matchResult && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/55"><span className={`text-6xl font-black tracking-widest ${matchResult === 'WIN' ? 'text-emerald-300' : 'text-rose-300'}`}>{matchResult}</span></div>}
-                </div>
-              </div>
+                 {countdown && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-slate-950/45"><span className="text-6xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)]">{countdown}</span></div>}
+                   {matchResult && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/55"><span className={`text-6xl font-black tracking-widest ${matchResult === 'WIN' ? 'text-emerald-300' : 'text-rose-300'}`}>{matchResult}</span></div>}
+                 </div>
+                 <div className="tetris-mobile-next"><span className="text-[9px] font-black uppercase tracking-[.12em] text-slate-500">다음 블록</span><div><NextBlock piece={game.nextPiece} compact /></div></div>
+               </div>
 
               <div className="rounded-[1.5rem] border border-violet-300/20 bg-gradient-to-b from-violet-300/[0.08] to-[#050914] p-3 md:p-4">
                 <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-violet-200"><Swords size={15} /> 상대 보드</div><span className="flex items-center gap-1 text-[10px] font-bold text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> SYNC 1.2s</span></div>
@@ -1350,7 +1354,7 @@ export default function GamesPage() {
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4"><button onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="tetris-action-secondary">{game.paused ? <Play size={15} /> : <Pause size={15} />}{game.paused ? '계속' : '일시정지'}</button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="tetris-action-secondary"><RotateCw size={15} /> 회전</button><div className="col-span-2 hidden items-center justify-center rounded-xl border border-white/5 bg-white/[0.03] px-3 text-center text-[11px] text-slate-500 md:flex">2줄 클리어 = 상대 1줄 공격 · 이후 클리어 줄마다 1줄 추가</div></div>
             <div className="mt-3 grid grid-cols-4 gap-2 sm:hidden"><button onClick={() => dispatch({ type: 'MOVE', dx: -1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowLeft size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'MOVE', dx: 0, dy: 1 })} disabled={!game.running || game.paused} className="touch-control"><ArrowDown size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="touch-control"><ArrowUp size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'MOVE', dx: 1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowRight size={16} className="mx-auto" /></button></div>
-            <p className="mt-3 text-center text-[11px] text-slate-500">키보드 ← → 이동 · ↓ 내리기 · ↑ 회전 · C 다음 블록 · Space 즉시 내리기</p>
+             <p className="tetris-touch-hint mt-3 text-center text-[11px] text-slate-500">모바일: 좌우 슬라이드 이동 · 위로 슬라이드 블록 교체 · 화면 탭 즉시 내리기 · 회전 버튼</p>
           </section>
 
           <aside className="space-y-4">
