@@ -22,6 +22,7 @@ export default function UsersPage() {
   const [sharedOrders, setSharedOrders] = useState<EscrowOrder[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [friendships, setFriendships] = useState<FriendConnection[]>([]);
+  const [friendProfiles, setFriendProfiles] = useState<Record<string, Partial<PublicProfile>>>({});
   const [friendBusy, setFriendBusy] = useState('');
   const selectionRequest = useRef(0);
 
@@ -53,6 +54,20 @@ export default function UsersPage() {
     const timer = window.setInterval(load, 5_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    if (!user || friendships.length === 0) {
+      setFriendProfiles({});
+      return () => { active = false; };
+    }
+    const ids = [...new Set(friendships.map((connection) => connection.requesterId === user.id ? connection.addresseeId : connection.requesterId))];
+    void Promise.all(ids.map(async (id) => [id, await getDocument<PublicProfile>('publicProfiles', id).catch(() => null)] as const)).then((rows) => {
+      if (!active) return;
+      setFriendProfiles(Object.fromEntries(rows.filter(([, profile]) => profile).map(([id, profile]) => [id, profile as PublicProfile])));
+    });
+    return () => { active = false; };
+  }, [friendships, user?.id]);
 
   const relationshipFor = (memberId: string) => friendships.find((item) => item.requesterId === memberId || item.addresseeId === memberId);
   const isFriend = (memberId: string) => relationshipFor(memberId)?.status === 'accepted';
@@ -124,7 +139,7 @@ export default function UsersPage() {
           </div>
         </header>
 
-        {user && friendships.length > 0 && <section className="mb-8 rounded-[2rem] border border-indigo-100 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-indigo-500">My network</div><h2 className="mt-1 text-xl font-black text-slate-950">친구와 연결하기</h2></div><span className="text-xs font-bold text-slate-400">{friendships.filter((item) => item.status === 'accepted').length}명 친구</span></div><div className="mt-4 flex flex-wrap gap-2">{friendships.map((connection) => { const memberId = connection.requesterId === user.id ? connection.addresseeId : connection.requesterId; const member = onlineUsers.find((item) => item.id === memberId); return <div key={connection.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2"><span className="text-sm font-bold text-slate-700">{member?.name || '회원'}</span>{connection.status === 'accepted' ? <Link href={`/webrtc?friend=${encodeURIComponent(memberId)}`} className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-black text-white">화상</Link> : connection.addresseeId === user.id && connection.status === 'pending' ? <button type="button" onClick={() => void acceptFriend(connection)} className="rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-black text-slate-950">수락</button> : <span className="text-[11px] font-bold text-slate-400">요청 대기</span>}</div>; })}</div></section>}
+        {user && <section className="mb-8 rounded-[2rem] border border-indigo-100 bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-indigo-500">My network</div><h2 className="mt-1 text-xl font-black text-slate-950">친구 목록</h2><p className="mt-1 text-xs text-slate-500">친구를 선택해 바로 영상 통화를 시작하세요.</p></div><span className="shrink-0 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-black text-indigo-700">{friendships.filter((item) => item.status === 'accepted').length}명 친구</span></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{friendships.length === 0 ? <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">아직 친구가 없습니다. 아래 회원 목록에서 친구 추가를 눌러보세요.</div> : friendships.map((connection) => { const memberId = connection.requesterId === user.id ? connection.addresseeId : connection.requesterId; const online = onlineUsers.find((item) => item.id === memberId); const profile = friendProfiles[memberId]; const name = online?.name || profile?.name || '친구 회원'; const image = online?.image || profile?.image; const incoming = connection.addresseeId === user.id && connection.status === 'pending'; return <div key={connection.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3"><div className="relative shrink-0">{image ? <img src={image} alt="" className="h-11 w-11 rounded-2xl object-cover" /> : <div className="grid h-11 w-11 place-items-center rounded-2xl bg-indigo-100 text-sm font-black text-indigo-700">{name.slice(0, 1)}</div>}{online && <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />}</div><div className="min-w-0 flex-1"><div className="truncate text-sm font-black text-slate-900">{name}</div><div className="truncate text-[11px] text-slate-400">{online?.country || profile?.country || (online ? '온라인' : '오프라인')}</div></div>{connection.status === 'accepted' ? <Link href={`/webrtc?friend=${encodeURIComponent(memberId)}`} className="shrink-0 rounded-xl bg-indigo-600 px-2.5 py-2 text-[11px] font-black text-white">영상통화</Link> : incoming ? <button type="button" disabled={friendBusy === connection.id} onClick={() => void acceptFriend(connection)} className="shrink-0 rounded-xl bg-emerald-500 px-2.5 py-2 text-[11px] font-black text-slate-950 disabled:opacity-50">수락</button> : <span className="shrink-0 text-[10px] font-bold text-slate-400">대기 중</span>}</div>; })}</div></section>}
 
         {onlineUsers.length === 0 ? (
           <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-20 text-center shadow-sm">
