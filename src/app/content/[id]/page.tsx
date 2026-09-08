@@ -82,10 +82,10 @@ export default function ContentDetailPage() {
   const backHref = content.sourceCategory === 'jobs' ? '/jobs' : content.sourceCategory === 'directory' ? '/directory' : content.sourceCategory === 'market' ? '/market' : content.sourceCategory === 'community' ? '/community' : '/news';
 
   return (
-    <article className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-10">
+    <article className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10">
       <Link href={backHref} className="text-sm font-bold text-teal-300 hover:text-teal-200">← 목록으로 돌아가기</Link>
       <div className="mt-5 overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
-        {images[0] ? <img src={images[0]} alt={title} className="max-h-[28rem] w-full object-cover" /> : <div className="grid h-44 place-items-center bg-gradient-to-br from-teal-500/20 via-slate-900 to-slate-950 text-sm font-bold text-teal-200">원문 대표 이미지가 없습니다</div>}
+        {images[0] ? <img src={images[0]} alt={title} className="max-h-[36rem] w-full object-cover" /> : <div className="grid h-52 place-items-center bg-gradient-to-br from-teal-500/20 via-slate-900 to-slate-950 text-sm font-bold text-teal-200">원문 대표 이미지가 없습니다</div>}
         <div className="p-6 sm:p-10">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {content.country && <span className="rounded-full bg-teal-300/10 px-2.5 py-1 font-bold text-teal-200">{content.country}</span>}
