@@ -654,11 +654,6 @@ export async function settleTetrisMatch(
     throw new Error('게임 정산 정보가 올바르지 않습니다.');
   }
   const payoutId = `game-payout-${matchId}`;
-  if (await getRawDocument('gamePayouts', payoutId, token)) return;
-
-  const winnerStake = await getRawDocument('gameStakes', `game-${matchId}-${winnerId}`, token);
-  const loserStake = await getRawDocument('gameStakes', `game-${matchId}-${loserId}`, token);
-  if (!winnerStake || !loserStake) throw new Error('양쪽 참가비 홀딩이 확인되지 않았습니다.');
   const winnerProfile = await getRawDocument('profiles', winnerId, token);
   if (!winnerProfile?.name) throw new Error('승자 프로필을 찾을 수 없습니다.');
 
@@ -699,7 +694,8 @@ export async function settleTetrisMatch(
     }),
   }, token);
   if (!response.ok) {
-    if (await getRawDocument('gamePayouts', payoutId, token)) return;
+    const error = await response.text();
+    if (error.includes('ALREADY_EXISTS')) return;
     throw new Error('게임 정산에 실패했습니다. 잠시 후 다시 시도해주세요.');
   }
 }
