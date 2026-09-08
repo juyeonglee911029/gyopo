@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { CheckCircle2, LockKeyhole, RefreshCcw, Save, ShieldAlert, WalletCards } from 'lucide-react';
-import { approveDepositRequest, approveTransferRequest, getSessionToken, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, reviewTransferRequest, type PortalUser } from '@/lib/firebase';
+import { approveDepositRequest, approveTransferRequest, getDocument, getSessionToken, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, reviewTransferRequest, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { CONTENT_SOURCES, REVIEW_REGIONS, sourceItemId, type ContentSource } from '@/lib/contentSources';
+import { CONTENT_SOURCES, REVIEW_REGIONS, sourceItemId, type ContentCategory, type ContentSource } from '@/lib/contentSources';
+import { curateSourceItems } from '@/lib/sourcepreview';
 import { regionLabel } from '@/lib/regions';
 
 type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number };
 type WalletSettings = { depositAddress?: string; network?: string; updatedAt?: string };
-type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category?: string };
-type SourceSection = { category: string; label: string; url: string; items: SourceItem[] };
+type ContentSourceSettings = { disabledSourceIds?: string[]; updatedAt?: string };
+type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category?: string; company?: string; location?: string; country?: string; salary?: string; tag?: string; author?: string };
+type SourceSection = { category: ContentCategory; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
 
 async function retryPublish(action: () => Promise<void>) {
@@ -34,11 +36,14 @@ export default function MasterPage() {
   const [withdrawals, setWithdrawals] = useState<RequestRow[]>([]);
   const [transfers, setTransfers] = useState<RequestRow[]>([]);
   const [settings, setSettings] = useState<WalletSettings>({ depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK });
+  const [disabledSourceIds, setDisabledSourceIds] = useState<string[]>([]);
+  const [contentSettingsLoaded, setContentSettingsLoaded] = useState(false);
   const [address, setAddress] = useState(MASTER_DEPOSIT_ADDRESS);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [sourceStatus, setSourceStatus] = useState<Record<string, string>>({});
+  const masterUserId = user?.id && isMasterUser(user) ? user.id : undefined;
 
   const load = async () => {
     const token = getSessionToken();
@@ -58,10 +63,17 @@ export default function MasterPage() {
     setTransfers(nextTransfers.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setSettings({ ...wallet, network: MASTER_NETWORK });
     setAddress(wallet.depositAddress || MASTER_DEPOSIT_ADDRESS);
+    const contentSettings = await getDocument<ContentSourceSettings>('adminSettings', 'contentSources', token).catch(() => null);
+    setDisabledSourceIds(contentSettings?.disabledSourceIds || []);
+    setContentSettingsLoaded(true);
     setLoading(false);
   };
+  const loadEffect = useEffectEvent(load);
 
-  useEffect(() => { void load(); }, [user?.id]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadEffect(), 0);
+    return () => window.clearTimeout(timer);
+  }, [masterUserId]);
 
   const token = getSessionToken();
   const totalBalance = profiles.reduce((sum, profile) => sum + Number(profile.usdtBalance || 0), 0);
@@ -87,7 +99,8 @@ export default function MasterPage() {
     if (!authorId) return setMessage('마스터 계정 정보를 확인할 수 없습니다. 다시 로그인해주세요.');
     setSourceStatus((current) => ({ ...current, [source.id]: '확인 중...' }));
     try {
-      const response = await fetch(`/api/content/preview?source=${encodeURIComponent(source.id)}`);
+       if (disabledSourceIds.includes(source.id)) return;
+       const response = await fetch(`/api/content/preview?source=${encodeURIComponent(source.id)}`);
       const data = await response.json() as SourcePayload;
       if (!response.ok) throw new Error(String(data.error || '출처를 확인하지 못했습니다.'));
       if (data.status === 'unavailable') {
@@ -121,22 +134,23 @@ export default function MasterPage() {
       }
       const publishErrors: string[] = [];
       const sections = [...(data.sections || [])];
-      if (data.items?.length && source.categories[0]) {
+      if (data.items?.length && source.categories[0] && !sections.some((section) => section.category === source.categories[0])) {
         sections.unshift({ category: source.categories[0], label: source.categories[0] === 'news' ? '뉴스' : '출처 정보', url: data.url || source.url, items: data.items });
       }
       for (const section of sections) {
-        for (const item of section.items || []) {
+        const curatedItems = curateSourceItems(section.items || [], section.category);
+        for (const item of curatedItems) {
           const createdAt = item.publishedAt || data.fetchedAt || new Date().toISOString();
           const id = sourceItemId(source.id, section.category, item.url);
           try {
             if (section.category === 'jobs') {
-              await retryPublish(() => mergeDocument('jobs', id, { title: item.title, company: source.name, location: source.region, salary: '원문 확인', tag: '출처 자동수집', country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
+              await retryPublish(() => mergeDocument('jobs', id, { title: item.title, company: item.company || source.name, location: item.location || item.country || source.region, salary: item.salary || '원문 확인', tag: item.tag || '채용', country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'jobs', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'directory') {
-              await retryPublish(() => mergeDocument('directories', id, { name: item.title, category: source.name, desc: item.description || '공식 출처에서 확인된 정보입니다.', tel: '원문 확인', address: source.region, rating: 0, reviews: 0, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
+              await retryPublish(() => mergeDocument('directories', id, { name: item.title, category: item.tag || source.name, desc: item.description || '공식 출처에서 확인된 정보입니다.', tel: '원문 확인', address: item.location || source.region, rating: 0, reviews: 0, country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'directory', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'market') {
-              await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: source.region, country: source.region, authorId, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
+              await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: item.location || source.region, country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'market', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'community' || section.category === 'news' || section.category === 'events') {
-               await retryPublish(() => mergeDocument('posts', id, { type: 'news', title: item.title, body: item.body || item.description || '상세 본문이 제공되지 않은 출처 콘텐츠입니다.', authorId, author: source.name, country: source.region, createdAt, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
+              await retryPublish(() => mergeDocument('posts', id, { type: section.category === 'community' ? 'general' : 'news', title: item.title, body: item.body || item.description || '상세 본문이 제공되지 않은 출처 콘텐츠입니다.', authorId, author: item.author || source.name, country: item.country || source.region, createdAt, sourceId: source.id, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
             }
           } catch {
             publishErrors.push(item.title);
@@ -153,15 +167,44 @@ export default function MasterPage() {
   };
   const syncAllSources = async () => {
     setMessage('등록된 공식·검증 출처를 순서대로 확인하고 있습니다.');
-    for (const source of CONTENT_SOURCES) await syncSource(source);
+    for (const source of CONTENT_SOURCES.filter((item) => !disabledSourceIds.includes(item.id))) await syncSource(source);
     setMessage('출처 확인이 끝났습니다. 확인된 결과만 뉴스 허브에 게시했습니다.');
   };
   const syncAutoSources = async () => {
-     for (const source of CONTENT_SOURCES) await syncSource(source);
+    for (const source of CONTENT_SOURCES.filter((item) => item.autoImport && !disabledSourceIds.includes(item.id))) await syncSource(source);
   };
+  const syncAutoSourcesEffect = useEffectEvent(syncAutoSources);
   useEffect(() => {
-    if (user?.id && isMasterUser(user)) void syncAutoSources();
-  }, [user?.id]);
+    if (!masterUserId || !contentSettingsLoaded) return;
+    const timer = window.setTimeout(() => void syncAutoSourcesEffect(), 0);
+    return () => window.clearTimeout(timer);
+  }, [contentSettingsLoaded, masterUserId]);
+  const removeSource = async (sourceId: string) => {
+    if (!token) return;
+    const next = [...new Set([...disabledSourceIds, sourceId])];
+    setSavingAction(`source-${sourceId}`);
+    try {
+      await mergeDocument('adminSettings', 'contentSources', { disabledSourceIds: next, updatedAt: new Date() }, token);
+      setDisabledSourceIds(next);
+      setMessage('선택한 출처를 목록과 자동 수집에서 제외했습니다.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '출처 삭제에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+    }
+  };
+  const restoreSource = async (sourceId: string) => {
+    if (!token) return;
+    const next = disabledSourceIds.filter((id) => id !== sourceId);
+    setSavingAction(`source-${sourceId}`);
+    try {
+      await mergeDocument('adminSettings', 'contentSources', { disabledSourceIds: next, updatedAt: new Date() }, token);
+      setDisabledSourceIds(next);
+      setMessage('출처를 다시 활성화했습니다.');
+    } finally {
+      setSavingAction(null);
+    }
+  };
   const approveDeposit = async (request: RequestRow) => {
     if (!token || request.status !== 'PENDING') return;
     setSavingAction(request.id);
@@ -226,7 +269,7 @@ export default function MasterPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 text-slate-900 dark:text-white">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">Master Operations</p><h1 className="mt-2 text-4xl font-black">운영자 센터</h1><p className="mt-2 text-sm text-slate-500">회원 잔고·입출금 신청·입금 지갑 설정을 서버 기준으로 관리합니다.</p></div><button onClick={() => void load()} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCcw size={16} /> 새로고침</button></header>
       <div className="mb-6 grid gap-4 sm:grid-cols-3"><div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-300/20 dark:bg-emerald-300/10"><p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">전체 회원</p><p className="mt-2 text-3xl font-black">{profiles.length}</p></div><div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 dark:border-cyan-300/20 dark:bg-cyan-300/10"><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">회원 잔고 합계</p><p className="mt-2 text-3xl font-black">{totalBalance.toFixed(2)} USDT</p></div><div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-300/20 dark:bg-amber-300/10"><p className="text-xs font-bold text-amber-700 dark:text-amber-300">승인 입금 합계</p><p className="mt-2 text-3xl font-black">{totalDeposits.toFixed(2)} USDT</p></div></div>
-       <section className="mb-6 rounded-3xl border border-teal-200 bg-white p-5 shadow-sm dark:border-teal-300/20 dark:bg-[#10182b]"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">실제 출처 뉴스 허브</h2><p className="mt-1 text-xs text-slate-500">운영자가 확인한 출처의 홈페이지 정보만 Firestore에 저장합니다. 검증되지 않은 국가는 자동 게시하지 않습니다.</p></div><button onClick={() => void syncAllSources()} className="rounded-xl bg-teal-400 px-4 py-2 text-xs font-black text-slate-950">전체 출처 확인</button></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{CONTENT_SOURCES.map((source) => <div key={source.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5"><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{source.name}</div><div className="mt-1 truncate text-[10px] text-slate-500">{source.region} · {source.trust === 'official' ? '공식' : '검증'}</div></div><button onClick={() => void syncSource(source)} disabled={sourceStatus[source.id] === '확인 중...'} className="shrink-0 rounded-lg border border-teal-200 px-2.5 py-1.5 text-[10px] font-black text-teal-700 disabled:opacity-50 dark:border-teal-300/20 dark:text-teal-200">{sourceStatus[source.id] || '확인'}</button></div>)}</div><p className="mt-4 text-xs leading-5 text-amber-700 dark:text-amber-200">출처 확인 대기: {REVIEW_REGIONS.map(regionLabel).join(' · ')}. 실제 공식 사이트를 확인하기 전에는 자동 게시하지 않습니다.</p></section>
+       <section className="mb-6 rounded-3xl border border-teal-200 bg-white p-5 shadow-sm dark:border-teal-300/20 dark:bg-[#10182b]"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">실제 출처 뉴스 허브</h2><p className="mt-1 text-xs text-slate-500">운영자가 확인한 출처의 홈페이지 정보만 Firestore에 저장합니다. 검증되지 않은 국가는 자동 게시하지 않습니다.</p></div><button onClick={() => void syncAllSources()} className="rounded-xl bg-teal-400 px-4 py-2 text-xs font-black text-slate-950">전체 출처 확인</button></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{CONTENT_SOURCES.filter((source) => !disabledSourceIds.includes(source.id)).map((source) => <div key={source.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5"><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{source.name}</div><div className="mt-1 truncate text-[10px] text-slate-500">{source.region} · {source.trust === 'official' ? '공식' : '검증'}</div></div><button onClick={() => void syncSource(source)} disabled={sourceStatus[source.id] === '확인 중...'} className="shrink-0 rounded-lg border border-teal-200 px-2.5 py-1.5 text-[10px] font-black text-teal-700 disabled:opacity-50 dark:border-teal-300/20 dark:text-teal-200">{sourceStatus[source.id] || '확인'}</button><button onClick={() => void removeSource(source.id)} disabled={savingAction === `source-${source.id}`} className="shrink-0 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[10px] font-black text-rose-600 disabled:opacity-50 dark:border-rose-300/20 dark:text-rose-200">삭제</button></div>)}</div>{disabledSourceIds.length > 0 && <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-3 dark:border-white/10"><p className="text-xs font-bold text-slate-500">제외된 출처</p><div className="mt-2 flex flex-wrap gap-2">{CONTENT_SOURCES.filter((source) => disabledSourceIds.includes(source.id)).map((source) => <button key={source.id} onClick={() => void restoreSource(source.id)} disabled={savingAction === `source-${source.id}`} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500 hover:border-teal-300 hover:text-teal-300 disabled:opacity-50">{source.name} 복원</button>)}</div></div>}<p className="mt-4 text-xs leading-5 text-amber-700 dark:text-amber-200">출처 확인 대기: {REVIEW_REGIONS.map(regionLabel).join(' · ')}. 실제 공식 사이트를 확인하기 전에는 자동 게시하지 않습니다.</p></section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><div className="mb-4 flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-black"><WalletCards size={19} className="text-cyan-400" /> 회원 잔고 순위</h2><span className="text-xs text-slate-500">{loading ? '동기화 중...' : '서버 기준'}</span></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-slate-200 text-xs text-slate-500 dark:border-white/10"><tr><th className="p-3">순위</th><th className="p-3">회원</th><th className="p-3">이메일</th><th className="p-3">가입 정보</th><th className="p-3 text-right">USDT</th></tr></thead><tbody>{[...profiles].sort((a, b) => Number(b.usdtBalance || 0) - Number(a.usdtBalance || 0)).map((profile, index) => <tr key={profile.id} className="border-b border-slate-100 dark:border-white/5"><td className="p-3 font-black text-amber-500">#{index + 1}</td><td className="p-3"><div className="flex items-center gap-2"><img src={profile.image} alt="" className="h-8 w-8 rounded-full" /><span className="font-bold">{profile.name}</span></div></td><td className="p-3 text-slate-500">{profile.email}</td><td className="p-3 text-slate-500">{profile.country || 'Global'} · {profile.gender || '미설정'}</td><td className="p-3 text-right font-black text-emerald-500">{Number(profile.usdtBalance || 0).toFixed(2)}</td></tr>)}</tbody></table></div></section>
         <aside className="space-y-6"><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 flex items-center gap-2 font-black"><LockKeyhole size={17} className="text-amber-400" /> TRON 입금 지갑</h2><p className="mb-3 text-xs leading-5 text-slate-500">회원은 이 서버 주소를 읽기만 합니다. 브라우저 localStorage 주소는 사용하지 않습니다.</p><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="T... 마스터 지갑 주소" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20" /><button onClick={() => void saveSettings()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950"><Save size={16} /> 설정 저장</button>{message && <p className="mt-3 text-xs font-bold text-emerald-500">{message}</p>}</section><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 flex items-center gap-2 font-black"><CheckCircle2 size={17} className="text-emerald-400" /> 입금 신청</h2><div className="space-y-2">{deposits.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5"><div className="flex justify-between font-bold"><span>{request.userId.slice(0, 10)}...</span><span>{request.amount} USDT</span></div><p className="mt-1 break-all text-[10px] text-slate-500">{request.network || 'USDT-TRC20'} · {request.depositAddress || '서버 주소'}</p><div className="mt-2 flex gap-2"><button onClick={() => void approveDeposit(request)} className="flex-1 rounded-lg bg-emerald-500 py-2 text-xs font-black text-white">승인</button><button onClick={() => void updateRequest('depositRequests', request, 'REJECTED')} className="flex-1 rounded-lg border border-red-200 py-2 text-xs font-black text-red-500">거절</button></div></div>)}{deposits.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 입금 신청이 없습니다.</p>}</div></section><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 font-black">출금 승인</h2><div className="space-y-2">{withdrawals.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5"><div className="flex justify-between font-bold"><span>{request.userId.slice(0, 10)}...</span><span>{request.amount} USDT</span></div><p className="mt-1 break-all text-[10px] text-slate-500">{request.targetAddress || '주소 없음'}</p><button onClick={() => void updateRequest('withdrawalRequests', request, 'APPROVED')} className="mt-2 w-full rounded-lg bg-cyan-500 py-2 text-xs font-black text-white">승인 처리</button></div>)}{withdrawals.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 출금 신청이 없습니다.</p>}</div></section></aside>
