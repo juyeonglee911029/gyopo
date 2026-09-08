@@ -1080,9 +1080,11 @@ export async function completeProfileOnboarding(
     }),
   }, token);
   if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
     const current = await refreshStoredUser();
     if (hasCompletedProfile(current)) return current;
-    throw new Error('프로필을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    if (response.status === 403) throw new Error('프로필 저장 권한이 없습니다. 잠시 후 다시 시도해주세요.');
+    throw new Error(errorBody || '프로필을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.');
   }
   storeSessionUser(completedUser);
   return completedUser;
