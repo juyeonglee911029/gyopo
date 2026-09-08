@@ -228,6 +228,24 @@ export async function GET(request: Request) {
   if (!source) return Response.json({ error: '등록되지 않은 출처입니다.' }, { status: 404 });
 
   try {
+    if (source.id === 'hanintoday-brazil' && requestedCategory === 'jobs') {
+      const response = await fetch('https://hanintoday.com.br/api/jobs', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+      if (!response.ok) throw new Error(`구인 API 응답 ${response.status}`);
+      const payload = await response.json() as { jobs?: Array<{ id?: string; title?: string; company?: string; area?: string; category?: string; employmentType?: string; salaryType?: string; salary?: number; description?: string; requirements?: string; contact?: string; createdAt?: string; details?: { workplaceAddress?: string; salaryConditions?: string } }> };
+      const items = (payload.jobs || []).filter((job) => job.id && job.title).slice(0, 50).map((job) => ({
+        title: clean(job.title),
+        url: `https://hanintoday.com.br/jobs/${job.id}`,
+        description: clean(job.description || ''),
+        body: clean([job.description, job.requirements, job.details?.workplaceAddress, job.details?.salaryConditions, job.contact].filter(Boolean).join('\n\n')),
+        publishedAt: job.createdAt,
+        category: 'jobs' as ContentCategory,
+        company: clean(job.company || ''),
+        location: clean(job.area || ''),
+        salary: job.details?.salaryConditions || (job.salary ? `${job.salary} · ${job.salaryType || ''}` : '상세 내용 참조'),
+        tag: clean(job.category || job.employmentType || '구인구직'),
+      }));
+      return Response.json({ sourceId: source.id, sourceName: source.name, region: source.region, url: 'https://hanintoday.com.br/jobs', title: '한인투데이 구인구직', description: '한인투데이에서 확인된 최신 구인구직 공고입니다.', items, sections: [{ category: 'jobs', label: '구인구직', url: 'https://hanintoday.com.br/jobs', items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['구인구직 공고가 없습니다.'], fetchedAt: new Date().toISOString(), verified: true });
+    }
     const html = await fetchHtml(source.url);
     const pageData = structuredData(html);
     const title = meta(html, 'og:title') || clean(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]) || pageData.headline || source.name;
