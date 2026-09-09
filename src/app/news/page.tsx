@@ -8,7 +8,7 @@ import { regionLabel } from '@/lib/regions';
 import { CONTENT_SOURCES, sourceItemId } from '@/lib/contentSources';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type SnapshotItem = { title: string; url: string; description?: string; body?: string; publishedAt?: string };
+type SnapshotItem = { title: string; url: string; description?: string; body?: string; publishedAt?: string; category?: string };
 type SnapshotSection = { category: string; label: string; url: string; items: SnapshotItem[] };
 type Snapshot = { id: string; sourceId: string; sourceName: string; region: string; url: string; title: string; description?: string; fetchedAt: string; verified?: boolean; items?: SnapshotItem[]; sections?: SnapshotSection[]; sourceSnapshot?: boolean };
 type NewsStory = { entry: SnapshotItem; category: string; categoryLabel: string; source: Snapshot };
@@ -81,13 +81,14 @@ export default function NewsPage() {
   const storyKeys = new Set<string>();
   const stories: NewsStory[] = [];
   visible.forEach((source) => {
-    source.sections?.filter((section) => section.items.length).forEach((section) => section.items.forEach((entry) => {
+    source.sections?.filter((section) => section.category === 'news' && section.items.length).forEach((section) => section.items.forEach((entry) => {
       const key = `${source.sourceId}:${entry.url}`;
       if (storyKeys.has(key)) return;
       storyKeys.add(key);
       stories.push({ entry, category: section.category, categoryLabel: section.label || categoryLabels[section.category] || '소식', source });
     }));
-    source.items?.forEach((entry) => {
+    const sourceCategory = CONTENT_SOURCES.find((item) => item.id === source.sourceId)?.categories[0];
+    source.items?.filter((entry) => (entry.category || sourceCategory || 'news') === 'news').forEach((entry) => {
       const key = `${source.sourceId}:${entry.url}`;
       if (storyKeys.has(key)) return;
       storyKeys.add(key);
