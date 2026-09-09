@@ -740,3 +740,11 @@ body { padding-top: 5.75rem !important; }
   .webrtc-grid > aside > section:nth-child(3) { font-size: .72rem !important; }
   .webrtc-grid > aside > section:nth-child(3) select { margin-top: .35rem !important; padding-block: .45rem !important; font-size: .72rem !important; }
 }
+/* Apply the final pass to the existing route markup. */
+.portal-frame > main > div > div > div.flex > main > a > div { border-bottom-color: transparent !important; background: transparent !important; }
+.portal-frame > main > div > div > div.flex > main > a:hover > div { background: transparent !important; }
+@media (max-width: 639px) {
+  .portal-frame > main > div.min-h-screen[class*="bg-[#070b17]"],
+  .portal-frame > main > div.min-h-screen[class*="bg-[#f5f7fb]"] { padding-top: 5.5rem !important; }
+  .portal-frame > main > div.min-h-screen[class*="bg-[#070b17]"] > header { padding-top: 0 !important; }
+}
