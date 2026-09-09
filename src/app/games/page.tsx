@@ -793,8 +793,6 @@ export default function GamesPage() {
     const invite = incomingInvite;
     const token = getSessionToken();
     if (!token || !user) return;
-    handledInviteIds.current.add(invite.id);
-    setIncomingInvite(null);
     await deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
     try {
       if (!invite.roomNumber || !(await joinTetrisLobbyRoom(invite.roomNumber, invite.matchId, {
@@ -810,6 +808,8 @@ export default function GamesPage() {
       setInviteStatus(error instanceof Error ? error.message : '수락 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
       return;
     }
+    handledInviteIds.current.add(invite.id);
+    setIncomingInvite(null);
     setMatchId(invite.matchId);
     setMatchRole('B');
     setRoomNumber(invite.roomNumber || null);
@@ -839,15 +839,14 @@ export default function GamesPage() {
     if (!incomingInvite) return;
     const invite = incomingInvite;
     const token = getSessionToken();
-    setIncomingInvite(null);
-    handledInviteIds.current.add(invite.id);
-    if (token) {
-      try {
-        await mergeDocument('tetrisInvites', invite.id, { status: 'rejected', updatedAt: new Date() }, token);
-        setInviteStatus('대전 신청을 거절했습니다.');
-      } catch {
-        setInviteStatus('거절 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
-      }
+    if (!token) return;
+    try {
+      await mergeDocument('tetrisInvites', invite.id, { status: 'rejected', updatedAt: new Date() }, token);
+      handledInviteIds.current.add(invite.id);
+      setIncomingInvite(null);
+      setInviteStatus('대전 신청을 거절했습니다.');
+    } catch {
+      setInviteStatus('거절 정보를 서버에 저장하지 못했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -898,13 +897,33 @@ export default function GamesPage() {
             ? '내 준비 완료 · 상대 준비를 기다리는 중'
             : '대전 방에 다시 연결했습니다. 참가비를 확인해주세요.',
     );
-    setInviteStatus('대전 방에 다시 연결되었습니다.');
+     setInviteStatus('대전 방에 다시 연결되었습니다.');
 
     if (room.startAt) beginCountdown(room.startAt);
     if (phase === 'playing' && !gameStartedRef.current) {
       gameStartedRef.current = true;
       dispatch({ type: 'START' });
     }
+  };
+
+  const restorePendingInvite = (invite: TetrisInvite) => {
+    setMatchId(invite.matchId);
+    setMatchRole('A');
+    setRoomNumber(invite.roomNumber || null);
+    setSentInviteId(invite.id);
+    setOpponent(invite.recipient);
+    setOpponentState(null);
+    setReadyForBattle(false);
+    setOpponentReady(false);
+    setRoomBetConfigured(false);
+    setStakeReserved(false);
+    setBetAmount(DEFAULT_ENTRY_FEE);
+    setRoomStartAt(null);
+    setCountdown(null);
+    setMatchResult(null);
+    setMatchPhase('waiting');
+    setMatchStatus(`${invite.recipient.name}님에게 보낸 대전 신청을 복구했습니다.`);
+    setInviteStatus('상대방의 수락 또는 거절을 기다리는 중입니다.');
   };
 
   const confirmBet = async () => {
@@ -1080,6 +1099,22 @@ export default function GamesPage() {
             restoreMatch(invite, role, room, lobbyRooms.find((lobby) => lobby.activeMatchId === invite.matchId)?.roomNumber);
             activeMatch = true;
             break;
+          }
+        }
+
+        const pendingSentInvite = !activeMatch
+          ? invites
+            .filter((invite) => invite.senderId === currentUserId && invite.status === 'pending' && Date.now() - new Date(invite.createdAt).getTime() < 120_000)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+          : undefined;
+        if (pendingSentInvite) {
+          const pendingLobby = lobbyRooms.find((lobby) => lobby.roomNumber === pendingSentInvite.roomNumber);
+          if (pendingLobby?.activeMatchId === pendingSentInvite.matchId && pendingLobby.status === 'waiting') {
+            restorePendingInvite(pendingSentInvite);
+            activeMatch = true;
+          } else if (pendingLobby?.activeMatchId && pendingLobby.activeMatchId !== pendingSentInvite.matchId) {
+            await mergeDocument('tetrisInvites', pendingSentInvite.id, { status: 'rejected', updatedAt: new Date() }, token).catch(() => undefined);
+            setInviteStatus('이전 대전 신청의 방이 이미 사용되어 신청을 종료했습니다. 새로 신청해주세요.');
           }
         }
 
