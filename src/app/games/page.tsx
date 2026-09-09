@@ -1049,22 +1049,35 @@ export default function GamesPage() {
       window.alert(`참가비는 ${MIN_ENTRY_FEE}~${MAX_ENTRY_FEE} USDT 사이로 입력해주세요.`);
       return;
     }
-     if (matchRole === 'B' && !roomBeforeBet?.betAmount) {
+    if (matchRole === 'B' && !roomBeforeBet?.betAmount) {
       window.alert('상대방이 참가비를 먼저 설정해야 합니다. 잠시 후 다시 시도해주세요.');
-       return;
+      return;
     }
+    let reservedNow = false;
     try {
+      if (!stakeReserved) {
+        await reserveGameStake(currentUserId, matchId, amount, token);
+        reservedNow = true;
+        setStakeReserved(true);
+        const refreshed = await refreshStoredUser().catch(() => null);
+        if (refreshed) setUser(refreshed);
+      }
       // Player A is the only source of truth for the room fee. Player B only confirms it.
       await updateRoom({
         ...(matchRole === 'A' ? { betAmount: amount } : {}),
         phase: 'betting',
         ...(matchRole === 'A' ? { readyA: true, readyAAt: new Date() } : { readyB: true, readyBAt: new Date() }),
+        ...(matchRole === 'A' ? { stakeHeldA: true } : { stakeHeldB: true }),
       });
       setReadyForBattle(true);
       setRoomBetConfigured(true);
       setMatchPhase('betting');
       setMatchStatus('서버 준비 완료 · 상대 준비를 기다리는 중');
     } catch (error) {
+      if (reservedNow) {
+        await refundGameStake(currentUserId, matchId, token).catch(() => undefined);
+        setStakeReserved(false);
+      }
       setMatchStatus(gameErrorMessage(error, '대전 설정을 저장하지 못했습니다. 다시 눌러주세요.'));
     }
   };
