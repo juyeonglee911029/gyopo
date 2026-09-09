@@ -521,6 +521,8 @@ export type TetrisQueueProfile = {
   age?: number;
   gender?: string;
   genderPreference?: GenderPreference;
+  ageMin?: number;
+  ageMax?: number;
   isSubscribed?: boolean;
   targetUserId?: string;
 };
@@ -828,9 +830,14 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
     const candidatePreference = candidate.genderPreference || 'any';
     const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
     const candidateMatches = candidatePreference === 'any' || profile.gender === candidatePreference;
+    const candidateAge = Number(candidate.age || 0);
+    const requesterAgeMatches = (!profile.ageMin && !profile.ageMax)
+      || (candidateAge >= (profile.ageMin || 13) && candidateAge <= (profile.ageMax || 130));
+    const candidateAgeMatches = (!candidate.ageMin && !candidate.ageMax)
+      || (Number(profile.age || 0) >= (candidate.ageMin || 13) && Number(profile.age || 0) <= (candidate.ageMax || 130));
     const targetMatches = (!profile.targetUserId || candidateId === profile.targetUserId)
       && (!candidate.targetUserId || candidate.targetUserId === profile.id);
-    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && targetMatches;
+    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && requesterAgeMatches && candidateAgeMatches && targetMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
@@ -1214,6 +1221,47 @@ export async function respondToFriendRequest(connection: FriendConnection, statu
   await mergeDocument(friendConnectionCollection, connection.id, { status, updatedAt: new Date() }, token);
 }
 
+export type FriendCallRequest = {
+  id: string;
+  callerId: string;
+  callerName: string;
+  callerImage: string;
+  calleeId: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  createdAt: string;
+  expiresAt: string;
+};
+
+const friendCallRequestCollection = 'friendCallRequests';
+
+export async function createFriendCallRequest(calleeId: string, caller: Pick<PortalUser, 'id' | 'name' | 'image'>, token = getSessionToken()): Promise<string> {
+  if (!token || !caller.id || !calleeId || caller.id === calleeId) throw new Error('통화 요청 대상을 확인해주세요.');
+  const id = `call-request-${caller.id}-${calleeId}-${crypto.randomUUID()}`;
+  const createdAt = new Date();
+  await createDocument(friendCallRequestCollection, id, {
+    callerId: caller.id,
+    callerName: caller.name,
+    callerImage: caller.image,
+    calleeId,
+    status: 'pending',
+    createdAt,
+    expiresAt: new Date(createdAt.getTime() + 90_000),
+  }, token);
+  return id;
+}
+
+export async function listIncomingFriendCallRequests(userId: string, token = getSessionToken()): Promise<FriendCallRequest[]> {
+  if (!token) return [];
+  const rows = await queryDocumentsWhere<Omit<FriendCallRequest, 'id'>>(friendCallRequestCollection, [{ field: 'calleeId', op: 'EQUAL', value: userId }], token, 20).catch(() => []);
+  return rows.filter((request) => request.status === 'pending' && new Date(request.expiresAt).getTime() > Date.now());
+}
+
+export async function respondToFriendCallRequest(request: FriendCallRequest, status: Extract<FriendCallRequest['status'], 'accepted' | 'declined'>, token = getSessionToken()): Promise<void> {
+  const viewerId = getTokenUserId(token);
+  if (!token || viewerId !== request.calleeId) throw new Error('통화 요청 권한을 확인해주세요.');
+  await mergeDocument(friendCallRequestCollection, request.id, { status, respondedAt: new Date() }, token);
+}
+
 export function getStoredSession(): StoredSession | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -1427,10 +1475,12 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
   const savedProfile = await getDocument<Partial<PortalUser>>('profiles', user.id, token);
   const savedGender = savedProfile?.gender;
   const savedCountry = savedProfile?.country;
+  const savedAge = Number(savedProfile?.age || 0);
   const persistedUser: PortalUser = {
     ...user,
     gender: isGender(savedGender) ? savedGender : user.gender,
-    country: isCountry(savedCountry) ? savedCountry.trim() : user.country?.trim(),
+    age: Number.isInteger(savedAge) && savedAge >= 13 && savedAge <= 130 ? savedAge : user.age,
+    country: isCountry(user.country) ? user.country.trim() : isCountry(savedCountry) ? savedCountry.trim() : user.country?.trim(),
   };
   if (!hasCompletedProfile(persistedUser)) throw new Error('먼저 성별·나이·국가 설정을 완료해주세요.');
   await upsertDocument('profiles', user.id, privateProfileData(persistedUser), token);
