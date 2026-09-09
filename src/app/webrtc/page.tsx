@@ -59,6 +59,12 @@ const stunServers = [
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
 ];
+const turnServers = [
+  { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+];
+const iceServers = [...stunServers, ...turnServers];
 const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise.race([
   navigator.mediaDevices.getUserMedia(constraints),
   new Promise<MediaStream>((_, reject) => window.setTimeout(() => reject(new Error('카메라와 마이크 권한 응답이 지연되고 있습니다. 브라우저 권한을 확인해주세요.')), 12000)),
@@ -466,7 +472,7 @@ export default function WebRTCPage() {
 
     const ensureConnection = (call: ActiveCall) => {
       if (connectionRef.current) return connectionRef.current;
-      const connection = new RTCPeerConnection({ iceServers: stunServers, iceCandidatePoolSize: 10 });
+       const connection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
       connectionRef.current = connection;
       const outgoing = createOutgoingStream();
       outgoing?.getTracks().forEach((track) => {
