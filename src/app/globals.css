@@ -758,3 +758,14 @@ body { padding-top: 5.75rem !important; }
 .portal-frame .jobs-page header { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
 .portal-frame .jobs-page main a > div,
 .portal-frame .jobs-page main a > div[class*="bg-white"] { border-bottom-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+/* Use the square, borderless sidebar surface language across content panels. */
+.portal-rail-card, #friend-dock, #global-lounge { border-radius: 0 !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.portal-frame > main div[class*="rounded-"],
+.portal-frame > main section[class*="rounded-"],
+.portal-frame > main article[class*="rounded-"],
+.portal-frame > main aside[class*="rounded-"],
+.portal-frame > main header[class*="rounded-"],
+.portal-frame > main form[class*="rounded-"] { border-radius: 0 !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.portal-frame > main [class*="backdrop-blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+#friend-dock [class*="rounded-"], #global-lounge [class*="rounded-"] { border-radius: 0 !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+#friend-dock > header, #global-lounge > div:first-child, #global-lounge > div:last-child { border-color: transparent !important; background: transparent !important; }
