@@ -787,3 +787,6 @@ body { padding-top: 5.75rem !important; }
 #friend-dock[class*="rounded-"] { -webkit-backdrop-filter: blur(18px) saturate(140%) !important; backdrop-filter: blur(18px) saturate(140%) !important; }
 @supports (backdrop-filter: blur(1px)) { #friend-dock[class*="rounded-"] { backdrop-filter: blur(18px) saturate(140%) !important; } }
 .portal-frame .webrtc-grid > section .webrtc-mobile-controls button { border-radius: 0 !important; }
+/* Keep control borders consistently white and translucent. */
+#friend-dock button[class*="rounded-"], #global-lounge button[class*="rounded-"] { border-color: rgba(255, 255, 255, .2) !important; }
+.portal-frame .webrtc-grid > aside > section input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .portal-frame .webrtc-grid > aside > section select, .portal-frame .webrtc-grid > aside > section textarea { border-color: rgba(255, 255, 255, .24) !important; }
