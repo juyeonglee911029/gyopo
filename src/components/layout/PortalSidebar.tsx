@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, Film, Gamepad2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
+import { BriefcaseBusiness, Film, Gamepad2, Home, MessageCircle, Music2, Newspaper, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 const primaryLinks = [
@@ -10,7 +10,6 @@ const primaryLinks = [
   { href: '/news', label: '오늘의 뉴스', english: 'News', icon: Newspaper },
   { href: '/jobs', label: '구인구직', english: 'Jobs', icon: BriefcaseBusiness },
   { href: '/directory', label: '업소록', english: 'Directory', icon: Store },
-  { href: '/market', label: '장터', english: 'Market', icon: ShoppingBag },
   { href: '/community', label: '커뮤니티', english: 'Community', icon: MessageCircle },
 ];
 
