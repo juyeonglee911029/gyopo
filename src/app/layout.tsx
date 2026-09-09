@@ -27,8 +27,8 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   metadataBase: new URL('https://gyopo.pages.dev'),
   title: 'K-Global Portal | 글로벌 한인 교민 통합 포털',
-  description: '전 세계 한인 교민을 위한 구인구직, 업체목록, 에스크로 장터 통합 플랫폼',
-  keywords: ['한인 포털', '교민 커뮤니티', '해외 구인구직', '한인 업소록', '교민 장터', '랜덤 화상채팅', 'K-POP 라디오'],
+  description: '전 세계 한인 교민을 위한 구인구직, 업체목록, 커뮤니티 통합 플랫폼',
+  keywords: ['한인 포털', '교민 커뮤니티', '해외 구인구직', '한인 업소록', '랜덤 화상채팅', 'K-POP 라디오'],
   applicationName: 'GYOPO',
   authors: [{ name: 'GYOPO' }],
   alternates: { canonical: 'https://gyopo.pages.dev' },
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     url: 'https://gyopo.pages.dev',
     siteName: 'GYOPO',
     title: 'GYOPO | 글로벌 한인 교민 통합 포털',
-    description: '교민 커뮤니티, 구인구직, 업소록, 장터, 화상채팅과 K-POP 라디오를 한 곳에서 만나보세요.',
+    description: '교민 커뮤니티, 구인구직, 업소록, 화상채팅과 K-POP 라디오를 한 곳에서 만나보세요.',
   },
   twitter: {
     card: 'summary',
@@ -66,7 +66,7 @@ export default function RootLayout({
             name: 'GYOPO',
             alternateName: 'K-Global Portal',
             url: 'https://gyopo.pages.dev',
-            description: '전 세계 한인을 위한 커뮤니티, 구인구직, 업소록, 장터, 화상채팅, K-POP 라디오 포털',
+            description: '전 세계 한인을 위한 커뮤니티, 구인구직, 업소록, 화상채팅, K-POP 라디오 포털',
             inLanguage: ['ko', 'en'],
             potentialAction: { '@type': 'SearchAction', target: 'https://gyopo.pages.dev/assistant?q={search_term_string}', 'query-input': 'required name=search_term_string' },
           }) }} />
