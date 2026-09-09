@@ -10,6 +10,7 @@ type YahooChart = { meta?: { regularMarketPrice?: number; chartPreviousClose?: n
 type CryptoQuote = { quotes?: { USD?: { price?: number; percent_change_24h?: number } } };
 type CoinGeckoQuote = Record<string, { usd?: number; usd_24h_change?: number }>;
 type BinanceQuote = { lastPrice?: string; priceChangePercent?: string };
+type CoinbaseQuote = { data?: { amount?: string } };
 
 const marketAssets: MarketAsset[] = [
   { key: 'bitcoin', label: 'BTC', symbol: 'bitcoin', currency: 'USD' },
@@ -50,6 +51,7 @@ const cryptoTickers: Record<string, string> = {
 };
 const coinGeckoIds: Record<string, string> = { bitcoin: 'bitcoin', ethereum: 'ethereum', ripple: 'ripple', solana: 'solana' };
 const binanceSymbols: Record<string, string> = { bitcoin: 'BTCUSDT', ethereum: 'ETHUSDT', ripple: 'XRPUSDT', solana: 'SOLUSDT' };
+const coinbaseSymbols: Record<string, string> = { bitcoin: 'BTC', ethereum: 'ETH', ripple: 'XRP', solana: 'SOL' };
 
 async function fetchCryptoAsset(asset: MarketAsset) {
   try {
@@ -70,6 +72,13 @@ async function fetchCryptoAsset(asset: MarketAsset) {
     const quote = await marketJson<BinanceQuote>(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbols[asset.symbol]}`);
     const value = Number(quote.lastPrice);
     if (Number.isFinite(value)) return { key: asset.key, label: asset.label, value, change: Number(quote.priceChangePercent) || null, currency: asset.currency };
+  } catch {
+    // Try the spot feed below when the exchange feed is unavailable.
+  }
+  try {
+    const quote = await marketJson<CoinbaseQuote>(`https://api.coinbase.com/v2/prices/${coinbaseSymbols[asset.symbol]}-USD/spot`);
+    const value = Number(quote.data?.amount);
+    if (Number.isFinite(value)) return { key: asset.key, label: asset.label, value, change: null, currency: asset.currency };
   } catch {
     // Return an explicit empty value so the ticker remains stable.
   }
