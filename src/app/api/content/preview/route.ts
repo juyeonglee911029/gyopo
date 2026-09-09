@@ -188,6 +188,8 @@ const countryIds: Record<string, string> = {
   독일: 'Germany', 네덜란드: 'Netherlands', 헝가리: 'Hungary', 스페인: 'Spain', 포르투갈: 'Portugal', 루마니아: 'Romania', 몰타: 'Malta', 벨기에: 'Belgium', 폴란드: 'Poland', 프랑스: 'France', 체코: 'Czechia', 슬로바키아: 'Slovakia', 오스트리아: 'Austria', 이탈리아: 'Italy', 태국: 'Thailand', 브라질: 'Brazil',
 };
 
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
+
 function titleCountry(title: string) {
   const label = title.match(/^\s*\[([^\]]+)]/)?.[1]?.trim();
   return { country: label ? countryIds[label] || label : undefined, location: label };
@@ -505,6 +507,102 @@ async function enrichItems(items: CrawlItem[]) {
   }));
 }
 
+function discoveredCategory(value: string, fallback: ContentCategory) {
+  const text = normalizeSourceText(value).toLocaleLowerCase();
+  if (/(?:구인|구직|채용|jobs?|stellen|karriere|career|vacanc)/i.test(text)) return 'jobs' as ContentCategory;
+  if (/(?:업소|업체|식당|병원|directory|business|branchenbuch|unternehmen|restaurant)/i.test(text)) return 'directory' as ContentCategory;
+  if (/(?:커뮤니티|게시판|community|forum|광장|생활정보)/i.test(text)) return 'community' as ContentCategory;
+  if (/(?:행사|이벤트|event|veranstaltung|전시)/i.test(text)) return 'events' as ContentCategory;
+  if (/(?:뉴스|news|nachrichten|기사|소식|noticia|noticias)/i.test(text)) return 'news' as ContentCategory;
+  return fallback;
+}
+
+function extractDiscoveredLinks(html: string, pageUrl: string, fallback: ContentCategory) {
+  const items: CrawlItem[] = [];
+  const seen = new Set<string>();
+  const origin = new URL(pageUrl).origin;
+  const blocked = /(?:login|register|signup|privacy|impressum|datenschutz|terms|kontakt|contact|about|sitemap|search|suche|tag|author|page=|#)/i;
+  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let url: URL;
+    try { url = new URL(clean(match[1]), pageUrl); } catch { continue; }
+    const title = normalizeSourceTitle(match[2].match(/<(?:h[1-6]|strong|b)[^>]*>([\s\S]*?)<\/(?:h[1-6]|strong|b)>/i)?.[1] || match[2]);
+    if (url.origin !== origin || url.href === pageUrl || url.hash || title.length < 6 || title.length > 240 || blocked.test(url.pathname + url.search) || /^(?:home|menu|more|read more|weiterlesen|로그인|회원가입|검색|더보기|전체보기)$/i.test(title)) continue;
+    const category = discoveredCategory(`${url.pathname} ${title}`, fallback);
+    if (category === 'news' && !/(?:article|news|nachricht|noticia|post|story|view|detail|read|\d{3,})/i.test(url.pathname + title) && url.pathname !== new URL(pageUrl).pathname) continue;
+    if (seen.has(url.href)) continue;
+    seen.add(url.href);
+    items.push({ title, url: normalizeSourceUrl(url.href), category });
+    if (items.length >= 36) break;
+  }
+  return items;
+}
+
+async function fetchDiscoveredSource(source: ContentSource, requestedCategory: ContentCategory | null) {
+  const rootHtml = await fetchHtml(source.url);
+  const rootItems = extractDiscoveredLinks(rootHtml, source.url, source.categories[0] || 'news');
+  const seedPages = new Map<string, { category: ContentCategory; label: string; url: string }>();
+  for (const item of rootItems) {
+    const category = item.category || source.categories[0] || 'news';
+    if (category === 'news' && /(?:article|news|nachricht|noticia|post|story|view|detail|read|\d{3,})/i.test(new URL(item.url).pathname)) continue;
+    if (requestedCategory && category !== requestedCategory) continue;
+    if (seedPages.has(item.url)) continue;
+    seedPages.set(item.url, { category, label: item.title, url: item.url });
+  }
+  const seeds = [...seedPages.values()].slice(0, 10);
+  const directItems = rootItems.filter((item) => !seedPages.has(item.url));
+  const sections = new Map<ContentCategory, CrawlItem[]>();
+  for (const item of directItems) {
+    if (!requestedCategory || item.category === requestedCategory) (sections.get(item.category) || (sections.set(item.category, []), sections.get(item.category)!)).push(item);
+  }
+  await Promise.all(seeds.map(async (seed) => {
+    try {
+      const html = await fetchHtml(seed.url);
+      const links = extractDiscoveredLinks(html, seed.url, seed.category).filter((item) => !requestedCategory || item.category === requestedCategory || seed.category === requestedCategory);
+      const enriched = await enrichItems(links);
+      const list = sections.get(seed.category) || [];
+      sections.set(seed.category, [...list, ...enriched.map((item) => ({ ...item, category: seed.category }))]);
+    } catch {
+      // A single unavailable category must not hide the other source sections.
+    }
+  }));
+  const outputSections = await Promise.all([...sections.entries()].map(async ([category, values]) => ({
+    category,
+    label: category === 'news' ? '뉴스' : categoryLabels[category],
+    url: source.url,
+    items: curateSourceItems(await enrichItems(values.slice(0, 12)), category),
+  })));
+  const items = requestedCategory ? outputSections.find((section) => section.category === requestedCategory)?.items || [] : [];
+  const count = outputSections.reduce((sum, section) => sum + section.items.length, 0);
+  return { sourceId: source.id, sourceName: source.name, region: source.region, url: source.url, title: `${source.name} 최신 출처 콘텐츠`, description: source.note, items, sections: outputSections, status: count ? 'ready' : 'unavailable', warnings: count ? [] : ['분류 가능한 원문 콘텐츠를 찾지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
+}
+
+async function fetchNaverSource(source: ContentSource, requestedCategory: ContentCategory | null) {
+  const paths = source.crawlPaths?.filter((item) => !requestedCategory || item.category === requestedCategory) || [];
+  const sections = await Promise.all(paths.map(async (path) => {
+    try {
+      const url = new URL(path.path, source.url).href;
+      const html = await fetchHtml(url);
+      const links: CrawlItem[] = [];
+      const seen = new Set<string>();
+      for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']*\/article\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+        let articleUrl: URL;
+        try { articleUrl = new URL(clean(match[1]), url); } catch { continue; }
+        const title = normalizeSourceTitle(match[2].replace(/<[^>]+>/g, ' '));
+        if (title.length < 8 || seen.has(articleUrl.href) || /^(?:포토|동영상|더보기|전체기사)$/i.test(title)) continue;
+        seen.add(articleUrl.href);
+        links.push({ title, url: articleUrl.href, category: 'news' });
+        if (links.length >= 10) break;
+      }
+      const items = curateSourceItems(await enrichItems(links), 'news');
+      return { category: 'news' as ContentCategory, label: path.label, url, items };
+    } catch {
+      return { category: 'news' as ContentCategory, label: path.label, url: new URL(path.path, source.url).href, items: [] };
+    }
+  }));
+  const items = sections.flatMap((section) => section.items).filter((item, index, all) => all.findIndex((other) => other.url === item.url) === index).slice(0, 40);
+  return { sourceId: source.id, sourceName: source.name, region: source.region, url: source.url, title: '네이버 뉴스 최신 기사', description: source.note, items: requestedCategory ? items : [], sections, status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['네이버 뉴스 섹션을 읽지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
+}
+
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   if (params.get('source') === 'market') return Response.json(await fetchMarket(), { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=120' } });
@@ -525,6 +623,8 @@ export async function GET(request: Request) {
   try {
     if (source.id === 'kba-europe-jobs') return Response.json(await fetchKbaSource(source));
     if (source.id === 'hanasia-thailand') return Response.json(await fetchHanasiaSource(source, requestedCategory));
+     if (source.id === 'naver-news') return Response.json(await fetchNaverSource(source, requestedCategory));
+     if (source.id === 'gutentag-korea' || source.id === 'spainagain-koreans') return Response.json(await fetchDiscoveredSource(source, requestedCategory));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'community') return Response.json(await fetchHaninCommunity(source));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'jobs') {
       const response = await fetch('https://hanintoday.com.br/api/jobs', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
