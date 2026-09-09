@@ -183,7 +183,11 @@ export default function MasterPage() {
   useEffect(() => {
     if (!masterUserId || !contentSettingsLoaded) return;
     const timer = window.setTimeout(() => void syncAutoSourcesEffect(), 0);
-    return () => window.clearTimeout(timer);
+    const interval = window.setInterval(() => void syncAutoSourcesEffect(), 30 * 60 * 1000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
   }, [contentSettingsLoaded, masterUserId]);
   const removeSource = async (sourceId: string) => {
     if (!token) return;
