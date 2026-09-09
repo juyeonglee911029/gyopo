@@ -1,4 +1,4 @@
-'use client';
+Header.tsx'use client';
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
