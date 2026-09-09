@@ -42,22 +42,27 @@ body { padding-top: 7rem !important; }
 .portal-frame > main > div, .portal-frame > main > section { background-color: transparent !important; }
 .portal-text-rail { position: fixed; top: 7.5rem; bottom: 1rem; left: 1rem; z-index: 220; display: none; width: 9rem; overflow-y: auto; background: transparent; pointer-events: auto; scrollbar-width: none; }
 .portal-text-rail::-webkit-scrollbar { display: none; }
-.portal-rail-card { overflow: hidden; border: 1px solid rgba(165, 243, 252, .14); border-radius: 0; background: rgba(8, 16, 31, .46); box-shadow: 0 20px 55px rgba(0, 0, 0, .18); backdrop-filter: blur(18px); }
-.portal-text-rail-label { margin: 0; border-bottom: 1px solid rgba(165, 243, 252, .1); padding: .8rem .7rem .65rem; color: rgba(103, 232, 249, .72); font-size: .56rem; font-weight: 900; letter-spacing: .16em; }
+.portal-rail-card { overflow: hidden; border: 0; border-radius: 0; background: rgba(8, 16, 31, .32); box-shadow: none; backdrop-filter: blur(18px); }
+.portal-text-rail-label { margin: 0; border-bottom: 0; padding: .8rem .7rem .65rem; color: rgba(255, 255, 255, .62); font-size: .56rem; font-weight: 500; letter-spacing: .16em; }
 .portal-text-rail-nav { display: grid; gap: 0; padding: .4rem; }
-.portal-text-link { display: block; border: 0; border-bottom: 1px solid rgba(255, 255, 255, .055); border-radius: 0; padding: .43rem .5rem; color: rgba(255, 255, 255, .62); font-size: .7rem; font-weight: 800; line-height: 1.35; text-decoration: none; transition: none; }
-.portal-text-link:last-child { border-bottom: 0; }
-.portal-text-link:hover, .portal-text-link-active { border-left: 2px solid #2dd4bf; color: #fff; background: rgba(45, 212, 191, .09); transform: none; }
+.portal-text-link { display: block; border: 0; border-radius: 0; padding: .43rem .5rem; color: rgba(255, 255, 255, .62); font-size: .7rem; font-weight: 500; line-height: 1.35; text-decoration: none; transition: background-color .16s ease, color .16s ease; }
+.portal-text-link:hover, .portal-text-link-active { border: 0; color: #fff; background: rgba(255, 255, 255, .1); transform: none; }
 .portal-text-link-active { text-shadow: none; }
 .portal-text-link-button { width: 100%; background: transparent; text-align: left; font: inherit; }
 .site-background-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #050914; pointer-events: none; }
-.site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .78; filter: brightness(1) saturate(1.08) contrast(1.02); }
+.site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .7; filter: brightness(1) saturate(1.08) contrast(1.02); }
 .site-background-video-shade { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(3, 7, 18, .25), rgba(3, 13, 26, .18) 50%, rgba(12, 5, 28, .28)); }
-#global-lounge { z-index: 240 !important; top: 7.5rem !important; right: 1rem !important; bottom: 1rem !important; width: 21rem !important; border-color: rgba(165, 243, 252, .14) !important; border-radius: 1.5rem !important; background-color: rgba(10, 17, 32, .42) !important; box-shadow: 0 24px 90px rgba(0, 0, 0, .28) !important; backdrop-filter: blur(18px); }
-#global-lounge > div:first-child { border-bottom-color: rgba(255, 255, 255, .08) !important; background-color: transparent !important; }
-#global-lounge > div:last-child { border-top-color: rgba(255, 255, 255, .08) !important; background-color: rgba(10, 17, 32, .3) !important; }
-#global-lounge input { background-color: rgba(255, 255, 255, .06) !important; }
-.portal-chrome #global-lounge ~ button { z-index: 250 !important; top: auto !important; right: auto !important; bottom: 1.25rem !important; height: 2.7rem !important; width: 2.7rem !important; border-color: rgba(165, 243, 252, .14) !important; border-radius: .85rem !important; background-color: rgba(16, 24, 43, .48) !important; }
+#global-lounge { z-index: 260 !important; top: 0 !important; right: 0 !important; bottom: 0 !important; width: 21rem !important; border: 0 !important; border-radius: 1.1rem 0 0 1.1rem !important; background-color: rgba(10, 17, 32, .3) !important; box-shadow: none !important; backdrop-filter: blur(20px); }
+#global-lounge > div:first-child { border: 0 !important; background-color: rgba(13, 22, 40, .18) !important; }
+#global-lounge > div:last-child { border: 0 !important; background-color: rgba(10, 17, 32, .18) !important; }
+#global-lounge input { border: 1px solid rgba(255, 255, 255, .12) !important; border-radius: .7rem !important; background-color: rgba(255, 255, 255, .08) !important; padding-block: .7rem !important; transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
+#global-lounge input:focus { border-color: rgba(45, 212, 191, .55) !important; background-color: rgba(255, 255, 255, .11) !important; box-shadow: 0 0 0 3px rgba(45, 212, 191, .1); }
+#global-lounge form button { width: 2.25rem !important; border-radius: .7rem !important; background: linear-gradient(135deg, #5eead4, #38bdf8) !important; box-shadow: 0 8px 24px rgba(45, 212, 191, .18); }
+#global-lounge > div:nth-child(2) > div > div { border-radius: .7rem !important; background: rgba(255, 255, 255, .055) !important; }
+.global-lounge-expand { display: grid; height: 2rem; width: 2rem; flex: 0 0 auto; place-items: center; border: 0; border-radius: .6rem; background: rgba(255, 255, 255, .06); color: #a5f3fc; transition: background-color .18s ease, color .18s ease; }
+.global-lounge-expand:hover { background: rgba(255, 255, 255, .14); color: #fff; }
+.portal-chrome #global-lounge ~ button { z-index: 270 !important; top: auto !important; right: auto !important; bottom: 1.25rem !important; height: 2.7rem !important; width: 2.7rem !important; border: 0 !important; border-radius: .85rem !important; background-color: rgba(16, 24, 43, .42) !important; }
+.global-lounge-fullscreen { left: 0 !important; width: 100vw !important; border-radius: 0 !important; }
 .portal-chrome > section { position: fixed; top: 0; left: 18rem; z-index: 60; width: 23rem; height: 4rem; border: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
 .portal-chrome > section > div:first-child { height: 4rem; max-width: none; margin: 0; padding: 0 .35rem; }
 .portal-chrome > section > div:first-child > div:nth-child(2) { min-width: 0; }
@@ -117,6 +122,11 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 }
 
 .header-action { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; border-radius: .75rem; padding: .55rem .7rem; font-size: .72rem; font-weight: 900; transition: transform .2s ease, background-color .2s ease, border-color .2s ease; }
+.portal-chrome > header .header-action { font-size: .64rem; font-weight: 500; }
+.portal-chrome > header .header-action em { font-size: .52rem; font-weight: 400; }
+.portal-chrome > header .translate-control, .portal-chrome > header .usdt-balance { font-size: .62rem; font-weight: 500; }
+.portal-chrome > header .usdt-balance small { font-weight: 500; }
+.portal-chrome > section b { font-size: .78rem; font-weight: 500; }
 .header-action:hover { transform: translateY(-1px); }
 .header-action-secondary { border: 1px solid rgba(148, 163, 184, .16); background: rgba(255, 255, 255, .05); color: #cbd5e1; }
 .header-action-secondary:hover { border-color: rgba(45, 212, 191, .3); color: #99f6e4; }
@@ -140,18 +150,18 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .header-profile-button:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(45, 212, 191, .45); }
 .header-mobile-menu { position: absolute; top: 4rem; right: .75rem; left: .75rem; display: grid; gap: .75rem; border: 1px solid rgba(148, 163, 184, .16); border-radius: 1rem; background: rgba(7, 11, 23, .97); padding: .75rem; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); backdrop-filter: blur(20px); }
 .header-mobile-menu a { border-radius: .75rem; padding: .7rem .75rem; background: rgba(255, 255, 255, .05); }
-.market-bar { position: static !important; width: 100% !important; overflow: hidden; border: 1px solid rgba(165, 243, 252, .14) !important; border-radius: 0 !important; background: rgba(8, 16, 31, .46) !important; box-shadow: 0 20px 55px rgba(0, 0, 0, .18) !important; backdrop-filter: blur(18px); }
+.market-bar { position: static !important; width: 100% !important; overflow: hidden; border: 0 !important; border-radius: 0 !important; background: rgba(8, 16, 31, .3) !important; box-shadow: none !important; backdrop-filter: blur(18px); }
 .market-bar-heading { display: flex; align-items: center; justify-content: space-between; gap: .4rem; border-bottom: 1px solid rgba(165, 243, 252, .1); padding: .62rem .65rem; }
-.market-bar-heading .market-detail-label { display: inline-flex; align-items: center; gap: .35rem; }
+.market-bar-heading .market-detail-label { display: inline-flex; align-items: center; gap: .35rem; font-size: .5rem; font-weight: 500; }
 .market-bar-heading .market-toggle { display: grid; height: 1.4rem; width: 1.4rem; place-items: center; border: 1px solid rgba(165, 243, 252, .12); padding: 0; color: #94a3b8; }
 .market-table { display: grid; gap: 0; padding: .3rem; }
 .market-table-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .3rem; border-bottom: 1px solid rgba(255, 255, 255, .06); padding: .42rem .35rem; }
 .market-table-row:last-child { border-bottom: 0; }
 .market-table-row > div:first-child { display: flex; min-width: 0; align-items: baseline; gap: .35rem; }
-.market-table-row b { color: #f8fafc; font-size: .65rem; letter-spacing: .05em; }
-.market-table-row span { overflow: hidden; color: #64748b; font-size: .5rem; text-overflow: ellipsis; white-space: nowrap; }
+.market-table-row b { color: #f8fafc; font-size: .55rem; font-weight: 500; letter-spacing: .05em; }
+.market-table-row span { overflow: hidden; color: #64748b; font-size: .42rem; text-overflow: ellipsis; white-space: nowrap; }
 .market-table-value { display: flex; align-items: flex-end; gap: .3rem; }
-.market-table-value strong { color: #dffcff; font-size: .65rem; }
+.market-table-value strong { color: #dffcff; font-size: .55rem; font-weight: 500; }
 .market-table-value .market-up, .market-table-value .market-down { font-size: .48rem; }
 .market-detail { display: block; border-top: 1px solid rgba(165, 243, 252, .1); padding: .35rem; }
 .market-fx-card { display: grid; gap: .45rem; padding: .55rem !important; }
@@ -181,7 +191,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .market-detail { border-top: 1px solid rgba(148, 163, 184, .09); }
 .market-detail-card { border: 1px solid rgba(165, 243, 252, .1); border-radius: 0; background: rgba(8, 16, 31, .34); padding: .8rem 1rem; }
 .market-detail-card > div.grid > div { border: 1px solid rgba(165, 243, 252, .08); border-radius: 0 !important; background: rgba(255, 255, 255, .035) !important; }
-.market-detail-label { color: #64748b; font-size: .62rem; font-weight: 900; letter-spacing: .15em; }
+.market-detail-label { color: #94a3b8; font-size: .5rem; font-weight: 500; letter-spacing: .12em; }
 .touch-control { border: 1px solid rgba(45, 212, 191, .24); border-radius: .75rem; background: rgba(45, 212, 191, .1); padding: .6rem .35rem; font-size: .72rem; font-weight: 900; color: #ccfbf1; }
 .touch-control:disabled { opacity: .35; }
 .games-layout button.bg-emerald-300 { display: none; }
@@ -223,8 +233,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 
 @media (min-width: 1024px) {
   .portal-text-rail { display: block; }
-  body:has(#global-lounge.translate-x-0) .portal-frame { margin-right: 23rem; }
-  body:has(#global-lounge.translate-x-0) .portal-chrome #global-lounge ~ button { right: 22rem !important; }
+  body:has(#global-lounge.translate-x-0) .portal-frame { margin-right: 21rem; }
+  body:has(#global-lounge.translate-x-0) .portal-chrome #global-lounge ~ button { right: 21rem !important; }
+  body:has(#global-lounge.global-lounge-fullscreen) .portal-frame { margin-right: 0; }
+  body:has(#global-lounge.global-lounge-fullscreen) .portal-chrome #global-lounge ~ button { right: 1rem !important; }
   .webrtc-page { margin-right: -20rem; }
   .webrtc-shell > section { display: none; }
 }
