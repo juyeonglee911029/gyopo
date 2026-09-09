@@ -68,7 +68,7 @@ export default function MusicPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b17] px-4 py-8 text-white md:px-8 md:py-12">
+    <div className="music-page min-h-screen bg-[#070b17] px-4 py-8 text-white md:px-8 md:py-12">
       <div className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
           <div><div className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-teal-300"><Music2 size={16} /> K-pop video</div><h1 className="text-4xl font-black tracking-tight md:text-6xl">K-POP MUSIC</h1><p className="mt-3 text-sm text-slate-400">등록곡뿐 아니라 YouTube에서 검색한 뮤직비디오도 바로 재생하고 함께 들을 수 있습니다.</p></div>
