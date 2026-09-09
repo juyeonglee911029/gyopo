@@ -44,8 +44,8 @@ body { background-image: radial-gradient(circle at 50% -18%, rgba(34, 211, 238, 
 .portal-text-link-active { text-shadow: 0 0 18px rgba(45, 212, 191, .3); }
 .portal-text-link-button { width: 100%; background: transparent; text-align: left; }
 .site-background-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #050914; pointer-events: none; }
-.site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .62; filter: brightness(.5) saturate(1.12) contrast(1.05); }
-.site-background-video-shade { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(3, 7, 18, .56), rgba(3, 13, 26, .42) 50%, rgba(12, 5, 28, .58)); }
+.site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .78; filter: brightness(1) saturate(1.08) contrast(1.02); }
+.site-background-video-shade { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(3, 7, 18, .25), rgba(3, 13, 26, .18) 50%, rgba(12, 5, 28, .28)); }
 body.webrtc-compact-shell { padding-top: 0 !important; overflow: hidden; }
 body.webrtc-compact-shell > header,
 body.webrtc-compact-shell > section,
@@ -62,11 +62,13 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .home-grid { background-image: linear-gradient(rgba(148, 163, 184, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, .055) 1px, transparent 1px); background-size: 42px 42px; }
 .home-glow { background: radial-gradient(circle, rgba(45, 212, 191, .18), transparent 66%); }
 .surface { background: rgba(15, 23, 42, .72); border: 1px solid rgba(148, 163, 184, .15); box-shadow: 0 20px 70px rgba(0, 0, 0, .18); }
-.home-page { background-image: radial-gradient(circle at 42% 5%, rgba(56, 189, 248, .08), transparent 31%), linear-gradient(rgba(7, 11, 23, .3), rgba(7, 11, 23, .4)); }
-.home-video-hero { background: radial-gradient(circle at 92% 8%, rgba(167, 139, 250, .2), transparent 30%), radial-gradient(circle at 48% 105%, rgba(45, 212, 191, .14), transparent 34%), rgba(11, 18, 34, .48); box-shadow: 0 30px 100px rgba(0, 0, 0, .28); }
-.surface { background: rgba(15, 23, 42, .48); }
-.home-route-card { background: rgba(255, 255, 255, .07); }
-.games-page, .webrtc-page, .music-page { background-color: rgba(7, 11, 23, .42) !important; }
+.home-page { background-image: radial-gradient(circle at 42% 5%, rgba(56, 189, 248, .08), transparent 31%), linear-gradient(rgba(7, 11, 23, .12), rgba(7, 11, 23, .16)); }
+.home-video-hero { background: radial-gradient(circle at 92% 8%, rgba(167, 139, 250, .2), transparent 30%), radial-gradient(circle at 48% 105%, rgba(45, 212, 191, .14), transparent 34%), rgba(11, 18, 34, .24); box-shadow: 0 30px 100px rgba(0, 0, 0, .28); }
+.surface { background: rgba(15, 23, 42, .24); }
+.home-route-card { background: rgba(255, 255, 255, .04); }
+.games-page, .webrtc-page, .music-page { background-color: rgba(7, 11, 23, .16) !important; }
+.tetris-modern-shell section, .tetris-modern-shell header { background-color: rgba(13, 21, 38, .34) !important; }
+.music-page section, .music-page aside { background-color: rgba(16, 24, 43, .24) !important; }
 .home-video-stage { background: linear-gradient(145deg, rgba(16, 185, 129, .82), rgba(14, 165, 233, .7) 46%, rgba(124, 58, 237, .78)); }
 .home-video-stage::before { position: absolute; inset: 0; content: ""; background-image: linear-gradient(rgba(255, 255, 255, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .09) 1px, transparent 1px); background-size: 34px 34px; mask-image: linear-gradient(to bottom, black, transparent 85%); }
 .home-video-stage::after { position: absolute; right: -22%; bottom: -26%; width: 75%; aspect-ratio: 1; border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px; content: ""; box-shadow: 0 0 0 38px rgba(255, 255, 255, .035), 0 0 0 76px rgba(255, 255, 255, .025); }
@@ -139,7 +141,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .games-page > .mx-auto:not(.tetris-modern-shell) { display: none; }
 .tetris-modern-shell { position: relative; }
 .tetris-modern-shell::before { position: absolute; top: -8rem; right: 5%; width: 32rem; height: 32rem; border-radius: 999px; background: rgba(34, 211, 238, .08); content: ""; filter: blur(70px); pointer-events: none; }
-.tetris-arena-card, .tetris-panel { position: relative; background: linear-gradient(145deg, rgba(16, 24, 43, .58), rgba(8, 14, 29, .58)); box-shadow: 0 25px 80px rgba(0, 0, 0, .2); }
+.tetris-arena-card, .tetris-panel { position: relative; background: linear-gradient(145deg, rgba(16, 24, 43, .34), rgba(8, 14, 29, .34)); box-shadow: 0 25px 80px rgba(0, 0, 0, .2); }
 .tetris-chat-panel { overflow: hidden; }
 .tetris-chat-messages { scrollbar-width: thin; scrollbar-color: rgba(45, 212, 191, .45) transparent; }
 .tetris-chat-messages::-webkit-scrollbar { width: 6px; }
