@@ -1180,9 +1180,11 @@ export type FriendConnection = {
   status: FriendStatus;
   createdAt: string;
   updatedAt: string;
+  sourceCollection?: 'friendships' | 'webrtcCalls';
 };
 
-const friendConnectionCollection = 'webrtcCalls';
+const friendConnectionCollection = 'friendships';
+const legacyFriendConnectionCollection = 'webrtcCalls';
 
 function friendshipId(first: string, second: string) {
   return `friend-${[first, second].sort().join('-')}`;
@@ -1191,11 +1193,12 @@ function friendshipId(first: string, second: string) {
 export async function listFriendConnections(userId: string, token = getSessionToken()): Promise<FriendConnection[]> {
   const viewerId = getTokenUserId(token);
   if (!token || (viewerId && viewerId !== userId)) return [];
-  const [sent, received] = await Promise.all([
-    queryDocumentsWhere<Omit<FriendConnection, 'id'>>(friendConnectionCollection, [{ field: 'requesterId', op: 'EQUAL', value: userId }], token).catch(() => []),
-    queryDocumentsWhere<Omit<FriendConnection, 'id'>>(friendConnectionCollection, [{ field: 'addresseeId', op: 'EQUAL', value: userId }], token).catch(() => []),
-  ]);
-  return [...new Map([...sent, ...received].map((item) => [item.id, item])).values()]
+  const collections = [friendConnectionCollection, legacyFriendConnectionCollection] as const;
+  const rows = await Promise.all(collections.flatMap((collection) => [
+    queryDocumentsWhere<Omit<FriendConnection, 'id'>>(collection, [{ field: 'requesterId', op: 'EQUAL', value: userId }], token).then((items) => items.map((item) => ({ ...item, sourceCollection: collection }))).catch(() => []),
+    queryDocumentsWhere<Omit<FriendConnection, 'id'>>(collection, [{ field: 'addresseeId', op: 'EQUAL', value: userId }], token).then((items) => items.map((item) => ({ ...item, sourceCollection: collection }))).catch(() => []),
+  ]));
+  return [...new Map(rows.flat().map((item) => [item.id, item])).values()]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
@@ -1203,22 +1206,30 @@ export async function sendFriendRequest(addresseeId: string, token = getSessionT
   const requesterId = getTokenUserId(token);
   if (!token || !requesterId || !addresseeId || requesterId === addresseeId) throw new Error('친구 요청 대상을 확인해주세요.');
   const id = friendshipId(requesterId, addresseeId);
-  const existing = await getDocument<FriendConnection>(friendConnectionCollection, id, token).catch(() => null);
+  const existing = await Promise.all(collectionsForFriendship().map((collection) => getDocument<FriendConnection>(collection, id, token).then((item) => item ? { ...item, sourceCollection: collection } : null).catch(() => null))).then((items) => items.find(Boolean) || null);
   if (existing?.status === 'accepted' || existing?.status === 'pending') return;
   if (existing?.status === 'declined') {
-    await deleteDocument(friendConnectionCollection, id, token);
+    await deleteDocument(existing.sourceCollection || friendConnectionCollection, id, token);
   }
   const now = new Date();
-  await createDocument(friendConnectionCollection, id, { requesterId, addresseeId, status: 'pending', createdAt: now, updatedAt: now }, token).catch(async (error) => {
-    const current = await getDocument<FriendConnection>(friendConnectionCollection, id, token).catch(() => null);
-    if (!current) throw error;
-  });
+  try {
+    await createDocument(friendConnectionCollection, id, { requesterId, addresseeId, status: 'pending', createdAt: now, updatedAt: now }, token);
+  } catch (error) {
+    await createDocument(legacyFriendConnectionCollection, id, { requesterId, addresseeId, status: 'pending', createdAt: now, updatedAt: now }, token).catch(async (legacyError) => {
+      const current = await getDocument<FriendConnection>(legacyFriendConnectionCollection, id, token).catch(() => null);
+      if (!current) throw legacyError || error;
+    });
+  }
+}
+
+function collectionsForFriendship() {
+  return [friendConnectionCollection, legacyFriendConnectionCollection] as const;
 }
 
 export async function respondToFriendRequest(connection: FriendConnection, status: Extract<FriendStatus, 'accepted' | 'declined'>, token = getSessionToken()): Promise<void> {
   const viewerId = getTokenUserId(token);
   if (!token || !viewerId || ![connection.requesterId, connection.addresseeId].includes(viewerId)) throw new Error('친구 요청 권한을 확인해주세요.');
-  await mergeDocument(friendConnectionCollection, connection.id, { status, updatedAt: new Date() }, token);
+  await mergeDocument(connection.sourceCollection || friendConnectionCollection, connection.id, { status, updatedAt: new Date() }, token);
 }
 
 export type FriendCallRequest = {
