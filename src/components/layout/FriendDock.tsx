@@ -173,7 +173,7 @@ export default function FriendDock() {
         <UserRoundCheck size={21} />
       </button>
 
-      <aside className={`fixed bottom-4 left-3 right-3 z-[70] overflow-hidden rounded-[1.5rem] border border-cyan-200/20 bg-[#091120] text-white shadow-[0_25px_100px_rgba(0,0,0,.7)] transition lg:left-[17rem] lg:right-auto lg:w-[430px] ${open ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-5 opacity-0'}`}>
+      <aside id="friend-dock" className={`fixed bottom-4 left-3 right-3 z-[70] overflow-hidden rounded-[1.5rem] border border-cyan-200/20 bg-[#091120] text-white shadow-[0_25px_100px_rgba(0,0,0,.7)] transition lg:left-[17rem] lg:right-auto lg:w-[430px] ${open ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-5 opacity-0'}`}>
          <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
            <div className="flex items-center gap-2 text-sm font-black"><UserRoundCheck size={17} className="text-cyan-300" /> 친구 채팅·통화</div>
            <button type="button" onClick={() => setOpen(false)} aria-label="친구 패널 닫기" className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><X size={17} /></button>
@@ -207,3 +207,4 @@ export default function FriendDock() {
     </>
   );
 }
+
