@@ -188,7 +188,7 @@ const countryIds: Record<string, string> = {
   독일: 'Germany', 네덜란드: 'Netherlands', 헝가리: 'Hungary', 스페인: 'Spain', 포르투갈: 'Portugal', 루마니아: 'Romania', 몰타: 'Malta', 벨기에: 'Belgium', 폴란드: 'Poland', 프랑스: 'France', 체코: 'Czechia', 슬로바키아: 'Slovakia', 오스트리아: 'Austria', 이탈리아: 'Italy', 태국: 'Thailand', 브라질: 'Brazil',
 };
 
-const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', events: '행사', community: '커뮤니티' };
 
 function titleCountry(title: string) {
   const label = title.match(/^\s*\[([^\]]+)]/)?.[1]?.trim();
