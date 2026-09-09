@@ -101,6 +101,9 @@ export default function MusicPlayer() {
     setPlaying(true);
     const detail: MusicSyncDetail = { source: 'local', player: 'top', track: next, playing: true, position: 0, startedAt: Date.now(), volume };
     pendingSyncRef.current = detail;
+    sendPlayerCommand(frameRef.current, 'loadVideoById', [next.videoId]);
+    sendPlayerCommand(frameRef.current, 'setVolume', [volume]);
+    sendPlayerCommand(frameRef.current, 'playVideo');
     emitMusicEvent('gyopo-music-local', detail);
     emitMusicPlayerEvent({ player: 'top', playing: true });
   };
