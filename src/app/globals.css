@@ -783,3 +783,7 @@ body { padding-top: 5.75rem !important; }
 .portal-frame input::placeholder, .portal-frame textarea::placeholder { color: rgba(255, 255, 255, .55) !important; }
 .portal-frame select option { background: #182236 !important; color: #fff !important; }
 .webrtc-page .webrtc-grid > aside, .webrtc-page .webrtc-grid > aside > section, .webrtc-page .webrtc-grid > aside > section > div { border-radius: 0 !important; border-color: transparent !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+/* Keep high-specificity mobile rules square and restore the frosted dock. */
+#friend-dock[class*="rounded-"] { -webkit-backdrop-filter: blur(18px) saturate(140%) !important; backdrop-filter: blur(18px) saturate(140%) !important; }
+@supports (backdrop-filter: blur(1px)) { #friend-dock[class*="rounded-"] { backdrop-filter: blur(18px) saturate(140%) !important; } }
+.portal-frame .webrtc-grid > section .webrtc-mobile-controls button { border-radius: 0 !important; }
