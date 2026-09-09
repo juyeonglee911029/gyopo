@@ -20,17 +20,17 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#070b17]/90 backdrop-blur-xl">
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-cyan-300/10 bg-[#050914]/94 shadow-[0_18px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
       <div className="flex h-16 items-center justify-between gap-3 px-3 sm:px-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 flex-shrink-0 group">
             <span className="brand-mark flex h-8 w-8 items-center justify-center rounded-[10px] text-slate-950 transition-transform group-hover:rotate-6 sm:h-9 sm:w-9">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true"><path d="M5 5.5h14M5 12h14M5 18.5h14M5 5.5v13M19 5.5v13" /></svg>
             </span>
-            <span className="hidden leading-none sm:block"><span className="font-display block text-[15px] font-extrabold tracking-[.18em] text-white">GYOPO</span><span className="mt-1 block text-[8px] font-bold tracking-[.22em] text-slate-500">GLOBAL NETWORK</span></span>
+            <span className="hidden leading-none sm:block"><span className="font-display block text-[15px] font-extrabold tracking-[.18em] text-white">GYOPO</span><span className="mt-1 block text-[8px] font-bold tracking-[.22em] text-cyan-300/60">GLOBAL GAMING NETWORK</span></span>
           </Link>
           
-          <div className="hidden items-center gap-2 text-xs font-bold text-slate-500 xl:flex"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,.8)]" /> 글로벌 네트워크 연결됨</div>
+          <div className="hidden items-center gap-2 text-[10px] font-black uppercase tracking-[.16em] text-slate-500 xl:flex"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(74,222,128,.8)]" /> Network live</div>
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
@@ -89,8 +89,9 @@ export default function Header() {
           <Link onClick={() => setMenuOpen(false)} href="/news">오늘의 뉴스</Link>
           <Link onClick={() => setMenuOpen(false)} href="/games">테트리스</Link>
           <Link onClick={() => setMenuOpen(false)} href="/webrtc">화상채팅</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/theater">극장</Link>
-           <Link onClick={() => setMenuOpen(false)} href="/users">유저목록</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/theater">극장</Link>
+            <Link onClick={() => setMenuOpen(false)} href="/music">K-pop 음악</Link>
+            <Link onClick={() => setMenuOpen(false)} href="/users">유저목록</Link>
            <Link onClick={() => setMenuOpen(false)} href="/assistant">AI 검색</Link>
         </nav>
       </div>}
