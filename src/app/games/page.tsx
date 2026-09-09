@@ -1445,16 +1445,17 @@ export default function GamesPage() {
                   </div>
 
                   <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5">
-                    <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><NextBlock piece={game.nextPiece} compact /></div>
+                    <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5 text-center"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><div className="mx-auto w-fit"><NextBlock piece={game.nextPiece} compact /></div></div>
                     <div className="rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div></div>
                   </div>
                 </div>
 
-                <div className="grid shrink-0 grid-cols-4 gap-1.5 sm:gap-2">
+                <div className="grid shrink-0 grid-cols-5 gap-1.5 sm:gap-2">
                   <button type="button" onClick={practiceStart} disabled={matchPhase === 'countdown' || matchPhase === 'playing'} className="flex min-h-9 items-center justify-center gap-1 rounded-xl bg-cyan-400 px-1 text-[10px] font-black text-slate-950 disabled:opacity-40 sm:text-xs"><Play size={13} />연습</button>
                   <button type="button" onClick={matchPhase === 'waiting' ? () => void cancelMatch() : () => void findMatch()} disabled={['betting', 'countdown', 'playing'].includes(matchPhase)} className="min-h-9 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40 sm:text-xs">{matchPhase === 'waiting' ? '취소' : '매칭'}</button>
                   <button type="button" onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="flex min-h-9 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-1 text-[10px] font-bold disabled:opacity-30 sm:text-xs">{game.paused ? <Play size={13} /> : <Pause size={13} />}{game.paused ? '계속' : '일시정지'}</button>
                   <button type="button" onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="flex min-h-9 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-1 text-[10px] font-bold disabled:opacity-30 sm:text-xs"><RotateCw size={13} />회전</button>
+                  <button type="button" onClick={() => void leaveBattleRoom()} disabled={!matchId} className="flex min-h-9 items-center justify-center gap-1 rounded-xl border border-rose-300/25 bg-rose-300/10 px-1 text-[10px] font-black text-rose-200 disabled:opacity-30 sm:text-xs"><X size={13} />나가기</button>
                 </div>
               </div>
             </section>
