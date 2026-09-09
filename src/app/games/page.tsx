@@ -1385,22 +1385,22 @@ export default function GamesPage() {
 
   if (true) {
     return (
-      <div className="games-page h-[calc(100dvh-6rem)] min-h-0 overflow-hidden bg-[#070b17] px-2 py-2 text-white sm:px-3 md:px-4">
-        <div className="tetris-modern-shell mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-2">
-          <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-3 py-2 shadow-xl sm:px-4">
+      <div className="games-page h-[calc(100dvh-5rem)] min-h-0 overflow-hidden bg-[#070b17] px-1.5 py-1.5 text-white sm:px-2 md:px-3">
+        <div className="tetris-modern-shell mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-1.5">
+          <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-2 py-1.5 shadow-xl sm:px-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300"><Gamepad2 size={13} /> Arcade / Live battle</div>
-              <h1 className="truncate text-xl font-black tracking-[-0.04em] sm:text-2xl md:text-3xl">GLOBAL TETRIS</h1>
+              <h1 className="truncate text-lg font-black tracking-[-0.04em] sm:text-xl md:text-2xl">GLOBAL TETRIS</h1>
             </div>
-            <div className="flex shrink-0 items-center gap-2 text-right text-[10px] sm:gap-3 sm:text-xs"><span className="hidden text-slate-400 sm:inline">{matchStatus}</span><span className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.08] px-2 py-1.5 font-black text-emerald-200">{matchPhase.toUpperCase()}</span></div>
+            <div className="flex shrink-0 items-center gap-1.5 text-right text-[9px] sm:gap-2 sm:text-[10px]"><span className="hidden text-slate-400 sm:inline">{matchStatus}</span><span className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-1.5 py-1 font-black text-emerald-200">{matchPhase.toUpperCase()}</span></div>
           </header>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(148px,.72fr)] gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)] lg:gap-3">
-            <section className="min-h-0 overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#0d1526] p-2 shadow-2xl sm:rounded-[1.5rem] sm:p-3">
-              <div className="grid min-h-0 h-full grid-rows-[minmax(0,1fr)_auto] gap-2">
-                <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(58px,112px)] gap-2">
-                  <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#050914] p-1.5 sm:p-2">
-                    <div className="h-full max-h-full aspect-[1/2] max-w-full">
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,.82fr)_minmax(168px,1.18fr)] gap-1.5 lg:grid-cols-[minmax(260px,.82fr)_minmax(360px,1.18fr)] lg:gap-2">
+            <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#0d1526] p-1.5 shadow-2xl sm:rounded-[1.5rem] sm:p-2">
+              <div className="grid min-h-0 h-full grid-rows-[minmax(0,1fr)_auto] gap-1.5">
+                <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(52px,82px)] gap-1.5">
+                  <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#050914] p-1 sm:p-1.5">
+                    <div className="mx-auto h-full max-h-full max-w-[20rem] aspect-[.49/1]">
                       <div className="relative h-full w-full">
                         <BoardGrid cells={visual} />
                         {countdown && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-black/45"><span className="text-3xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)] sm:text-5xl">{countdown}</span></div>}
@@ -1409,10 +1409,9 @@ export default function GamesPage() {
                     </div>
                   </div>
 
-                  <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2">
-                    <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5 sm:p-2"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><NextBlock piece={game.nextPiece} compact /></div>
-                    <div className="rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5 sm:p-2"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div></div>
-                    <div className="grid min-h-0 grid-rows-4 gap-1 text-center text-[9px] sm:text-[10px]"><div className="rounded-lg bg-cyan-300/[0.08] p-1.5"><b className="block text-cyan-200">{game.score.toLocaleString()}</b><span className="text-slate-500">점수</span></div><div className="rounded-lg bg-emerald-300/[0.08] p-1.5"><b className="block text-emerald-200">{game.lines}</b><span className="text-slate-500">라인</span></div><div className="rounded-lg bg-amber-300/[0.08] p-1.5"><b className="block text-amber-200">{game.attackTotal}</b><span className="text-slate-500">공격</span></div><div className="rounded-lg bg-rose-300/[0.08] p-1.5"><b className="block text-rose-200">{game.garbageReceived}</b><span className="text-slate-500">받음</span></div></div>
+                  <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5">
+                    <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><NextBlock piece={game.nextPiece} compact /></div>
+                    <div className="rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div></div>
                   </div>
                 </div>
 
@@ -1425,12 +1424,12 @@ export default function GamesPage() {
               </div>
             </section>
 
-            <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-emerald-300/15 bg-[#0d1526] shadow-2xl sm:rounded-[1.5rem]">
+            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-emerald-300/15 bg-[#0d1526] shadow-2xl sm:rounded-[1.5rem]">
               <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2 sm:px-3"><div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200"><MessageCircle size={13} /> Voice + Video</div><span className="text-[9px] font-bold text-slate-500">게임 시작 시 자동 연결</span></div>
-              <div className="h-[38%] min-h-[135px] shrink-0 overflow-hidden p-1.5 sm:p-2">
+              <div className="h-[58%] min-h-[235px] shrink-0 overflow-hidden p-1 sm:min-h-[300px] sm:p-1.5 lg:min-h-[360px]">
                 {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-[#050914]" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-[#050914] p-4 text-center"><div><Camera size={22} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
               </div>
-              <div className="shrink-0 space-y-1.5 border-t border-white/10 p-1.5 text-[10px] sm:p-2">
+              <div className="shrink-0 space-y-1 border-t border-white/10 p-1 text-[9px] sm:p-1.5 sm:text-[10px]">
                 {inviteStatus && <p className="rounded-lg bg-cyan-300/[0.07] px-2 py-1.5 leading-4 text-cyan-100">{inviteStatus}</p>}
                 {matchId && <div className="grid grid-cols-2 gap-1.5"><div className={`rounded-lg px-2 py-1.5 text-center ${readyForBattle ? 'bg-emerald-300/10 text-emerald-200' : 'bg-white/[0.04] text-slate-500'}`}><b className="block">나</b>{readyForBattle ? '준비 완료' : '준비 전'}</div><div className={`rounded-lg px-2 py-1.5 text-center ${opponentReady ? 'bg-emerald-300/10 text-emerald-200' : 'bg-white/[0.04] text-slate-500'}`}><b className="block">상대방</b>{opponentReady ? '준비 완료' : '준비 전'}</div></div>}
                 {matchPhase === 'betting' && <div className="flex gap-1.5">{matchRole === 'A' ? <input type="number" min={MIN_ENTRY_FEE} max={MAX_ENTRY_FEE} step="1" value={betAmount} onChange={(event) => setBetAmount(Number(event.target.value))} aria-label="배팅금액" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-white outline-none" /> : <div className="flex min-w-0 flex-1 items-center rounded-lg bg-amber-300/10 px-2 py-1.5 text-amber-100">배팅 {formatUsdt(betAmount)} USDT</div>}<button type="button" onClick={() => void confirmBet()} disabled={readyForBattle} className="rounded-lg bg-amber-300 px-2 py-1.5 font-black text-slate-950 disabled:opacity-40">{matchRole === 'A' ? '설정·준비' : '수락·준비'}</button></div>}
@@ -1464,13 +1463,6 @@ export default function GamesPage() {
           </div>
         </header>
 
-        <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-          <div className="tetris-stat-card"><span>내 점수</span><b className="text-cyan-300">{game.score.toLocaleString()}</b></div>
-          <div className="tetris-stat-card"><span>내 라인</span><b className="text-emerald-300">{game.lines}</b></div>
-          <div className="tetris-stat-card"><span>보낸 공격</span><b className="text-amber-300">{game.attackTotal}</b></div>
-          <div className="tetris-stat-card"><span>받은 공격</span><b className="text-rose-300">{game.garbageReceived}</b></div>
-        </div>
-
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
           <section className="tetris-arena-card rounded-[2rem] border border-white/10 p-4 shadow-2xl md:p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1497,8 +1489,7 @@ export default function GamesPage() {
                 <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-violet-200"><Swords size={15} /> 상대 보드</div><span className="flex items-center gap-1 text-[10px] font-bold text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> SYNC 1.2s</span></div>
                 {opponent ? <div className="mb-3 flex items-center gap-2"><img src={opponent.image} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-violet-300/30" /><div className="min-w-0"><div className="truncate text-sm font-black">{opponent.name}</div><div className="text-[10px] text-slate-500">{opponent.country || 'Global'} · {opponentState ? '상대 화면 수신 중' : '연결 대기'}</div></div></div> : <div className="mb-3 rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs text-slate-500">매칭 후 상대 블록이 이 화면에 크게 표시됩니다.</div>}
                 <div className="relative mx-auto w-full max-w-[330px] rounded-2xl border border-violet-300/20 bg-[#030611] p-2 shadow-[0_0_45px_rgba(139,92,246,.12)]"><BoardGrid cells={opponentVisual} compact />{!opponentState && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-950/45 px-5 text-center text-xs font-bold text-slate-400">상대방이 게임을 시작하면 블록이 실시간으로 보입니다.</div>}</div>
-                <div className="mt-3 grid grid-cols-4 gap-1.5 text-center text-[10px]"><div className="rounded-xl bg-white/[0.04] px-2 py-2"><b className="block text-violet-200">{opponentState?.score?.toLocaleString() || 0}</b><span className="text-slate-500">점수</span></div><div className="rounded-xl bg-white/[0.04] px-2 py-2"><b className="block text-emerald-200">{opponentState?.lines || 0}</b><span className="text-slate-500">라인</span></div><div className="rounded-xl bg-white/[0.04] px-2 py-2"><b className="block text-amber-200">{opponentState?.attackTotal || 0}</b><span className="text-slate-500">공격</span></div><div className="rounded-xl bg-white/[0.04] px-2 py-2"><b className="block text-rose-200">{opponentState?.garbageReceived || 0}</b><span className="text-slate-500">받음</span></div></div>
-              </div>
+               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -1513,7 +1504,7 @@ export default function GamesPage() {
           </section>
 
           <aside className="space-y-4">
-            <section className="tetris-panel rounded-[1.5rem] border border-white/10 p-4"><div className="mb-3 flex items-center justify-between"><div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Next block</div><span className="rounded-full bg-amber-300/10 px-2 py-1 text-[10px] font-black text-amber-200">QUEUE</span></div><div className="mx-auto w-28"><NextBlock piece={game.nextPiece} /></div><div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs"><div className="rounded-xl bg-cyan-300/[0.08] px-2 py-2"><b className="block text-cyan-200">{game.attackTotal}</b><span className="text-slate-500">보낸 줄</span></div><div className="rounded-xl bg-rose-300/[0.08] px-2 py-2"><b className="block text-rose-200">{game.garbageReceived}</b><span className="text-slate-500">받은 줄</span></div></div></section>
+             <section className="tetris-panel rounded-[1.5rem] border border-white/10 p-4"><div className="mb-3 flex items-center justify-between"><div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Next block</div><span className="rounded-full bg-amber-300/10 px-2 py-1 text-[10px] font-black text-amber-200">QUEUE</span></div><div className="mx-auto w-28"><NextBlock piece={game.nextPiece} /></div></section>
 
             <section className="tetris-panel rounded-[1.5rem] border border-amber-300/20 p-4"><div className="mb-2 flex items-center justify-between"><div className="font-black">대전 설정</div><span className="rounded-full bg-amber-300/10 px-2 py-1 text-[10px] font-black uppercase text-amber-200">{matchPhase}</span></div><p className="mb-3 text-xs leading-5 text-slate-400">{inviteStatus || matchStatus}</p>{matchPhase === 'waiting' && <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.08] px-3 py-3 text-xs font-bold text-cyan-100">상대의 수락 또는 매칭을 기다리는 중입니다.</div>}{matchPhase === 'betting' && matchRole === 'A' && <div className="space-y-2"><label className="block text-xs font-bold text-amber-100">참가비 설정<input type="number" min={MIN_ENTRY_FEE} max={MAX_ENTRY_FEE} step="1" value={betAmount} onChange={(event) => setBetAmount(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm font-black text-white outline-none focus:border-amber-300" /></label><button onClick={() => void confirmBet()} disabled={readyForBattle} className="tetris-action-start w-full">참가비 확정 · 준비하기</button></div>}{matchPhase === 'betting' && matchRole === 'B' && <div className="space-y-2"><div className="rounded-xl bg-amber-300/[0.08] px-3 py-3 text-sm text-amber-100">상대 참가비 <b>{betAmount} USDT</b></div><button onClick={() => void confirmBet()} disabled={readyForBattle} className="tetris-action-start w-full">수락하고 준비하기</button></div>}{matchPhase === 'holding' && <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-3 text-sm font-bold text-emerald-100">양쪽 참가비를 홀딩하고 있습니다. 잠시 후 카운트다운이 시작됩니다.</div>}{matchPhase === 'finished' && <div className={`rounded-2xl px-3 py-4 text-center ${matchResult === 'WIN' ? 'bg-emerald-300/[0.1] text-emerald-200' : 'bg-rose-300/[0.1] text-rose-200'}`}><div className="text-3xl font-black">{matchResult || 'FINISHED'}</div><p className="mt-1 text-xs">정산 완료 후 새 참가비로 다시 대전할 수 있습니다.</p><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => void requestRematch()} className="rounded-xl bg-cyan-300 py-3 text-xs font-black text-slate-950">리매치 요청</button><button onClick={() => void leaveBattleRoom()} className="rounded-xl border border-white/10 bg-white/5 py-3 text-xs font-bold">방 나가기</button></div></div>}</section>
 
