@@ -5,7 +5,6 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/footer';
 import GlobalChat from '@/components/layout/GlobalChat';
 import PortalFrame from '@/components/layout/portalframe';
-import MarketTicker from '@/components/layout/MarketTicker';
 import MusicPlayer from '@/components/layout/musicplayer';
 import SiteBackgroundVideo from '@/components/layout/sitebackgroundvideo';
 import PortalTextRail from '@/components/layout/portaltextrail';
@@ -73,7 +72,6 @@ export default function RootLayout({
           <SiteBackgroundVideo />
           <div className="portal-chrome">
             <Header />
-            <MarketTicker />
             <MusicPlayer />
             <PortalTextRail />
             <GlobalChat />
