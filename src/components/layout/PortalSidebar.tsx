@@ -2,31 +2,31 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, Film, Gamepad2, Globe2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
+import { BriefcaseBusiness, Film, Gamepad2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
 
 const primaryLinks = [
-  { href: '/', label: '홈', icon: Home },
-  { href: '/news', label: '오늘의 뉴스', icon: Newspaper },
-  { href: '/jobs', label: '구인구직', icon: BriefcaseBusiness },
-  { href: '/directory', label: '업소록', icon: Store },
-  { href: '/market', label: '장터', icon: ShoppingBag },
-  { href: '/community', label: '커뮤니티', icon: MessageCircle },
+  { href: '/', label: '홈', english: 'Home', icon: Home },
+  { href: '/news', label: '오늘의 뉴스', english: 'News', icon: Newspaper },
+  { href: '/jobs', label: '구인구직', english: 'Jobs', icon: BriefcaseBusiness },
+  { href: '/directory', label: '업소록', english: 'Directory', icon: Store },
+  { href: '/market', label: '장터', english: 'Market', icon: ShoppingBag },
+  { href: '/community', label: '커뮤니티', english: 'Community', icon: MessageCircle },
 ];
 
 const utilityLinks = [
-  { href: '/users', label: '유저 목록', icon: Users },
-  { href: '/games', label: '테트리스', icon: Gamepad2 },
-  { href: '/webrtc', label: '화상채팅', icon: Video },
-  { href: '/music', label: 'K-POP 라디오', icon: Music2 },
-  { href: '/theater', label: '극장', icon: Film },
-  { href: '/assistant', label: 'AI 검색', icon: Sparkles },
+  { href: '/users', label: '유저 목록', english: 'Members', icon: Users },
+  { href: '/games', label: '테트리스', english: 'Tetris', icon: Gamepad2 },
+  { href: '/webrtc', label: '화상채팅', english: 'Video', icon: Video },
+  { href: '/music', label: 'K-POP 라디오', english: 'Radio', icon: Music2 },
+  { href: '/theater', label: '극장', english: 'Theater', icon: Film },
+  { href: '/assistant', label: 'AI 검색', english: 'AI Search', icon: Sparkles },
 ];
 
-function LinkRow({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof Home; active: boolean }) {
+function LinkRow({ href, label, english, icon: Icon, active }: { href: string; label: string; english: string; icon: typeof Home; active: boolean }) {
   return (
     <Link href={href} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${active ? 'bg-teal-300 text-slate-950 shadow-[0_8px_24px_rgba(45,212,191,.16)]' : 'text-slate-400 hover:bg-white/7 hover:text-white'}`}>
       <Icon size={17} className={active ? 'text-slate-950' : 'text-slate-500 transition group-hover:text-teal-300'} />
-      <span>{label}</span>
+       <span>{label}<small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {english}</small></span>
     </Link>
   );
 }
@@ -36,32 +36,30 @@ export default function PortalSidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-cyan-300/10 bg-[#070c18]/97 pt-24 shadow-[20px_0_70px_rgba(0,0,0,.24)] backdrop-blur-xl lg:flex">
        <div className="border-b border-white/8 px-4 py-4">
-        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.24em] text-slate-500"><Globe2 size={14} className="text-teal-300" /> Global channels</div>
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-teal-300/15 bg-teal-300/[.06] px-3 py-2.5">
-          <span className="text-lg">🌐</span>
-           <div><p className="text-sm font-black text-white">WORLD LOBBY</p><p className="mt-0.5 text-[10px] text-slate-500">전 세계 한인 실시간 연결</p></div>
-        </div>
+        <div className="text-[10px] font-black uppercase tracking-[.24em] text-teal-300">GYOPO NETWORK</div>
+        <p className="mt-2 text-sm font-black text-white">사람 · 콘텐츠 · 기회</p>
+        <p className="mt-1 text-[10px] text-slate-500">People, content, and opportunities</p>
       </div>
 
        <nav className="flex-1 overflow-y-auto px-3 py-5">
-         <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">Community network</p>
+         <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">Community / 커뮤니티</p>
         <div className="space-y-1">
           {primaryLinks.map((link) => <LinkRow key={link.href} {...link} active={link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)} />)}
         </div>
-         <p className="mb-2 mt-7 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">Arena &amp; live</p>
+         <p className="mb-2 mt-7 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">Live &amp; play / 라이브</p>
         <div className="space-y-1">
           {utilityLinks.map((link) => <LinkRow key={link.href} {...link} active={pathname.startsWith(link.href)} />)}
           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/7 hover:text-white">
             <UserRoundCheck size={17} className="text-slate-500 transition group-hover:text-teal-300" />
-            <span>친구 채팅·통화</span>
+             <span>친구 채팅·통화 <small className="ml-1.5 text-[10px] font-semibold opacity-45">/ Friends</small></span>
           </button>
         </div>
       </nav>
 
       <div className="border-t border-white/8 p-4">
          <div className="rounded-2xl border border-teal-300/15 bg-gradient-to-br from-teal-300/[.10] to-cyan-300/[.03] p-3 shadow-[0_0_30px_rgba(45,212,191,.05)]">
-          <p className="text-xs font-black text-teal-200">GYOPO LIVE NETWORK</p>
-          <p className="mt-1 text-[11px] leading-5 text-slate-500">게임, 영상, 음악으로 전 세계 커뮤니티와 연결하세요.</p>
+           <p className="text-xs font-black text-teal-200">GYOPO LIVE NETWORK</p>
+           <p className="mt-1 text-[11px] leading-5 text-slate-500">게임, 영상, 음악으로 연결하세요.<br />Connect through play, video, and music.</p>
         </div>
       </div>
     </aside>
