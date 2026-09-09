@@ -4,10 +4,11 @@ import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import GlobalChat from '@/components/layout/GlobalChat';
-import PortalFrame from '@/components/layout/PortalFrame';
+import PortalFrame from '@/components/layout/portalframe';
 import MarketTicker from '@/components/layout/MarketTicker';
-import MusicPlayer from '@/components/layout/MusicPlayer';
-import SiteBackgroundVideo from '@/components/layout/SiteBackgroundVideo';
+import MusicPlayer from '@/components/layout/musicplayer';
+import SiteBackgroundVideo from '@/components/layout/sitebackgroundvideo';
+import PortalTextRail from '@/components/layout/portaltextrail';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
 import { AdSenseScript } from '@/components/ads/AdSense';
@@ -74,6 +75,7 @@ export default function RootLayout({
             <Header />
             <MarketTicker />
             <MusicPlayer />
+            <PortalTextRail />
             <GlobalChat />
             <FriendDock />
           </div>
