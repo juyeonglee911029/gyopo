@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createDocument, deleteDocument, getSessionToken, isMasterUser, listDocuments, listEscrowOrdersForMember, mergeDocument, reserveEscrowPurchase, type EscrowOrder, type EscrowStatus } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
-type Product = { id: string; title: string; price: string; location: string; image?: string; country: string; authorId: string; createdAt: string; sourceUrl?: string; sourceName?: string; sourceContentId?: string };
+type Product = { id: string; title: string; price: string; location: string; image?: string; country: string; authorId: string; createdAt: string; sourceId?: string; sourceUrl?: string; sourceName?: string; sourceContentId?: string };
 
 const parsePrice = (value: string) => Number(value.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0] || 0);
 
