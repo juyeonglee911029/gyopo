@@ -1,8 +1,8 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { MessageCircle, PhoneOff, Send, UserRoundCheck, Video, X } from 'lucide-react';
-import { createDocument, getDocument, getSessionToken, listFriendConnections, queryDocumentsWhere, type PublicProfile } from '@/lib/firebase';
+import { Check, MessageCircle, PhoneCall, PhoneOff, Send, UserRoundCheck, Video, X } from 'lucide-react';
+import { createDocument, createFriendCallRequest, getDocument, getSessionToken, listFriendConnections, listIncomingFriendCallRequests, queryDocumentsWhere, respondToFriendCallRequest, type FriendCallRequest, type PublicProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type FriendMember = Partial<PublicProfile> & { id: string; friendshipId: string };
@@ -26,6 +26,7 @@ export default function FriendDock() {
   const [messages, setMessages] = useState<FriendMessage[]>([]);
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [incomingCalls, setIncomingCalls] = useState<FriendCallRequest[]>([]);
 
   useEffect(() => {
     const show = (event: Event) => {
@@ -60,6 +61,27 @@ export default function FriendDock() {
     };
     void load();
     const timer = window.setInterval(load, 5_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) {
+      setIncomingCalls([]);
+      return;
+    }
+    let active = true;
+    const load = async () => {
+      const requests = await listIncomingFriendCallRequests(user.id, getSessionToken()).catch(() => []);
+      if (active) {
+        setIncomingCalls(requests);
+        if (requests.length > 0) setOpen(true);
+      }
+    };
+    void load();
+    const timer = window.setInterval(load, 2_000);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -121,6 +143,27 @@ export default function FriendDock() {
     }
   };
 
+  const requestVideoCall = async (friendId: string) => {
+    if (!user) return;
+    try {
+      await createFriendCallRequest(friendId, user, getSessionToken());
+      setVideoFriendId(friendId);
+      setError('통화 요청을 보냈습니다. 친구가 수락하면 바로 연결됩니다.');
+    } catch {
+      setError('통화 요청을 보내지 못했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const answerVideoCall = async (request: FriendCallRequest, status: 'accepted' | 'declined') => {
+    try {
+      await respondToFriendCallRequest(request, status, getSessionToken());
+      setIncomingCalls((rows) => rows.filter((row) => row.id !== request.id));
+      if (status === 'accepted') window.location.href = `/webrtc?friend=${encodeURIComponent(request.callerId)}&auto=1`;
+    } catch {
+      setError('통화 요청을 처리하지 못했습니다. 다시 시도해주세요.');
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -130,16 +173,18 @@ export default function FriendDock() {
       </button>
 
       <aside className={`fixed bottom-4 left-3 right-3 z-[70] overflow-hidden rounded-[1.5rem] border border-cyan-200/20 bg-[#091120] text-white shadow-[0_25px_100px_rgba(0,0,0,.7)] transition lg:left-[17rem] lg:right-auto lg:w-[430px] ${open ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-5 opacity-0'}`}>
-        <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm font-black"><UserRoundCheck size={17} className="text-cyan-300" /> 친구 채팅·통화</div>
-          <button type="button" onClick={() => setOpen(false)} aria-label="친구 패널 닫기" className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><X size={17} /></button>
-        </header>
+         <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+           <div className="flex items-center gap-2 text-sm font-black"><UserRoundCheck size={17} className="text-cyan-300" /> 친구 채팅·통화</div>
+           <button type="button" onClick={() => setOpen(false)} aria-label="친구 패널 닫기" className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><X size={17} /></button>
+         </header>
 
-        {friends.length === 0 ? (
-          <div className="p-8 text-center"><UserRoundCheck size={28} className="mx-auto text-slate-600" /><p className="mt-3 text-sm font-bold text-slate-300">수락된 친구가 없습니다.</p><p className="mt-1 text-xs text-slate-500">유저 목록에서 친구 요청을 보내보세요.</p></div>
-        ) : (
-          <>
-            <div className="flex gap-2 overflow-x-auto border-b border-white/10 p-2.5">
+         {incomingCalls.length > 0 && <div className="mx-3 mt-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/[.08] p-3"><div className="flex items-center gap-2 text-xs font-black text-emerald-100"><PhoneCall size={14} /> 영상 통화 요청 / Incoming call</div>{incomingCalls.map((request) => <div key={request.id} className="mt-3 flex items-center gap-2"><img src={request.callerImage} alt="" className="h-8 w-8 rounded-lg object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-white">{request.callerName}</p><p className="text-[10px] text-emerald-100/65">친구가 영상 통화를 요청했습니다.</p></div><button type="button" onClick={() => void answerVideoCall(request, 'accepted')} aria-label="통화 수락" className="rounded-lg bg-emerald-300 p-2 text-slate-950"><Check size={14} /></button><button type="button" onClick={() => void answerVideoCall(request, 'declined')} aria-label="통화 거절" className="rounded-lg bg-white/10 p-2 text-slate-300"><X size={14} /></button></div>)}</div>}
+
+         {friends.length === 0 ? (
+           <div className="p-8 text-center"><UserRoundCheck size={28} className="mx-auto text-slate-600" /><p className="mt-3 text-sm font-bold text-slate-300">수락된 친구가 없습니다.</p><p className="mt-1 text-xs text-slate-500">유저 목록에서 친구 요청을 보내보세요.</p></div>
+         ) : (
+           <>
+             <div className="flex gap-2 overflow-x-auto border-b border-white/10 p-2.5">
               {friends.map((friend) => <button key={friend.id} type="button" onClick={() => setSelectedId(friend.id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-black ${friend.id === selectedId ? 'bg-cyan-300 text-slate-950' : 'bg-white/5 text-slate-300'}`}>{friend.image ? <img src={friend.image} alt="" className="h-6 w-6 rounded-lg object-cover" /> : <span className="grid h-6 w-6 place-items-center rounded-lg bg-white/10">{friend.name?.slice(0, 1) || '?'}</span>}<span className="max-w-24 truncate">{friend.name || '친구'}</span></button>)}
             </div>
 
@@ -147,7 +192,7 @@ export default function FriendDock() {
               {videoFriendId === selected.id ? (
                 <div className="relative mb-3 aspect-video overflow-hidden rounded-xl bg-black"><iframe title={`${selected.name || '친구'} 영상 통화`} src={`/webrtc?friend=${encodeURIComponent(selected.id)}&auto=1&compact=1`} allow="camera; microphone; autoplay; display-capture" className="h-full w-full border-0" /><button type="button" onClick={() => setVideoFriendId('')} className="absolute right-2 top-2 rounded-lg bg-rose-500/90 p-2 text-white" aria-label="영상 통화 종료"><PhoneOff size={15} /></button></div>
               ) : (
-                <button type="button" onClick={() => setVideoFriendId(selected.id)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 py-2.5 text-xs font-black text-slate-950"><Video size={15} /> {selected.name || '친구'} 영상 통화 시작</button>
+                 <button type="button" onClick={() => void requestVideoCall(selected.id)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 py-2.5 text-xs font-black text-slate-950"><Video size={15} /> {selected.name || '친구'} 통화 요청 / Call</button>
               )}
 
               <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[.16em] text-slate-500"><span className="flex items-center gap-1.5"><MessageCircle size={13} /> Friend chat</span><span>24시간 보관</span></div>
