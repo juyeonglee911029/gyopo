@@ -18,12 +18,31 @@ export default function MusicPlayer() {
   const [remoteResults, setRemoteResults] = useState<MusicTrack[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const searchShellRef = useRef<HTMLElement>(null);
   const pendingSyncRef = useRef<MusicSyncDetail | null>(null);
   const syncTimerRef = useRef<number | null>(null);
   const originRef = useRef('top-player');
   const loadedVideoIdRef = useRef<string | null>(null);
   const localResults = useMemo(() => searchMusicTracks(query), [query]);
   const results = query.trim() ? (remoteResults.length ? remoteResults : localResults) : MUSIC_TRACKS;
+
+  useEffect(() => {
+    const closeSearch = (event: PointerEvent) => {
+      if (!searchShellRef.current?.contains(event.target as Node)) setSearchFocused(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSearchFocused(false);
+        (document.activeElement as HTMLElement | null)?.blur();
+      }
+    };
+    document.addEventListener('pointerdown', closeSearch);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeSearch);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
 
   useEffect(() => {
     const savedVolume = Number(window.localStorage.getItem('gyopo-music-volume'));
@@ -156,7 +175,7 @@ export default function MusicPlayer() {
   }, [volume]);
 
   return (
-    <section className="music-player-shell border-b border-white/10 bg-[#0b1222] px-3 py-2 text-white shadow-[0_8px_30px_rgba(0,0,0,.18)] sm:px-5">
+    <section ref={searchShellRef} className="music-player-shell border-b border-white/10 bg-[#0b1222] px-3 py-2 text-white shadow-[0_8px_30px_rgba(0,0,0,.18)] sm:px-5">
       <div className="mx-auto flex max-w-[1440px] items-center gap-3">
         <Music2 size={17} className="shrink-0 text-teal-300" />
          <div className="min-w-0 flex-1">
@@ -182,7 +201,7 @@ export default function MusicPlayer() {
           <iframe ref={frameRef} onLoad={() => syncFrame()} title="GYOPO music player" src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&cc_load_policy=0&iv_load_policy=3&playsinline=1`} className="pointer-events-none absolute h-px w-px opacity-0" allow="autoplay; encrypted-media" />
       </div>
 
-       {(searchFocused || query) && <div className="music-player-results mx-auto mt-2 max-w-[1440px] rounded-xl bg-[#0b1222]/92 p-2 backdrop-blur-xl"><div className="flex flex-wrap gap-1.5">{MUSIC_HOT_KEYWORDS.map((keyword) => <button type="button" key={keyword} onMouseDown={(event) => event.preventDefault()} onClick={() => setQuery(keyword)} className="rounded-full bg-white/[.06] px-2.5 py-1.5 text-[11px] font-bold text-slate-400 hover:bg-teal-300/10 hover:text-teal-200">#{keyword}</button>)}</div>{query && <div className="mt-2 grid gap-2 sm:grid-cols-2">{results.length ? results.map((item) => <div key={item.id} className={`flex items-center gap-2 rounded-xl px-2 py-2 ${item.id === track.id ? 'bg-teal-300/10' : 'bg-white/[.05]'}`}><button type="button" onClick={() => selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-2 text-left">{item.thumbnail && <img src={item.thumbnail} alt="" className="h-10 w-16 rounded object-cover" />}<span className="min-w-0"><b className="block truncate text-xs">{item.title}</b><span className="block truncate text-[11px] text-slate-400">{item.artist}</span><span className="block truncate text-[10px] text-slate-500">{item.views || 'YouTube 검색 결과'}{item.published ? ` · ${item.published}` : ''}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label="즐겨찾기" className={favoriteIds.includes(item.id) ? 'text-rose-300' : 'text-slate-500'}><Heart size={14} fill={favoriteIds.includes(item.id) ? 'currentColor' : 'none'} /></button></div>) : <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-teal-200 underline">YouTube에서 이 키워드 검색하기</a>}</div>}</div>}
+        {searchFocused && <div className="music-player-results mx-auto mt-2 max-w-[1440px] rounded-xl bg-[#0b1222]/92 p-2 backdrop-blur-xl"><div className="flex flex-wrap gap-1.5">{MUSIC_HOT_KEYWORDS.map((keyword) => <button type="button" key={keyword} onMouseDown={(event) => event.preventDefault()} onClick={() => setQuery(keyword)} className="rounded-full bg-white/[.06] px-2.5 py-1.5 text-[11px] font-bold text-slate-400 hover:bg-teal-300/10 hover:text-teal-200">#{keyword}</button>)}</div>{query && <div className="mt-2 grid gap-2 sm:grid-cols-2">{results.length ? results.map((item) => <div key={item.id} className={`flex items-center gap-2 rounded-xl px-2 py-2 ${item.id === track.id ? 'bg-teal-300/10' : 'bg-white/[.05]'}`}><button type="button" onClick={() => selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-2 text-left">{item.thumbnail && <img src={item.thumbnail} alt="" className="h-10 w-16 rounded object-cover" />}<span className="min-w-0"><b className="block truncate text-xs">{item.title}</b><span className="block truncate text-[11px] text-slate-400">{item.artist}</span><span className="block truncate text-[10px] text-slate-500">{item.views || 'YouTube 검색 결과'}{item.published ? ` · ${item.published}` : ''}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label="즐겨찾기" className={favoriteIds.includes(item.id) ? 'text-rose-300' : 'text-slate-500'}><Heart size={14} fill={favoriteIds.includes(item.id) ? 'currentColor' : 'none'} /></button></div>) : <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-teal-200 underline">YouTube에서 이 키워드 검색하기</a>}</div>}</div>}
     </section>
   );
 }
