@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, Film, Gamepad2, Globe2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, Users, Video } from 'lucide-react';
+import { BriefcaseBusiness, Film, Gamepad2, Globe2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
 
 const primaryLinks = [
   { href: '/', label: '홈', icon: Home },
@@ -51,6 +51,10 @@ export default function PortalSidebar() {
          <p className="mb-2 mt-7 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">Arena &amp; live</p>
         <div className="space-y-1">
           {utilityLinks.map((link) => <LinkRow key={link.href} {...link} active={pathname.startsWith(link.href)} />)}
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/7 hover:text-white">
+            <UserRoundCheck size={17} className="text-slate-500 transition group-hover:text-teal-300" />
+            <span>친구 채팅·통화</span>
+          </button>
         </div>
       </nav>
 
