@@ -705,12 +705,14 @@ export default function WebRTCPage() {
             <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${isConnected ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>{isConnected ? 'CONNECTED' : active ? 'CONNECTING' : 'READY'}</span>
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
-            <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-cover ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`} />
-            {!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,#172b50,#050914_72%)] p-4 text-center"><div><Camera size={26} className="mx-auto mb-2 text-cyan-200" /><p className="text-xs font-black">{active ? status : '카메라·마이크 준비 중'}</p><p className="mt-1 text-[10px] text-slate-500">게임방 영상 연결</p></div></div>}
-            <div className="absolute bottom-2 right-2 w-[32%] min-w-[64px] overflow-hidden rounded-xl border border-white/70 bg-black shadow-xl">
-              <video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-cover ${flip ? 'scale-x-[-1]' : ''}`} />
-            </div>
+           <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
+             <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-contain bg-[#030611] ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`} />
+             <span className="absolute left-2 top-2 rounded-md bg-black/65 px-1.5 py-1 text-[9px] font-black text-slate-200">상대 화면</span>
+             {!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,#172b50,#050914_72%)] p-4 text-center"><div><Camera size={26} className="mx-auto mb-2 text-cyan-200" /><p className="text-xs font-black">{active ? status : '카메라·마이크 준비 중'}</p><p className="mt-1 text-[10px] text-slate-500">게임방 영상 연결</p></div></div>}
+             <div className="absolute bottom-2 right-2 w-[42%] max-w-[220px] min-w-[96px] overflow-hidden rounded-xl border border-white/80 bg-black shadow-xl">
+               <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-black/65 px-1.5 py-1 text-[8px] font-black text-white">내 화면</span>
+               <video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-contain bg-[#030611] ${flip ? 'scale-x-[-1]' : ''}`} />
+             </div>
           </div>
 
           <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-white/10 bg-[#10182b] p-2">
