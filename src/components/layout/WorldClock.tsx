@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Clock3 } from 'lucide-react';
-import { regionLabel, regionTimeZone } from '@/lib/regions';
+import { REGIONS, regionLabel, regionTimeZone } from '@/lib/regions';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 function formatClock(date: Date, timeZone: string) {
@@ -26,6 +26,7 @@ function formatDate(date: Date, timeZone: string) {
 
 export default function WorldClock() {
   const selectedCountry = useGlobalStore((state) => state.selectedCountry);
+  const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function WorldClock() {
         <div className="mt-1 flex items-baseline justify-between gap-3"><strong className="font-display text-2xl font-extrabold text-white tabular-nums">{now ? formatClock(now, koreaZone) : '--:--:--'}</strong><span className="text-[11px] text-slate-400">{now ? formatDate(now, koreaZone) : ''}</span></div>
       </div>
       <div className="rounded-2xl border border-white/10 bg-white/[.05] px-4 py-3">
-        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400"><Clock3 size={14} className="text-cyan-300" /> 선택 지역</div>
+        <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400"><span className="flex items-center gap-2"><Clock3 size={14} className="text-cyan-300" /> 선택 지역</span><select aria-label="시간을 볼 국가 선택" value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} className="max-w-[9rem] rounded-lg border border-white/10 bg-white/[.06] px-2 py-1 text-[10px] font-bold tracking-normal text-slate-200 outline-none"><option value="Global">🌐 전체 지역</option>{REGIONS.filter((region) => region.id !== 'Global').map((region) => <option key={region.id} value={region.id}>{region.flag} {region.label}</option>)}</select></div>
         <div className="mt-1 flex items-baseline justify-between gap-3"><strong className="font-display text-2xl font-extrabold text-white tabular-nums">{now ? formatClock(now, selectedZone) : '--:--:--'}</strong><span className="truncate text-right text-[11px] text-slate-400">{selectedLabel}</span></div>
       </div>
     </div>
