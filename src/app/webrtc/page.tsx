@@ -83,6 +83,8 @@ export default function WebRTCPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatError, setChatError] = useState('');
   const [genderPreference, setGenderPreference] = useState<GenderPreference>(user?.genderPreference || 'any');
+  const [ageMin, setAgeMin] = useState(13);
+  const [ageMax, setAgeMax] = useState(130);
   const [targetUserId, setTargetUserId] = useState('');
   const [compactMode, setCompactMode] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
@@ -317,6 +319,10 @@ export default function WebRTCPage() {
       window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
       return;
     }
+    if (ageMin > ageMax) {
+      setPermissionError('최소 나이는 최대 나이보다 작거나 같아야 합니다.');
+      return;
+    }
     setPermissionError('');
     const profile = { ...user, genderPreference };
     const profileChanged = profile.genderPreference !== user.genderPreference;
@@ -357,9 +363,11 @@ export default function WebRTCPage() {
       image: user.image,
        age: user.age || 0,
       country: user.country || 'Global',
-      gender: user.gender || '',
-      genderPreference,
-      targetUserId: targetUserId || undefined,
+       gender: user.gender || '',
+       genderPreference,
+       ageMin,
+       ageMax,
+       targetUserId: targetUserId || undefined,
       isSubscribed: Boolean(user.isSubscribed),
       status: 'waiting',
       lastSeenAt: new Date(),
@@ -537,12 +545,12 @@ export default function WebRTCPage() {
              lastSeenAt: new Date().toISOString(),
            });
           let nextCall: ActiveCall | null = null;
-          if (ownQueue?.status === 'matched' && ownQueue.callId && ownQueue.opponent) {
+           if (ownQueue?.status === 'matched' && ownQueue.callId && ownQueue.opponent) {
             const matchedPeer = makePeer(ownQueue.opponent);
             nextCall = { callId: ownQueue.callId, peer: matchedPeer, initiator: user.id < matchedPeer.userId };
           } else {
             await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
-            const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined }, token).catch(() => null);
+             const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined }, token).catch(() => null);
            if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
           if (!nextCall) {
@@ -637,7 +645,7 @@ export default function WebRTCPage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [active, user]);
+  }, [active, ageMax, ageMin, genderPreference, targetUserId, user]);
 
   useEffect(() => {
     if (!activeCallId || !user) return;
@@ -764,7 +772,7 @@ export default function WebRTCPage() {
           <aside className="space-y-5">
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">LIVE CHAT 상태</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-amber-500/10 p-3 text-xs font-bold text-amber-100">{permissionError}</p>}{!active ? <button onClick={startMatch} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">상대 화면에도 적용</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />내 영상과 상대방에게 전송되는 영상 모두에 적용됩니다.</div></section>
-              <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터</span><span className="text-xs font-bold text-cyan-300">활성화</span></div><label className="block text-xs font-bold text-slate-400">찾고 싶은 상대<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두</option><option value="male">남성</option><option value="female">여성</option></select></label><p className="mt-3 text-xs leading-5 text-slate-500">내 성별은 필터에서 선택하지 않습니다. 상대 성별을 지정하면 연결될 때마다 0.25 USDT가 차감되며, 잔고가 부족하면 충전 화면으로 이동합니다.</p></section>
+               <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터 / Filters</span><span className="text-xs font-bold text-cyan-300">활성화</span></div><label className="block text-xs font-bold text-slate-400">찾고 싶은 상대 / Gender<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두 / Any</option><option value="male">남성 / Male</option><option value="female">여성 / Female</option></select></label><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs font-bold text-slate-400">최소 나이 / Min<select value={ageMin} onChange={(event) => setAgeMin(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none">{Array.from({ length: 88 }, (_, index) => index + 13).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-xs font-bold text-slate-400">최대 나이 / Max<select value={ageMax} onChange={(event) => setAgeMax(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none">{Array.from({ length: 88 }, (_, index) => index + 13).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div><p className="mt-3 text-xs leading-5 text-slate-500">{ageMin}–{ageMax}세 범위와 성별 조건을 서로 만족하는 회원끼리 연결합니다. 성별 필터는 연결될 때마다 0.25 USDT가 차감됩니다.</p></section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 자동 연결 안내</div><p>연결이 끊기거나 상대가 나가면 연결 종료를 누르지 않아도 다음 인증 회원을 계속 찾습니다.</p></section>
            <section className="webrtc-sidebar-screen rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-3">
              <div className="mb-2 flex items-center justify-between px-1"><span className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">상대 화면</span><span className="text-[10px] font-bold text-slate-500">글로벌 라운지 위치</span></div>
