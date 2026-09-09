@@ -8,6 +8,8 @@ export const runtime = 'edge';
 type MarketAsset = { key: string; label: string; symbol: string; currency: string };
 type YahooChart = { meta?: { regularMarketPrice?: number; chartPreviousClose?: number; currency?: string } };
 type CryptoQuote = { quotes?: { USD?: { price?: number; percent_change_24h?: number } } };
+type CoinGeckoQuote = Record<string, { usd?: number; usd_24h_change?: number }>;
+type BinanceQuote = { lastPrice?: string; priceChangePercent?: string };
 
 const marketAssets: MarketAsset[] = [
   { key: 'bitcoin', label: 'BTC', symbol: 'bitcoin', currency: 'USD' },
@@ -23,7 +25,7 @@ const marketAssets: MarketAsset[] = [
 ];
 
 async function marketJson<T>(url: string) {
-  const response = await fetch(url, { headers: { 'User-Agent': 'GYOPO-Market/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+  const response = await fetch(url, { cache: 'no-store', headers: { 'User-Agent': 'GYOPO-Market/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) throw new Error(`시세 출처 응답 ${response.status}`);
   return response.json() as Promise<T>;
 }
@@ -46,15 +48,32 @@ const cryptoTickers: Record<string, string> = {
   ripple: 'xrp-xrp',
   solana: 'sol-solana',
 };
+const coinGeckoIds: Record<string, string> = { bitcoin: 'bitcoin', ethereum: 'ethereum', ripple: 'ripple', solana: 'solana' };
+const binanceSymbols: Record<string, string> = { bitcoin: 'BTCUSDT', ethereum: 'ETHUSDT', ripple: 'XRPUSDT', solana: 'SOLUSDT' };
 
 async function fetchCryptoAsset(asset: MarketAsset) {
   try {
     const quote = await marketJson<CryptoQuote>(`https://api.coinpaprika.com/v1/tickers/${cryptoTickers[asset.symbol]}?quotes=USD`);
     const usd = quote.quotes?.USD;
-    return { key: asset.key, label: asset.label, value: usd?.price ?? null, change: usd?.percent_change_24h ?? null, currency: asset.currency };
+    if (typeof usd?.price === 'number') return { key: asset.key, label: asset.label, value: usd.price, change: usd.percent_change_24h ?? null, currency: asset.currency };
   } catch {
-    return { key: asset.key, label: asset.label, value: null, change: null, currency: asset.currency };
+    // Try a second provider below when the primary crypto feed is unavailable.
   }
+  try {
+    const quote = await marketJson<CoinGeckoQuote>(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coinGeckoIds[asset.symbol])}&vs_currencies=usd&include_24hr_change=true`);
+    const usd = quote[coinGeckoIds[asset.symbol]];
+    if (typeof usd?.usd === 'number') return { key: asset.key, label: asset.label, value: usd.usd, change: usd.usd_24h_change ?? null, currency: asset.currency };
+  } catch {
+    // Continue to the exchange feed.
+  }
+  try {
+    const quote = await marketJson<BinanceQuote>(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbols[asset.symbol]}`);
+    const value = Number(quote.lastPrice);
+    if (Number.isFinite(value)) return { key: asset.key, label: asset.label, value, change: Number(quote.priceChangePercent) || null, currency: asset.currency };
+  } catch {
+    // Return an explicit empty value so the ticker remains stable.
+  }
+  return { key: asset.key, label: asset.label, value: null, change: null, currency: asset.currency };
 }
 
 async function fetchMarket() {
