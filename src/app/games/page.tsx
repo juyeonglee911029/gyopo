@@ -86,6 +86,14 @@ type TetrisRoom = TetrisLobby & {
   playerBResult?: 'win' | 'lose';
   playerAState?: GameState | StoredGameState;
   playerBState?: GameState | StoredGameState;
+  musicVideoId?: string;
+  musicTitle?: string;
+  musicArtist?: string;
+  musicPlaying?: boolean;
+  musicPosition?: number;
+  musicStartedAt?: number;
+  musicVolume?: number;
+  musicUpdatedAt?: string;
 };
 type GameAction =
   | { type: 'START' }
@@ -306,14 +314,17 @@ export default function GamesPage() {
   const opponentAttackInitializedRef = useRef(false);
   const lobbyReleaseRequestedRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const roomMusicKeyRef = useRef('');
+  const togetherListeningRef = useRef(false);
   const currentUserId = user ? (getSessionUserId() || user.id) : '';
   const [, setRoomBetConfigured] = useState(false);
+  const [togetherListening, setTogetherListening] = useState(false);
 
-  useEffect (() => {
+  useEffect(() => {
     const htmlOverflow = document.documentElement.style.overflow;
     const bodyOverflow = document.body.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
     return () => {
       document.documentElement.style.overflow = htmlOverflow;
       document.body.style.overflow = bodyOverflow;
@@ -443,35 +454,72 @@ export default function GamesPage() {
     }, token);
   };
 
+  useEffect(() => {
+    const onLocalMusicChange = (event: Event) => {
+      if (!matchId || !togetherListeningRef.current) return;
+      const detail = (event as CustomEvent<{ track?: { videoId?: string; title?: string; artist?: string }; playing?: boolean; position?: number; startedAt?: number; volume?: number; source?: string }>).detail;
+      if (!detail.track?.videoId || detail.source === 'room') return;
+      void updateRoom({
+        musicVideoId: detail.track.videoId,
+        musicTitle: detail.track.title || 'GYOPO MUSIC',
+        musicArtist: detail.track.artist || 'YouTube',
+        musicPlaying: Boolean(detail.playing),
+        musicPosition: Number(detail.position || 0),
+        musicStartedAt: Number(detail.startedAt || Date.now()),
+        musicVolume: Number(detail.volume ?? 70),
+        musicUpdatedAt: new Date().toISOString(),
+      }).catch(() => undefined);
+    };
+    window.addEventListener('gyopo-music-local', onLocalMusicChange);
+    return () => window.removeEventListener('gyopo-music-local', onLocalMusicChange);
+  }, [matchId, togetherListening, currentUserId]);
+
+  const toggleTogetherListening = () => {
+    const next = !togetherListeningRef.current;
+    togetherListeningRef.current = next;
+    setTogetherListening(next);
+    if (next) window.dispatchEvent(new CustomEvent('gyopo-music-request-state'));
+  };
+
   const beginCountdown = (startAt = new Date(Date.now() + 5000).toISOString()) => {
     if (countdownRoomRef.current === startAt) return;
     countdownRoomRef.current = startAt;
     setMatchResult(null);
     setMatchPhase('countdown');
     setRoomStartAt(startAt);
+    setCountdown(Math.max(1, Math.min(5, Math.ceil((new Date(startAt).getTime() - Date.now()) / 1000))));
   };
 
   useEffect(() => {
-    if (!roomStartAt) return;
+    if (!roomStartAt) {
+      setCountdown(null);
+      return;
+    }
     const startTime = new Date(roomStartAt).getTime();
-    const timer = window.setInterval(() => {
+    let timer: number | null = null;
+    let cancelled = false;
+    const finish = () => {
+      if (cancelled || gameStartedRef.current) return;
+      setCountdown(null);
+      setMatchPhase('playing');
+      gameStartedRef.current = true;
+      dispatch({ type: 'START' });
+    };
+    const tick = () => {
       const remaining = Math.ceil((startTime - Date.now()) / 1000);
-      if (remaining > 1) {
+      if (remaining > 0) {
         setCountdown(Math.min(5, remaining));
+        timer = window.setTimeout(tick, 100);
         return;
       }
       setCountdown('START');
-      if (remaining <= 0) {
-        window.clearInterval(timer);
-         window.setTimeout(() => {
-           setCountdown(null);
-           setMatchPhase('playing');
-           gameStartedRef.current = true;
-           dispatch({ type: 'START' });
-        }, 650);
-      }
-    }, 100);
-    return () => window.clearInterval(timer);
+      timer = window.setTimeout(finish, 450);
+    };
+    if (Number.isFinite(startTime)) tick();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [roomStartAt]);
 
   const practiceStart = () => {
@@ -600,6 +648,9 @@ export default function GamesPage() {
     countdownRoomRef.current = null;
     opponentAttackTotalRef.current = 0;
     opponentAttackInitializedRef.current = false;
+    roomMusicKeyRef.current = '';
+    togetherListeningRef.current = false;
+    setTogetherListening(false);
     dispatch({ type: 'RESET' });
   };
 
@@ -781,6 +832,7 @@ export default function GamesPage() {
     setIncomingInvite(null);
     setMatchPhase('betting');
     setMatchStatus('대전 신청 수락 · 상대의 배팅금액을 기다리는 중');
+    setInviteStatus('대전 신청을 수락했습니다. 상대가 배팅금액을 설정하면 준비할 수 있습니다.');
   };
 
   const rejectInvite = async () => {
@@ -1037,8 +1089,14 @@ export default function GamesPage() {
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
           : undefined;
         const currentInvite = incomingInvite ? invites.find((invite) => invite.id === incomingInvite.id) : null;
-        if (currentInvite && currentInvite.status !== 'pending') setIncomingInvite(null);
+        if (currentInvite && currentInvite.status !== 'pending') {
+          setIncomingInvite(null);
+          setInviteStatus(currentInvite.status === 'accepted' ? '대전 신청이 수락되었습니다. 배팅금액을 설정하고 준비해주세요.' : '대전 신청이 거절되었습니다. 다른 유저에게 다시 신청할 수 있습니다.');
+        }
         if (pending && pending.id !== incomingInvite?.id) setIncomingInvite(pending);
+
+        const acceptedSentInvite = sentInviteId ? invites.find((invite) => invite.id === sentInviteId && invite.status === 'accepted') : null;
+        if (acceptedSentInvite) setInviteStatus(`${acceptedSentInvite.recipient.name}님이 대전 신청을 수락했습니다. 배팅금액을 설정해주세요.`);
 
         const rejected = invites.find((invite) => invite.id === sentInviteId && invite.status === 'rejected');
         if (rejected && sentInviteId) {
@@ -1138,12 +1196,25 @@ export default function GamesPage() {
         setMatchStatus(gameErrorMessage(error, '대전 방을 만들지 못했습니다.'));
         return;
       }
-       const room = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
-       if (!room) return;
-       roomSeenRef.current = true;
-       const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
-       const nextState = deserializeGameState(matchRole === 'A' ? room.playerBState : room.playerAState);
-       const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
+        const room = await getDocument<TetrisRoom>('tetrisRooms', matchId, token).catch(() => null);
+        if (!room) return;
+        roomSeenRef.current = true;
+        const nextOpponent = matchRole === 'A' ? room.playerB : room.playerA;
+        const nextState = deserializeGameState(matchRole === 'A' ? room.playerBState : room.playerAState);
+        if (room.musicVideoId && room.musicUpdatedAt && room.musicUpdatedAt !== roomMusicKeyRef.current) {
+          roomMusicKeyRef.current = room.musicUpdatedAt;
+          window.dispatchEvent(new CustomEvent('gyopo-music-sync', {
+            detail: {
+              source: 'room',
+              track: { id: `youtube-${room.musicVideoId}`, title: room.musicTitle || 'GYOPO MUSIC', artist: room.musicArtist || 'YouTube', videoId: room.musicVideoId, keywords: [] },
+              playing: Boolean(room.musicPlaying),
+              position: Number(room.musicPosition || 0),
+              startedAt: Number(room.musicStartedAt || Date.now()),
+              volume: Number(room.musicVolume ?? 70),
+            },
+          }));
+        }
+        const nextReady = matchRole === 'A' ? Boolean(room.readyB) : Boolean(room.readyA);
          if (room.betAmount) {
            setBetAmount(room.betAmount);
            setRoomBetConfigured(true);
@@ -1356,12 +1427,20 @@ export default function GamesPage() {
 
             <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-emerald-300/15 bg-[#0d1526] shadow-2xl sm:rounded-[1.5rem]">
               <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2 sm:px-3"><div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200"><MessageCircle size={13} /> Voice + Video</div><span className="text-[9px] font-bold text-slate-500">게임 시작 시 자동 연결</span></div>
-              <div className="min-h-0 flex-1 overflow-hidden p-1.5 sm:p-2">
-                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-[#050914]" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-[#050914] p-4 text-center"><div><Camera size={26} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
+              <div className="h-[38%] min-h-[135px] shrink-0 overflow-hidden p-1.5 sm:p-2">
+                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-[#050914]" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-[#050914] p-4 text-center"><div><Camera size={22} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
               </div>
-              <div className="grid h-20 shrink-0 grid-rows-[minmax(0,1fr)_auto] gap-1 border-t border-white/10 p-1.5 sm:h-24 sm:p-2">
-                <div className="min-h-0 overflow-hidden text-[10px] text-slate-400">{messages.length === 0 ? <div className="py-1 text-center text-slate-600">게임 채팅 대기 중</div> : messages.slice(-2).map((message) => <div key={message.id} className="truncate"><b className="text-cyan-200">{message.user}</b> {message.text}</div>)}</div>
-                <form onSubmit={sendMessage} className="flex gap-1"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="게임 채팅" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-white outline-none" /><button aria-label="게임 채팅 보내기" className="rounded-lg bg-cyan-400 px-2 text-[10px] font-black text-slate-950"><Send size={13} /></button></form>
+              <div className="shrink-0 space-y-1.5 border-t border-white/10 p-1.5 text-[10px] sm:p-2">
+                {inviteStatus && <p className="rounded-lg bg-cyan-300/[0.07] px-2 py-1.5 leading-4 text-cyan-100">{inviteStatus}</p>}
+                {matchId && <div className="grid grid-cols-2 gap-1.5"><div className={`rounded-lg px-2 py-1.5 text-center ${readyForBattle ? 'bg-emerald-300/10 text-emerald-200' : 'bg-white/[0.04] text-slate-500'}`}><b className="block">나</b>{readyForBattle ? '준비 완료' : '준비 전'}</div><div className={`rounded-lg px-2 py-1.5 text-center ${opponentReady ? 'bg-emerald-300/10 text-emerald-200' : 'bg-white/[0.04] text-slate-500'}`}><b className="block">상대방</b>{opponentReady ? '준비 완료' : '준비 전'}</div></div>}
+                {matchPhase === 'betting' && <div className="flex gap-1.5">{matchRole === 'A' ? <input type="number" min={MIN_ENTRY_FEE} max={MAX_ENTRY_FEE} step="1" value={betAmount} onChange={(event) => setBetAmount(Number(event.target.value))} aria-label="배팅금액" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-white outline-none" /> : <div className="flex min-w-0 flex-1 items-center rounded-lg bg-amber-300/10 px-2 py-1.5 text-amber-100">배팅 {formatUsdt(betAmount)} USDT</div>}<button type="button" onClick={() => void confirmBet()} disabled={readyForBattle} className="rounded-lg bg-amber-300 px-2 py-1.5 font-black text-slate-950 disabled:opacity-40">{matchRole === 'A' ? '설정·준비' : '수락·준비'}</button></div>}
+                {matchPhase === 'holding' && <div className="rounded-lg bg-emerald-300/10 px-2 py-1.5 text-center font-bold text-emerald-200">양쪽 참가비 홀딩 중 · 자동 시작 대기</div>}
+                {matchPhase === 'finished' && <button type="button" onClick={() => void requestRematch()} className="w-full rounded-lg bg-cyan-300 px-2 py-1.5 font-black text-slate-950">승패 결과 · 다시 신청하기</button>}
+                {matchId && <div className="flex gap-1.5"><button type="button" onClick={toggleTogetherListening} className={`flex-1 rounded-lg border px-2 py-1.5 font-black ${togetherListening ? 'border-teal-300/40 bg-teal-300/15 text-teal-200' : 'border-white/10 bg-white/5 text-slate-300'}`}>{togetherListening ? '같이 듣기 켜짐' : '같이 듣기'}</button><button type="button" onClick={() => void requestBattleStart()} disabled={!readyForBattle || !opponentReady || !['betting', 'holding'].includes(matchPhase)} className="flex-1 rounded-lg bg-cyan-300 px-2 py-1.5 font-black text-slate-950 disabled:opacity-40">자동 시작 확인</button></div>}
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10">
+                <div className="border-b border-white/10 p-2"><div className="mb-1.5 flex items-center justify-between"><b className="text-[10px] uppercase tracking-[0.16em] text-cyan-200">Tetris Lounge</b><span className="text-[9px] text-emerald-300">{onlineUsers.length}명</span></div>{onlineUsers.filter((online) => online.id !== user?.id).length === 0 ? <p className="text-[10px] text-slate-500">현재 대전 가능한 유저가 없습니다.</p> : <div className="space-y-1">{onlineUsers.filter((online) => online.id !== user?.id).map((online) => <div key={online.id} className="flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1.5"><span className="min-w-0 flex-1 truncate text-[10px] font-bold text-slate-200">{online.name}</span><button type="button" onClick={() => void sendInvite(online)} disabled={Boolean(matchId) || matchPhase === 'countdown' || matchPhase === 'playing'} className="rounded-md bg-cyan-300 px-1.5 py-1 text-[9px] font-black text-slate-950 disabled:opacity-40">대전 신청</button></div>)}</div>}</div>
+                <div className="p-2"><div className="mb-1.5 flex items-center justify-between"><b className="text-[10px] uppercase tracking-[0.16em] text-slate-400">게임 채팅</b><span className="text-[9px] text-emerald-300">LIVE</span></div><div className="mb-1.5 space-y-1">{messages.length === 0 ? <div className="text-[10px] text-slate-600">게임 채팅 대기 중</div> : messages.slice(-3).map((message) => <div key={message.id} className="truncate text-[10px] text-slate-400"><b className="text-cyan-200">{message.user}</b> {message.text}</div>)}</div><form onSubmit={sendMessage} className="flex gap-1"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="게임 채팅" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-white outline-none" /><button aria-label="게임 채팅 보내기" className="rounded-lg bg-cyan-400 px-2 text-[10px] font-black text-slate-950"><Send size={13} /></button></form></div>
               </div>
             </section>
           </div>
