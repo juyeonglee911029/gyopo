@@ -388,6 +388,7 @@ html[data-theme="dark"] .tetris-modern-shell > header, html[data-theme="light"] 
 
 /* Normalize the legacy friend dock and page shells to the same reading scale. */
 #friend-dock { font-size: .72rem !important; }
+#friend-dock, #friend-dock * { font-size: .68rem !important; line-height: 1.25 !important; }
 #friend-dock header { padding: .65rem .8rem !important; font-size: .74rem !important; }
 #friend-dock .text-sm { font-size: .72rem !important; }
 #friend-dock .text-xs { font-size: .62rem !important; }
