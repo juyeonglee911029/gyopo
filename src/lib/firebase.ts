@@ -667,10 +667,14 @@ export async function reserveTetrisLobbyRoom(profile: TetrisQueueProfile, matchI
   for (let roomNumber = 1; roomNumber <= TETRIS_LOBBY_ROOM_COUNT; roomNumber += 1) {
     const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
     const room = document ? decodeDocument<TetrisLobbyRoom>(document) : null;
-    if (room?.status === 'occupied' || (room?.status === 'waiting' && isFreshTetrisLobbyRoom(room) && room.waitingUserId !== member.id)) continue;
+    if (room?.status === 'occupied') continue;
+    if (room?.status === 'waiting') {
+      if (room.waitingUserId === member.id) continue;
+      if (isFreshTetrisLobbyRoom(room)) continue;
+    }
     const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member), token, document?.updateTime);
     if (claimed) {
-      await setTetrisRoomAccess(roomNumber, matchId, member.id, null, token).catch(() => undefined);
+      await setTetrisRoomAccess(roomNumber, matchId, member.id, null, token);
       return roomNumber;
     }
   }
@@ -695,7 +699,7 @@ export async function joinTetrisLobbyRoom(roomNumber: number, matchId: string, p
     playerB: member,
     updatedAt: new Date(),
   }, token, document.updateTime);
-  if (joined) await setTetrisRoomAccess(roomNumber, matchId, room.playerAId || room.waitingUserId, member.id, token).catch(() => undefined);
+  if (joined) await setTetrisRoomAccess(roomNumber, matchId, room.playerAId || room.waitingUserId, member.id, token);
   return joined;
 }
 
