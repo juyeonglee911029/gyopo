@@ -949,7 +949,7 @@ export async function startTetrisCountdown(matchId: string, token?: string): Pro
   if (room.startAt) return room.startAt;
   if (room.phase === 'finished' || !room.readyA || !room.readyB || !room.stakeHeldA || !room.stakeHeldB) return null;
 
-  const startAt = new Date(Date.now() + 5000).toISOString();
+  const startAt = new Date(Date.now() + 10_000).toISOString();
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
