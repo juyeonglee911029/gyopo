@@ -10,7 +10,6 @@ import {
   Newspaper,
   Play,
   Radio,
-  ShoppingBag,
   Sparkles,
   Store,
   UsersRound,
@@ -29,7 +28,6 @@ const services = [
   { href: '/news', label: '오늘의 뉴스', detail: '검증된 출처의 핵심 소식을 빠르게', icon: Newspaper, tone: 'text-lime-200 bg-lime-300/10', layout: 'sm:col-span-7' },
   { href: '/community', label: '커뮤니티', detail: '해외 생활의 진짜 이야기가 모이는 곳', icon: UsersRound, tone: 'text-violet-200 bg-violet-300/10', layout: 'sm:col-span-5' },
   { href: '/jobs', label: '구인구직', detail: '나에게 맞는 글로벌 기회 찾기', icon: BriefcaseBusiness, tone: 'text-sky-200 bg-sky-300/10', layout: 'sm:col-span-5' },
-  { href: '/market', label: '에스크로 장터', detail: '안심하고 사고파는 교민 마켓', icon: ShoppingBag, tone: 'text-amber-200 bg-amber-300/10', layout: 'sm:col-span-7' },
   { href: '/directory', label: '한인 업소록', detail: '가까운 한인 비즈니스를 한 번에', icon: Store, tone: 'text-emerald-200 bg-emerald-300/10', layout: 'sm:col-span-7' },
   { href: '/assistant', label: '정보 도우미', detail: '궁금한 해외 생활 정보를 바로 질문', icon: Sparkles, tone: 'text-cyan-200 bg-cyan-300/10', layout: 'sm:col-span-5' },
 ];
