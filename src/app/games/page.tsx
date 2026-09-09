@@ -1059,8 +1059,9 @@ export default function GamesPage() {
         await reserveGameStake(currentUserId, matchId, amount, token);
         reservedNow = true;
         setStakeReserved(true);
-        const refreshed = await refreshStoredUser().catch(() => null);
-        if (refreshed) setUser(refreshed);
+        void refreshStoredUser().then((refreshed) => {
+          if (refreshed) setUser(refreshed);
+        }).catch(() => undefined);
       }
       // Player A is the only source of truth for the room fee. Player B only confirms it.
       await updateRoom({
@@ -1386,8 +1387,9 @@ export default function GamesPage() {
               void reserveGameStake(currentUserId, matchId, amount, token)
             .then(async () => {
               setStakeReserved(true);
-              const refreshed = await refreshStoredUser().catch(() => null);
-              if (refreshed) setUser(refreshed);
+              void refreshStoredUser().then((refreshed) => {
+                if (refreshed) setUser(refreshed);
+              }).catch(() => undefined);
               await updateRoom(matchRole === 'A' ? { stakeHeldA: true } : { stakeHeldB: true });
             })
             .catch((error) => {
