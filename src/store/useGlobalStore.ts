@@ -10,9 +10,18 @@ export type Transaction = {
   details: string;
 };
 
+export type PortalLanguage = 'ko' | 'en';
+
+function storedLanguage(): PortalLanguage {
+  if (typeof window === 'undefined') return 'ko';
+  return window.localStorage.getItem('gyopo-language') === 'en' ? 'en' : 'ko';
+}
+
 interface GlobalState {
   selectedCountry: string;
   setSelectedCountry: (country: string) => void;
+  language: PortalLanguage;
+  setLanguage: (language: PortalLanguage) => void;
   darkMode: boolean;
   setDarkMode: (enabled: boolean) => void;
   
@@ -28,6 +37,11 @@ interface GlobalState {
 export const useGlobalStore = create<GlobalState>((set) => ({
   selectedCountry: 'Global',
   setSelectedCountry: (country) => set({ selectedCountry: country }),
+  language: storedLanguage(),
+  setLanguage: (language) => {
+    if (typeof window !== 'undefined') window.localStorage.setItem('gyopo-language', language);
+    set({ language });
+  },
   darkMode: true,
   setDarkMode: (enabled) => set({ darkMode: enabled }),
   
