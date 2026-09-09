@@ -11,6 +11,7 @@ export type MusicTrack = {
 
 export type MusicSyncDetail = {
   source?: 'local' | 'room';
+  player?: 'top' | 'radio' | 'game';
   track: MusicTrack;
   playing: boolean;
   position?: number;
@@ -20,6 +21,10 @@ export type MusicSyncDetail = {
 
 export function emitMusicEvent(name: 'gyopo-music-local' | 'gyopo-music-sync', detail: MusicSyncDetail) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent<MusicSyncDetail>(name, { detail }));
+}
+
+export function emitMusicPlayerEvent(detail: { player: 'top' | 'radio' | 'game'; playing: boolean }) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('gyopo-music-player', { detail }));
 }
 
 export const MUSIC_TRACKS: MusicTrack[] = [
