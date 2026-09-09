@@ -1385,7 +1385,7 @@ export default function GamesPage() {
 
   if (true) {
     return (
-      <div className="games-page h-[calc(100dvh-5rem)] min-h-0 overflow-hidden bg-[#070b17] px-1.5 py-1.5 text-white sm:px-2 md:px-3">
+      <div className="games-page h-[calc(100dvh-8.5rem)] min-h-0 overflow-hidden bg-[#070b17] px-1.5 py-1.5 text-white sm:px-2 md:px-3 lg:h-[calc(100dvh-9.25rem)]">
         <div className="tetris-modern-shell mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-1.5">
           <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-2 py-1.5 shadow-xl sm:px-3">
             <div className="min-w-0">
