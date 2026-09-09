@@ -21,18 +21,6 @@ export default function MusicPage() {
   }, []);
 
   useEffect(() => {
-    const stopWhenAnotherPlayerStarts = (event: Event) => {
-      const detail = (event as CustomEvent<{ player?: string; playing?: boolean }>).detail;
-      if (!detail || detail.player === 'radio') return;
-      if (!detail.playing && detail.player !== 'game') return;
-      setPlaying(false);
-      frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), 'https://www.youtube.com');
-    };
-    window.addEventListener('gyopo-music-player', stopWhenAnotherPlayerStarts);
-    return () => window.removeEventListener('gyopo-music-player', stopWhenAnotherPlayerStarts);
-  }, []);
-
-  useEffect(() => {
     if (!query.trim()) {
       setRemoteResults([]);
       return;
@@ -83,7 +71,7 @@ export default function MusicPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
           <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
              <div className="aspect-video bg-black"><iframe ref={frameRef} key={track.videoId} onLoad={() => { const frame = frameRef.current?.contentWindow; frame?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [volume] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: playing ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com'); }} src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&rel=0`} title={track.title} className="h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>
-             <div className="flex flex-wrap items-center justify-between gap-3 p-5 md:p-7"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-teal-300">Now playing</div><h2 className="mt-2 text-3xl font-black">{track.title}</h2><p className="mt-1 text-sm font-bold text-slate-400">{track.artist}</p></div><div className="flex items-center gap-3"><button type="button" onClick={togglePlaying} className="flex items-center gap-2 rounded-xl bg-teal-300 px-3 py-2 text-xs font-black text-slate-950">{playing ? <Pause size={14} /> : <Play size={14} />}{playing ? '일시정지' : '재생'}</button><label className="flex items-center gap-2 text-xs text-slate-400">볼륨<input type="range" min="0" max="100" value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="accent-teal-300" /></label></div></div>
+              <div className="flex flex-wrap items-center justify-between gap-3 p-5 md:p-7"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-teal-300">Now playing</div><h2 className="mt-2 text-3xl font-black">{track.title}</h2><p className="mt-1 text-sm font-bold text-slate-400">{track.artist}</p><div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500"><span className="rounded-full border border-white/10 bg-white/[.04] px-2.5 py-1.5">조회수 · {track.views || '집계 중'}</span><span className="rounded-full border border-white/10 bg-white/[.04] px-2.5 py-1.5">공개일 · {track.published || '정보 확인 중'}</span></div></div><div className="flex items-center gap-3"><button type="button" onClick={togglePlaying} className="flex items-center gap-2 rounded-xl bg-teal-300 px-3 py-2 text-xs font-black text-slate-950">{playing ? <Pause size={14} /> : <Play size={14} />}{playing ? '일시정지' : '재생'}</button><label className="flex items-center gap-2 text-xs text-slate-400">볼륨<input type="range" min="0" max="100" value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="accent-teal-300" /></label></div></div>
           </section>
 
           <aside className="rounded-[2rem] border border-white/10 bg-[#10182b] p-5">
