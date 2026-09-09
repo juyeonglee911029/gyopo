@@ -131,6 +131,12 @@ export default function WebRTCPage() {
   }, []);
 
   useEffect(() => {
+    if (!compactMode) return;
+    document.body.classList.add('webrtc-compact-shell');
+    return () => document.body.classList.remove('webrtc-compact-shell');
+  }, [compactMode]);
+
+  useEffect(() => {
     userRef.current = user;
     if (!user) return;
     if (!active) {
@@ -717,7 +723,7 @@ export default function WebRTCPage() {
 
           <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-white/10 bg-[#10182b] p-2">
              <button type="button" onClick={toggleMicrophone} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 text-[10px] font-black disabled:opacity-40">{audioEnabled ? <Mic size={13} /> : <MicOff size={13} />}{audioEnabled ? '마이크' : '음소거'}</button>
-             <button type="button" onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={13} />{isSharingScreen ? '공유 중지' : '화면+음악'}</button>
+              <button type="button" onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={13} />{isSharingScreen ? '공유 중지' : '화면·오디오 공유'}</button>
              <span className="flex min-h-9 items-center justify-center rounded-lg border border-white/10 px-1 text-[10px] font-bold text-slate-400">{status}</span>
             <button type="button" onClick={() => void endMatch()} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg bg-rose-500/90 px-1 text-[10px] font-black text-white disabled:opacity-40"><VideoOff size={13} />종료</button>
           </div>
@@ -749,7 +755,7 @@ export default function WebRTCPage() {
                <div className="grid grid-cols-3 gap-2">
                  {!active ? <button onClick={startMatch} className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-3 text-sm font-black text-slate-950"><PhoneCall size={17} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 py-3 text-sm font-black text-white"><VideoOff size={17} /> 연결 종료</button>}
                   <button onClick={toggleMicrophone} disabled={!active} aria-label={audioEnabled ? '마이크 끄기' : '마이크 켜기'} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/10 px-2 text-xs font-black disabled:opacity-40">{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}{audioEnabled ? '마이크' : '음소거'}</button>
-                  <button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} /> {isSharingScreen ? '공유 중지' : '화면 + 음악'}</button>
+                   <button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} /> {isSharingScreen ? '공유 중지' : '화면·오디오 공유'}</button>
                  <span className="flex min-h-10 items-center justify-center rounded-xl border border-white/10 px-2 text-[11px] font-bold text-slate-400">{isConnected ? '연결됨' : '대기 중'}</span>
                </div>
              </div>
@@ -763,7 +769,7 @@ export default function WebRTCPage() {
            <section className="webrtc-sidebar-screen rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-3">
              <div className="mb-2 flex items-center justify-between px-1"><span className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">상대 화면</span><span className="text-[10px] font-bold text-slate-500">글로벌 라운지 위치</span></div>
              <div className="relative aspect-video overflow-hidden rounded-2xl bg-black"><video ref={sidebarVideoRef} autoPlay playsInline className="h-full w-full object-cover" />{!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center text-xs text-slate-500">상대 영상 대기 중</div>}</div>
-              <div className="mt-3 grid grid-cols-3 gap-2"><button onClick={toggleMicrophone} disabled={!active} className="flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-2 text-xs font-black disabled:opacity-40">{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}{audioEnabled ? '마이크 켜짐' : '마이크 꺼짐'}</button><button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} />{isSharingScreen ? '공유 중지' : '화면 + 음악'}</button><span className="flex items-center justify-center rounded-xl border border-white/10 px-2 text-[10px] font-bold text-slate-400">{isConnected ? '연결됨' : '대기 중'}</span></div>
+              <div className="mt-3 grid grid-cols-3 gap-2"><button onClick={toggleMicrophone} disabled={!active} className="flex items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 py-2 text-xs font-black disabled:opacity-40">{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}{audioEnabled ? '마이크 켜짐' : '마이크 꺼짐'}</button><button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} />{isSharingScreen ? '공유 중지' : '화면·오디오 공유'}</button><span className="flex items-center justify-center rounded-xl border border-white/10 px-2 text-[10px] font-bold text-slate-400">{isConnected ? '연결됨' : '대기 중'}</span></div>
              <div className="mt-3 max-h-36 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-4 text-center text-xs text-slate-500">연결 후 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={`side-${message.id}`} className="rounded-xl bg-white/[0.05] p-2 text-xs"><b className="text-cyan-200">{message.user}</b><p className="mt-1 break-words text-slate-300">{message.text}</p></div>)}</div>
               {user && activeCallId && <form onSubmit={sendVideoChat} className="mt-2 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="메시지 또는 AI 질문..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none" /><button type="button" onClick={() => void askSharedAi()} className="rounded-xl border border-violet-300/30 bg-violet-300/10 px-3 text-[11px] font-black text-violet-100">AI 함께</button><button className="rounded-xl bg-cyan-400 px-3 text-xs font-black text-slate-950">전송</button></form>}
            </section>
