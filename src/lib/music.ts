@@ -29,6 +29,7 @@ export function emitMusicPlayerEvent(detail: { player: 'top' | 'radio' | 'game';
 }
 
 export const MUSIC_TRACKS: MusicTrack[] = [
+  { id: 'would-you', title: 'WOULD YOU (feat. TARZZAN, WOOCHAN)', artist: 'TAEYANG', videoId: 'K1VTsnCNu3Y', keywords: ['TAEYANG', '태양', 'WOULD YOU', 'QUINTESSENCE'] },
   { id: 'swim', title: 'SWIM', artist: 'BTS', videoId: 'b4iVv91Z6lY', keywords: ['BTS', 'SWIM', '신곡'] },
   { id: 'droptop', title: 'DROP TOP', artist: 'MEOVV (미야오)', videoId: 'l4On7TQoM-M', keywords: ['미야오', 'DROPTOP', 'MEOVV'] },
   { id: 'supernova', title: 'Supernova', artist: 'aespa', videoId: 'phuiiNCxRMg', keywords: ['aespa', 'Supernova', 'SM'] },
@@ -37,7 +38,7 @@ export const MUSIC_TRACKS: MusicTrack[] = [
   { id: 'butter', title: 'Butter', artist: 'BTS', videoId: 'WMweEpGlu_U', keywords: ['BTS', 'Butter', 'K-pop'] },
 ];
 
-export const MUSIC_HOT_KEYWORDS = ['SWIM', '미야오 DROP TOP', 'K-pop 최신곡', 'BTS 전곡', 'K-POP TOP 100', '뉴진스', 'BLACKPINK'];
+export const MUSIC_HOT_KEYWORDS = ['WOULD YOU', 'SWIM', '미야오 DROP TOP', 'K-pop 최신곡', 'BTS 전곡', 'K-POP TOP 100', '뉴진스', 'BLACKPINK'];
 
 export function searchMusicTracks(query: string): MusicTrack[] {
   const normalized = query.trim().toLowerCase();
