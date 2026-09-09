@@ -4,10 +4,10 @@ import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import GlobalChat from '@/components/layout/GlobalChat';
-import PortalSidebar from '@/components/layout/PortalSidebar';
 import PortalFrame from '@/components/layout/PortalFrame';
 import MarketTicker from '@/components/layout/MarketTicker';
 import MusicPlayer from '@/components/layout/MusicPlayer';
+import SiteBackgroundVideo from '@/components/layout/SiteBackgroundVideo';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
 import { AdSenseScript } from '@/components/ads/AdSense';
@@ -69,11 +69,11 @@ export default function RootLayout({
             inLanguage: ['ko', 'en'],
             potentialAction: { '@type': 'SearchAction', target: 'https://gyopo.pages.dev/assistant?q={search_term_string}', 'query-input': 'required name=search_term_string' },
           }) }} />
-          <div className="portal-chrome">
+          <SiteBackgroundVideo />
+          <div className="portal-chrome relative z-10">
             <Header />
             <MarketTicker />
             <MusicPlayer />
-            <PortalSidebar />
             <GlobalChat />
             <FriendDock />
           </div>
