@@ -652,3 +652,56 @@ body { padding-top: 5.75rem !important; }
 .market-page [class~="text-gray-500"] {
   color: rgb(148 163 184) !important;
 }
+
+/* Final responsive pass: keep search and conversation controls quiet and translucent. */
+.music-player-search { border: 0 !important; background: rgba(255, 255, 255, .08) !important; box-shadow: none !important; backdrop-filter: blur(14px); }
+.music-player-search input { background: transparent !important; border: 0 !important; }
+.music-player-results { border: 0 !important; box-shadow: 0 18px 50px rgba(0, 0, 0, .25); }
+.assistant-page > div { background: rgba(8, 16, 31, .26) !important; border-color: rgba(165, 243, 252, .12) !important; }
+.assistant-page form > div { border: 0 !important; background: rgba(255, 255, 255, .08) !important; box-shadow: none !important; }
+.assistant-page form input { background: transparent !important; }
+
+@media (min-width: 1024px) {
+  .assistant-page { padding-inline: 2rem !important; }
+  .assistant-page > div { min-height: calc(100dvh - 9rem) !important; }
+  .assistant-page > div > header { padding: 2rem 2.25rem !important; }
+  .assistant-page > div > .flex-1 { padding: 2rem 2.25rem !important; }
+  .assistant-page > div > form { padding: 1.25rem 2.25rem !important; }
+}
+
+@media (max-width: 639px) {
+  .assistant-page { height: calc(100dvh - 7rem) !important; min-height: 0 !important; overflow: hidden !important; padding: .4rem !important; }
+  .assistant-page > div { height: 100% !important; min-height: 0 !important; border-radius: 1rem !important; }
+  .assistant-page > div > header { padding: .7rem !important; }
+  .assistant-page > div > header .h-12 { height: 2.25rem !important; width: 2.25rem !important; border-radius: .7rem !important; }
+  .assistant-page > div > header h1 { font-size: 1.05rem !important; }
+  .assistant-page > div > header > p { display: none !important; }
+  .assistant-page > div > .flex-1 { min-height: 0 !important; gap: .55rem !important; padding: .7rem !important; }
+  .assistant-page > div > .flex-1 > div { gap: .45rem !important; }
+  .assistant-page > div > .flex-1 > div > div { max-width: calc(100% - 2rem) !important; padding: .55rem .7rem !important; font-size: .72rem !important; line-height: 1.45 !important; border-radius: .8rem !important; }
+  .assistant-page > div > form { padding: .55rem !important; }
+  .assistant-page > div > form > div { padding: .25rem !important; border-radius: .7rem !important; }
+  .assistant-page > div > form input { padding-inline: .55rem !important; font-size: .72rem !important; }
+  .assistant-page > div > form button { height: 2rem !important; width: 2rem !important; border-radius: .6rem !important; }
+
+  .portal-frame > main .webrtc-page { height: calc(100dvh - 7rem) !important; min-height: 0 !important; overflow: hidden !important; padding: .35rem !important; }
+  .portal-frame > main .webrtc-shell { height: 100% !important; min-height: 0 !important; transform: none !important; }
+  .webrtc-shell > header { position: static !important; height: 2.2rem !important; margin: 0 0 .25rem !important; padding: 0 .35rem !important; }
+  .webrtc-shell > header h1 { font-size: 1.05rem !important; }
+  .webrtc-shell > header .mb-2 { margin-bottom: 0 !important; font-size: .48rem !important; }
+  .webrtc-shell > header p { display: none !important; }
+  .webrtc-grid { height: calc(100% - 2.45rem) !important; min-height: 0 !important; display: block !important; }
+  .webrtc-grid > section { position: relative !important; inset: auto !important; height: 100% !important; max-height: none !important; aspect-ratio: auto !important; border-radius: 1rem !important; }
+  .webrtc-grid > section > div:first-of-type { padding: .5rem !important; }
+  .webrtc-grid > section > div:first-of-type p:first-child { font-size: .85rem !important; }
+  .webrtc-grid > section .webrtc-mobile-controls { display: none !important; }
+  .webrtc-grid > aside { position: absolute !important; right: .45rem !important; bottom: .45rem !important; left: .45rem !important; z-index: 8 !important; display: grid !important; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr) !important; gap: .35rem !important; max-height: 43% !important; overflow: hidden !important; padding: 0 !important; border-radius: .85rem !important; background: transparent !important; }
+  .webrtc-grid > aside > section:nth-child(1), .webrtc-grid > aside > section:nth-child(3) { display: block !important; min-width: 0 !important; padding: .5rem !important; border-radius: .85rem !important; background: rgba(8, 13, 28, .82) !important; backdrop-filter: blur(16px); }
+  .webrtc-grid > aside > section:nth-child(2), .webrtc-grid > aside > section:nth-child(4), .webrtc-grid > aside > section:nth-child(5) { display: none !important; }
+  .webrtc-grid > aside > section:nth-child(1) .mb-5 { margin-bottom: .4rem !important; padding: .4rem !important; }
+  .webrtc-grid > aside > section:nth-child(1) button { padding-block: .55rem !important; font-size: .68rem !important; }
+  .webrtc-grid > aside > section:nth-child(3) .mb-4 { margin-bottom: .35rem !important; }
+  .webrtc-grid > aside > section:nth-child(3) select { margin-top: .2rem !important; padding-block: .35rem !important; font-size: .68rem !important; }
+  .webrtc-grid > aside > section:nth-child(3) > div.grid { margin-top: .35rem !important; }
+  .webrtc-grid > aside > section:nth-child(3) > p { display: none !important; }
+}
