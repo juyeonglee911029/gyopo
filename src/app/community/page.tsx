@@ -147,10 +147,10 @@ export default function CommunityPage() {
     : posts.filter((post) => post.country === selectedCountry || post.country === 'Global');
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
+     <div className="community-page container mx-auto max-w-5xl px-4 py-8 text-slate-100">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-black text-gray-800">교민 커뮤니티</h1>
+          <h1 className="text-3xl font-black text-white">교민 커뮤니티</h1>
           <p className="text-sm text-gray-500 mt-1">직접 쓴 이야기와 선별된 생활 질문·정보·유머를 나눠보세요.</p>
         </div>
          <button onClick={() => openWrite()} className="bg-blue-600 text-white px-5 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-md transition">
@@ -158,8 +158,8 @@ export default function CommunityPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-gray-50 border-b border-gray-200 text-sm font-bold text-gray-500">
+       <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[.045]">
+         <div className="hidden grid-cols-12 gap-4 border-b border-white/10 bg-white/[.035] p-4 text-sm font-bold text-slate-400 md:grid">
           <div className="col-span-1 text-center">분류</div>
           <div className="col-span-1 text-center">국가</div>
           <div className="col-span-5">제목</div>
@@ -168,11 +168,11 @@ export default function CommunityPage() {
           <div className="col-span-1 text-center">조회</div>
         </div>
 
-        <div className="divide-y divide-gray-100">
-          {loading && <div className="text-center py-20 text-gray-400">게시글을 불러오는 중입니다...</div>}
-          {!loading && filteredPosts.length === 0 && <div className="text-center py-20 text-gray-500">아직 게시글이 없습니다. 첫 글을 남겨보세요.</div>}
+         <div className="divide-y divide-white/10">
+           {loading && <div className="py-20 text-center text-slate-400">게시글을 불러오는 중입니다...</div>}
+           {!loading && filteredPosts.length === 0 && <div className="py-20 text-center text-slate-500">아직 게시글이 없습니다. 첫 글을 남겨보세요.</div>}
           {filteredPosts.map((post) => (
-             <div key={post.id} className="relative hover:bg-blue-50/50 transition-colors">
+             <div key={post.id} className="relative transition-colors hover:bg-white/[.06]">
               <Link href={post.sourceContentId ? `/content/${post.sourceContentId}?source=${encodeURIComponent(post.sourceId || '')}&category=${encodeURIComponent(post.sourceCategory || 'community')}&url=${encodeURIComponent(post.sourceUrl || '')}` : `/community/${post.id}`} className="block">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center">
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center">
@@ -180,15 +180,15 @@ export default function CommunityPage() {
                     {post.type === 'notice' ? '공지' : post.type === 'news' ? '뉴스' : '자유'}
                   </span>
                 </div>
-                <div className="col-span-1 text-xs md:text-sm font-bold text-center"><span className="bg-gray-100 px-2 py-1 rounded text-gray-600">{post.country}</span></div>
+                 <div className="col-span-1 text-center text-xs font-bold md:text-sm"><span className="rounded bg-white/10 px-2 py-1 text-slate-300">{post.country}</span></div>
                  <div className="col-span-1 md:col-span-5">
-                     <div className="flex items-center gap-3">{post.image && <img src={post.image} alt="" className="h-12 w-16 shrink-0 rounded-lg object-cover" />}<div className="min-w-0"><h3 className="truncate text-base font-bold text-gray-800">{post.title}</h3><p className="mt-1 line-clamp-1 text-xs text-gray-500">{post.body}</p></div></div>
+                      <div className="flex items-center gap-3">{post.image && <img src={post.image} alt="" className="h-12 w-16 shrink-0 rounded-lg object-cover" />}<div className="min-w-0"><h3 className="truncate text-base font-bold text-white">{post.title}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{post.body}</p></div></div>
                    {post.sourceName && <div className="text-xs text-blue-500">출처: {post.sourceName}</div>}
                   {!!post.comments && <span className="text-blue-500 text-sm font-bold">[{post.comments}]</span>}
                 </div>
-                   <div className="col-span-2 text-sm text-gray-500 flex items-center md:justify-center"><span className="md:hidden mr-1">작성자: </span>{post.author}</div>
-                <div className="col-span-2 text-xs md:text-sm text-gray-400 text-center">{formatDate(post.createdAt)}</div>
-                <div className="col-span-1 text-xs md:text-sm text-gray-400 text-center hidden md:block">{post.views || 0}</div>
+                    <div className="col-span-2 flex items-center text-sm text-slate-400 md:justify-center"><span className="mr-1 md:hidden">작성자: </span>{post.author}</div>
+                 <div className="col-span-2 text-center text-xs text-slate-500 md:text-sm">{formatDate(post.createdAt)}</div>
+                 <div className="col-span-1 hidden text-center text-xs text-slate-500 md:block md:text-sm">{post.views || 0}</div>
               </div>
               </Link>
               {user && (user.id === post.authorId || isMasterUser(user)) && !post.id.startsWith('seed-') && <div className="absolute right-3 bottom-2 flex gap-2 text-xs">{user.id === post.authorId && <button onClick={() => openWrite(post)} className="font-bold text-blue-600 hover:underline">수정</button>}<button onClick={() => void handleDelete(post)} className="font-bold text-red-500 hover:underline">삭제</button></div>}
