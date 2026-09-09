@@ -2,12 +2,50 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { useState } from 'react';
-import { Gamepad2, Wallet, LogIn, LogOut, Moon, Video, Menu, X, Globe2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CircleDollarSign, Gamepad2, Languages, LogIn, LogOut, Video, Menu, X } from 'lucide-react';
 import { isMasterUser, signOut } from '@/lib/firebase';
+import { REGIONS } from '@/lib/regions';
 
 function formatUsdt(value: number) {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function TranslateMenu() {
+  const selectedCountry = useGlobalStore((state) => state.selectedCountry);
+  const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const selectedRegion = REGIONS.find((region) => region.id === selectedCountry) || REGIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Translate country selector" className="translate-control">
+        <Languages size={15} className="text-teal-300" />
+        <span className="hidden sm:inline">Translate</span>
+        <span aria-hidden="true">{selectedRegion.flag}</span>
+      </button>
+      {open && <div className="translate-menu">
+        <div className="border-b border-white/8 px-3 py-2"><p className="text-[10px] font-black uppercase tracking-[.18em] text-teal-300">Translate</p><p className="mt-0.5 text-[11px] text-slate-500">지역을 선택하세요 / Choose a region</p></div>
+        <div className="max-h-72 overflow-y-auto p-1.5">
+          {REGIONS.map((region) => <button key={region.id} type="button" onClick={() => { setSelectedCountry(region.id); setOpen(false); }} className={`translate-option ${region.id === selectedCountry ? 'translate-option-active' : ''}`}>
+            <span className="text-base" aria-hidden="true">{region.flag}</span>
+            <span className="min-w-0 flex-1 truncate text-left"><b>{region.label}</b><small>{region.short}</small></span>
+            {region.id === selectedCountry && <span className="text-xs text-teal-300">✓</span>}
+          </button>)}
+        </div>
+      </div>}
+    </div>
+  );
 }
 
 export default function Header() {
@@ -34,29 +72,26 @@ export default function Header() {
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-          <div className="hidden items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-bold text-slate-300 md:flex" aria-label="전체 지역">
-            <Globe2 size={14} className="text-teal-300" /> 전체 지역
-          </div>
-          <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
-            <Gamepad2 size={16} />
-            <span>테트리스</span>
-          </Link>
-          <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
-            <Video size={17} />
-            <span>화상채팅</span>
-          </Link>
-          <div aria-label="다크모드 적용" className="header-night-mode"><Moon size={14} /><span className="hidden xl:inline">NIGHT MODE</span></div>
+           <TranslateMenu />
+           <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
+             <Gamepad2 size={16} />
+             <span>테트리스 <em>/ Tetris</em></span>
+           </Link>
+           <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
+             <Video size={17} />
+             <span>화상채팅 <em>/ Video</em></span>
+           </Link>
 
-          {user ? (
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link href="/wallet" className="flex items-center gap-1.5 rounded-lg border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-sm font-bold text-teal-200 transition hover:bg-teal-300/20">
-                <Wallet size={16} />
-                <span className="text-[10px] sm:text-sm">{formatUsdt(user.usdtBalance)} USDT</span>
-              </Link>
-              {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
-              <div className="flex items-center gap-2">
-                <img src={user.image} alt="Profile" className="w-8 h-8 rounded-full border border-white/15" />
-                <button onClick={handleLogout} aria-label="로그아웃" className="p-1 text-slate-500 transition-colors hover:text-rose-300">
+           {user ? (
+             <div className="flex items-center gap-2 sm:gap-4">
+               <Link href="/wallet" aria-label={`${formatUsdt(user.usdtBalance)} USDT`} className="usdt-balance">
+                 <CircleDollarSign size={16} />
+                 <span>{formatUsdt(user.usdtBalance)} <small>USDT</small></span>
+               </Link>
+               {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
+               <div className="flex items-center gap-2">
+                 <button type="button" onClick={() => window.dispatchEvent(new Event('gyopo-profile-edit'))} aria-label="프로필 편집 / Edit profile" className="header-profile-button"><img src={user.image} alt="Profile" className="h-8 w-8 rounded-full border border-white/15 object-cover" /></button>
+                 <button onClick={handleLogout} aria-label="로그아웃" className="p-1 text-slate-500 transition-colors hover:text-rose-300">
                   <LogOut size={18} />
                 </button>
               </div>
@@ -76,24 +111,23 @@ export default function Header() {
         </div>
       </div>
       {menuOpen && <div className="header-mobile-menu lg:hidden">
-        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-bold text-slate-200">
-          <Globe2 size={16} className="text-teal-300" />
-          <span className="text-slate-400">표시 범위</span>
-          <span className="ml-auto font-black text-white">전체 지역</span>
-        </div>
-        <nav className="grid grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-          <Link onClick={() => setMenuOpen(false)} href="/jobs">구인구직</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/directory">업소록</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/market">장터</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/community">커뮤니티</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/news">오늘의 뉴스</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/games">테트리스</Link>
-          <Link onClick={() => setMenuOpen(false)} href="/webrtc">화상채팅</Link>
-           <Link onClick={() => setMenuOpen(false)} href="/theater">극장</Link>
-            <Link onClick={() => setMenuOpen(false)} href="/music">K-pop 음악</Link>
-            <Link onClick={() => setMenuOpen(false)} href="/users">유저목록</Link>
-           <Link onClick={() => setMenuOpen(false)} href="/assistant">AI 검색</Link>
-        </nav>
+       <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-bold text-slate-200">
+           <TranslateMenu />
+           <span className="text-slate-400">지역 / Region</span>
+         </div>
+         <nav className="grid grid-cols-2 gap-2 text-sm font-bold text-slate-200">
+           <Link onClick={() => setMenuOpen(false)} href="/jobs">구인구직 / Jobs</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/directory">업소록 / Directory</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/market">장터 / Market</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/community">커뮤니티 / Community</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/news">오늘의 뉴스 / News</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/games">테트리스 / Tetris</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/webrtc">화상채팅 / Video</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/theater">극장 / Theater</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/music">K-pop 음악 / Radio</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/users">유저목록 / Members</Link>
+           <Link onClick={() => setMenuOpen(false)} href="/assistant">AI 검색 / AI Search</Link>
+         </nav>
       </div>}
     </header>
   );
