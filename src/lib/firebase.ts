@@ -531,6 +531,8 @@ export type TetrisLobbyRoom = {
   roomNumber?: number;
   status?: 'idle' | 'waiting' | 'occupied';
   activeMatchId?: string;
+  inviteOnly?: boolean;
+  invitedUserId?: string;
   waitingUserId?: string;
   waitingUser?: TetrisQueueProfile;
   playerAId?: string;
@@ -544,6 +546,7 @@ export type WebrtcMatchClaim = { callId: string; opponent: TetrisQueueProfile; i
 
 const TETRIS_LOBBY_ROOM_COUNT = 10;
 const TETRIS_LOBBY_STALE_MS = 30_000;
+const TETRIS_COUNTDOWN_MS = 3_000;
 
 function tetrisLobbyId(roomNumber: number) {
   return `room-${roomNumber}`;
@@ -579,12 +582,14 @@ async function compareAndMergeTetrisLobbyRoom(
   return response.ok;
 }
 
-function waitingLobbyData(roomNumber: number, matchId: string, profile: TetrisQueueProfile): Record<string, unknown> {
+function waitingLobbyData(roomNumber: number, matchId: string, profile: TetrisQueueProfile, invitedUserId?: string): Record<string, unknown> {
   const member = tetrisProfile(profile);
   return {
     roomNumber,
     status: 'waiting',
     activeMatchId: matchId,
+    inviteOnly: Boolean(invitedUserId),
+    invitedUserId: invitedUserId || null,
     waitingUserId: member.id,
     waitingUser: member,
     playerAId: member.id,
@@ -634,12 +639,15 @@ export async function claimTetrisLobbyRoom(profile: TetrisQueueProfile, token?: 
       await setTetrisRoomAccess(roomNumber, room.activeMatchId, room.playerAId || member.id, room.playerBId, token).catch(() => undefined);
       return { roomNumber, matchId: room.activeMatchId, role: 'A' };
     }
+    if (room?.status === 'waiting' && room.inviteOnly) continue;
     if (room?.status === 'waiting' && room.waitingUserId && isFreshTetrisLobbyRoom(room)) {
       const matchId = room.activeMatchId || `tetris-room-${roomNumber}-${crypto.randomUUID()}`;
       const joined = await compareAndMergeTetrisLobbyRoom(roomNumber, {
         roomNumber,
         status: 'occupied',
         activeMatchId: matchId,
+        inviteOnly: false,
+        invitedUserId: null,
         waitingUserId: null,
         waitingUser: null,
         playerAId: room.playerAId || room.waitingUserId,
@@ -664,7 +672,7 @@ export async function claimTetrisLobbyRoom(profile: TetrisQueueProfile, token?: 
   return null;
 }
 
-export async function reserveTetrisLobbyRoom(profile: TetrisQueueProfile, matchId: string, token?: string): Promise<number | null> {
+export async function reserveTetrisLobbyRoom(profile: TetrisQueueProfile, matchId: string, token?: string, invitedUserId?: string): Promise<number | null> {
   const member = tetrisProfile(profile);
   for (let roomNumber = 1; roomNumber <= TETRIS_LOBBY_ROOM_COUNT; roomNumber += 1) {
     const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
@@ -672,9 +680,10 @@ export async function reserveTetrisLobbyRoom(profile: TetrisQueueProfile, matchI
     if (room?.status === 'occupied') continue;
     if (room?.status === 'waiting') {
       if (room.waitingUserId === member.id) continue;
+      if (room.inviteOnly) continue;
       if (isFreshTetrisLobbyRoom(room)) continue;
     }
-    const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member), token, document?.updateTime);
+    const claimed = await compareAndMergeTetrisLobbyRoom(roomNumber, waitingLobbyData(roomNumber, matchId, member, invitedUserId), token, document?.updateTime);
     if (claimed) {
       await setTetrisRoomAccess(roomNumber, matchId, member.id, null, token);
       return roomNumber;
@@ -687,12 +696,14 @@ export async function joinTetrisLobbyRoom(roomNumber: number, matchId: string, p
   const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
   if (!document) return false;
   const room = decodeDocument<TetrisLobbyRoom>(document);
-  if (room.status !== 'waiting' || room.activeMatchId !== matchId || !room.waitingUserId || !isFreshTetrisLobbyRoom(room)) return false;
+  if (room.status !== 'waiting' || room.activeMatchId !== matchId || !room.waitingUserId || !room.inviteOnly || room.invitedUserId !== profile.id || !isFreshTetrisLobbyRoom(room)) return false;
   const member = tetrisProfile(profile);
   const joined = await compareAndMergeTetrisLobbyRoom(roomNumber, {
     roomNumber,
     status: 'occupied',
     activeMatchId: matchId,
+    inviteOnly: false,
+    invitedUserId: null,
     waitingUserId: null,
     waitingUser: null,
     playerAId: room.playerAId || room.waitingUserId,
@@ -957,7 +968,7 @@ export async function startTetrisCountdown(matchId: string, token?: string): Pro
   if (room.startAt) return room.startAt;
   if (room.phase === 'finished' || !room.readyA || !room.readyB || !room.stakeHeldA || !room.stakeHeldB) return null;
 
-  const startAt = new Date(Date.now() + 10_000).toISOString();
+   const startAt = new Date(Date.now() + TETRIS_COUNTDOWN_MS).toISOString();
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
