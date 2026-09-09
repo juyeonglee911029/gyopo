@@ -9,6 +9,7 @@ import PortalFrame from '@/components/layout/PortalFrame';
 import MarketTicker from '@/components/layout/MarketTicker';
 import MusicPlayer from '@/components/layout/MusicPlayer';
 import AppRuntime from '@/components/layout/AppRuntime';
+import FriendDock from '@/components/layout/FriendDock';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
 const notoSansKr = Noto_Sans_KR({
@@ -46,6 +47,7 @@ export default function RootLayout({
           <MusicPlayer />
           <PortalSidebar />
           <GlobalChat />
+          <FriendDock />
 
           <PortalFrame>
             <main className="min-w-0 flex-grow">
