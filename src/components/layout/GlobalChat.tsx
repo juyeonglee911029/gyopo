@@ -131,7 +131,7 @@ export default function GlobalChat() {
   return (
     <>
       <aside id="global-lounge" className={`global-lounge fixed bottom-4 right-4 top-24 z-[240] hidden w-[22rem] flex-col overflow-hidden rounded-3xl border border-cyan-200/15 bg-[#0a1120]/46 shadow-[0_24px_90px_rgba(0,0,0,.35)] backdrop-blur-xl transition-transform duration-300 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'} ${desktopMaximized ? 'global-lounge-fullscreen' : ''}`}>
-         <div className="border-b border-white/8 bg-[#0d1628]/45 p-4">
+          <div className="border-b border-white/8 bg-transparent p-4">
           <div className="flex items-center justify-between gap-3">
             <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> {language === 'ko' ? '실시간 라운지' : 'Live Lounge'}</div><p className="mt-1 text-[11px] text-slate-500">{language === 'ko' ? '지역에 관계없이 연결된 교민들' : 'Connect with the global Korean community'}</p></div>
              <div className="flex items-center gap-1">
@@ -162,7 +162,7 @@ export default function GlobalChat() {
         ))}
       </div>
 
-         <div className="border-t border-white/8 bg-[#0d1628]/45 p-3">
+          <div className="border-t border-white/8 bg-transparent p-3">
          {user ? (
            <form onSubmit={handleSend} className="space-y-2">
              {imageData && <div className="relative w-fit overflow-hidden rounded-lg border border-white/10"><img src={imageData} alt="첨부 미리보기" className="h-16 w-24 object-cover" /><button type="button" onClick={() => setImageData('')} aria-label="사진 첨부 취소" className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"><X size={11} /></button></div>}
@@ -202,4 +202,3 @@ export default function GlobalChat() {
     </>
   );
 }
-
