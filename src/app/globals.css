@@ -554,6 +554,13 @@ body { padding-top: 5.75rem !important; }
   .portal-chrome > section b { font-size: .66rem !important; }
   .portal-frame > footer { display: none !important; }
   .watch-page { min-height: calc(100dvh - 5.4rem) !important; }
+  .portal-frame > main > .news-page > header,
+  .portal-frame > main > .directory-page > div > header,
+  .portal-frame > main > .jobs-page > header,
+  .portal-frame > main > .community-page > div > header,
+  .portal-frame > main > .market-page > div > div:first-child,
+  .portal-frame > main > .music-page > .max-w-7xl > header,
+  .portal-frame > main > .assistant-page > div > header { padding-top: 3.5rem !important; }
 }
 
 /* Keep one responsive LIVE CHAT workspace instead of duplicate controls. */
