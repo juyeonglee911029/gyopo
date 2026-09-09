@@ -717,7 +717,7 @@ export default function WebRTCPage() {
     return (
       <div className="h-full min-h-0 w-full overflow-hidden bg-[#050914] text-white">
         <div className="relative flex h-full min-h-0 flex-col">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#10182b] px-3 py-2">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-transparent px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">GAME VOICE + VIDEO</div>
               <div className="truncate text-xs font-bold text-slate-300">{peer?.name || '상대방 연결 대기'}</div>
@@ -760,7 +760,7 @@ export default function WebRTCPage() {
             {!hasRemoteVideo && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_center,#172b50,#050914_70%)] text-center"><div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 p-5">{isMatching || active ? <LoaderCircle size={42} className="animate-spin text-cyan-300" /> : <Camera size={42} className="text-slate-500" />}</div><div><p className="text-xl font-black">{active ? status : '연결 대기 중'}</p><p className="mt-2 text-sm text-slate-400">{active ? '상대방의 카메라 연결을 기다리고 있습니다.' : '시작 버튼을 누르면 카메라와 마이크를 준비합니다.'}</p></div></div>}
             {(isConnected || hasRemoteVideo) && <div className="absolute left-4 top-4 flex items-center gap-2 rounded-xl bg-black/60 px-3 py-2 text-xs font-bold backdrop-blur"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> {status}</div>}
              {peer && <div className="webrtc-peer-card absolute bottom-4 left-4 rounded-2xl bg-black/60 px-4 py-3 backdrop-blur"><div className="flex items-center gap-3"><img src={peer.image} alt="" className="h-10 w-10 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="text-xs text-slate-300">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div></div>}
-             <div className="absolute bottom-4 right-4 w-1/4 min-w-[100px] overflow-hidden rounded-2xl border-2 border-white/60 bg-black shadow-2xl"><video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-cover ${flip ? 'scale-x-[-1]' : ''}`} /></div>
+              <div className="absolute bottom-4 right-4 w-1/4 min-w-[100px] overflow-hidden rounded-2xl border-2 border-white/60 bg-black shadow-2xl"><video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-contain bg-[#030611] ${flip ? 'scale-x-[-1]' : ''}`} /></div>
              <div className="webrtc-mobile-controls">
                <div className="mb-2 flex items-center justify-between gap-2 text-xs">
                  <span className="truncate font-bold text-slate-200">{active ? status : '카메라와 마이크를 준비하세요'}</span>
