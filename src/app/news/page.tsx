@@ -13,7 +13,7 @@ type SnapshotSection = { category: string; label: string; url: string; items: Sn
 type Snapshot = { id: string; sourceId: string; sourceName: string; region: string; url: string; title: string; description?: string; fetchedAt: string; verified?: boolean; items?: SnapshotItem[]; sections?: SnapshotSection[]; sourceSnapshot?: boolean };
 type NewsStory = { entry: SnapshotItem; category: string; categoryLabel: string; source: Snapshot };
 
-const categoryLabels: Record<string, string> = { news: '뉴스', events: '행사', jobs: '구인구직', directory: '업소', market: '장터', community: '커뮤니티' };
+const categoryLabels: Record<string, string> = { news: '뉴스', events: '행사', jobs: '구인구직', directory: '업소', community: '커뮤니티' };
 const navigationTitlePattern = /^(로그인|회원가입|전체보기|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|검색|한인회소개|임원소개|역대 회장|찾아오시는 길|주요 연락처|공지사항|한인회 소식지|대사관소식)$/i;
 
 function contentHref(sourceId: string, category: string, entry: SnapshotItem) {
