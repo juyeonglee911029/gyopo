@@ -754,3 +754,7 @@ body { padding-top: 5.75rem !important; }
 .portal-frame > main > .jobs-page main > a > div[class*="bg-white"] { border-bottom-color: transparent !important; background: transparent !important; box-shadow: none !important; }
 .portal-text-link.portal-text-link-button { font-family: inherit !important; font-size: .7rem !important; font-weight: 500 !important; line-height: 1.35 !important; }
 #friend-dock header .text-sm, #friend-dock header .text-sm *, #friend-dock .text-xs { font-size: .7rem !important; line-height: 1.35 !important; }
+/* Match the actual page-transition route wrapper. */
+.portal-frame .jobs-page header { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+.portal-frame .jobs-page main a > div,
+.portal-frame .jobs-page main a > div[class*="bg-white"] { border-bottom-color: transparent !important; background: transparent !important; box-shadow: none !important; }
