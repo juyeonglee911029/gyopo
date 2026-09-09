@@ -221,6 +221,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .games-page > .mx-auto:not(.tetris-modern-shell) { display: none; }
 .tetris-modern-shell { position: relative; }
 .tetris-modern-shell::before { position: absolute; top: -8rem; right: 5%; width: 32rem; height: 32rem; border-radius: 999px; background: rgba(34, 211, 238, .08); content: ""; filter: blur(70px); pointer-events: none; }
+.tetris-waiting-state { min-height: 15rem; padding-block: 2.5rem; }
 .tetris-arena-card, .tetris-panel { position: relative; border-radius: 0 !important; background: rgba(8, 16, 31, .34); box-shadow: none; }
 .tetris-chat-panel { overflow: hidden; }
 .tetris-chat-messages { scrollbar-width: thin; scrollbar-color: rgba(45, 212, 191, .45) transparent; }
@@ -255,6 +256,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .battle-fx-incoming { border-color: rgba(244, 63, 94, .7); color: #fecdd3; box-shadow: 0 0 45px rgba(244, 63, 94, .45); }
 
 @media (min-width: 1024px) {
+  .games-page { padding-inline: 1rem !important; }
+  .games-page > .tetris-modern-shell { width: min(calc(100% - .5rem), 1280px) !important; max-width: 1280px !important; transform: scale(.94); transform-origin: top center; }
+  .tetris-modern-shell > .grid { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr) !important; }
+  .tetris-video-panel { width: 100%; max-width: 34rem; justify-self: end; }
   .portal-text-rail { display: block; }
   body:has(#global-lounge.translate-x-0) .portal-frame { margin-right: 21rem; }
   body:has(#global-lounge.translate-x-0) .portal-chrome #global-lounge ~ button { right: 21rem !important; }
@@ -262,6 +267,13 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   body:has(#global-lounge.global-lounge-fullscreen) .portal-chrome #global-lounge ~ button { right: 1rem !important; }
   .webrtc-page { margin-right: 0; }
   .webrtc-shell > section { display: none; }
+}
+
+.global-lounge-mobile-toggle { display: grid !important; height: 2.75rem !important; width: 2.75rem !important; flex: 0 0 auto; place-items: center; border: 0 !important; border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; color: #fff; box-shadow: none !important; }
+.global-lounge-mobile-toggle:hover { background: rgba(255, 255, 255, .18) !important; }
+
+@media (max-width: 639px) {
+  .global-lounge-mobile-toggle { height: 3rem !important; width: 3rem !important; }
 }
 
 @media (max-width: 1023px) {
@@ -790,3 +802,21 @@ body { padding-top: 5.75rem !important; }
 /* Keep control borders consistently white and translucent. */
 #friend-dock button[class*="rounded-"], #global-lounge button[class*="rounded-"] { border-color: rgba(255, 255, 255, .2) !important; }
 .portal-frame .webrtc-grid > aside > section input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .portal-frame .webrtc-grid > aside > section select, .portal-frame .webrtc-grid > aside > section textarea { border-color: rgba(255, 255, 255, .24) !important; }
+
+/* Final control pass: square translucent fields, centered delete actions, and borderless chat controls. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select {
+  border: 1px solid rgba(255, 255, 255, .22) !important;
+  border-radius: 0 !important;
+  background: rgba(255, 255, 255, .08) !important;
+  box-shadow: none !important;
+}
+.music-player-search { border: 0 !important; border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; }
+.music-player-search input { border: 0 !important; border-radius: 0 !important; background: transparent !important; }
+.portal-frame button, .portal-chrome button, .music-player-shell button, #friend-dock button, #global-lounge button { border: 0 !important; border-color: transparent !important; }
+.delete-action, button[class*="text-red-"], button[class*="text-rose-"] { display: inline-flex !important; min-width: 4rem; min-height: 2.25rem; align-items: center !important; justify-content: center !important; padding: .55rem .75rem !important; border: 0 !important; border-radius: 0 !important; background: rgba(244, 63, 94, .82) !important; color: #fff !important; text-align: center !important; vertical-align: middle; white-space: nowrap; line-height: 1 !important; text-decoration: none !important; }
+#friend-dock { border: 0 !important; border-color: transparent !important; }
+#friend-dock > header, #friend-dock > div, #friend-dock input, #friend-dock button { border-color: transparent !important; }
+#friend-dock input { background: rgba(255, 255, 255, .08) !important; }
+.webrtc-page .webrtc-grid > aside, .webrtc-page .webrtc-grid > aside > section, .webrtc-page .webrtc-grid > aside > section > div { border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; }
+.tetris-modern-shell button, .tetris-modern-shell a { border: 0 !important; border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; color: #fff !important; box-shadow: none !important; }
+.tetris-modern-shell .tetris-action-danger { background: rgba(244, 63, 94, .82) !important; color: #fff !important; }
