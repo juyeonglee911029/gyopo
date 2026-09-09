@@ -404,7 +404,8 @@ body:has(.webrtc-page) .portal-frame > footer { display: none !important; }
 /* Keep page content on one left edge and reserve the footer as a compact base. */
 .portal-frame > main .mx-auto { margin-left: 0 !important; margin-right: 0 !important; }
 .portal-frame main [class*="bg-white"], .portal-frame main [class*="bg-slate-50"], .portal-frame main [class*="bg-gray-50"], .portal-frame main [class*="bg-gray-100"] { background-color: rgba(8, 16, 31, .34) !important; }
-.portal-frame > footer { margin-top: 1.5rem !important; background: rgba(6, 10, 20, .38) !important; }
+.portal-frame > footer { position: relative; margin-top: 1rem !important; border-top: 0 !important; background: rgba(6, 10, 20, .28) !important; }
+.portal-frame > footer::before { content: ''; position: absolute; top: 0; right: 0; left: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(103, 232, 249, .4) 12%, rgba(255, 255, 255, .16) 50%, rgba(103, 232, 249, .4) 88%, transparent); box-shadow: 0 0 18px rgba(34, 211, 238, .18); }
 .portal-frame > footer > div { padding-top: .6rem !important; padding-bottom: .55rem !important; }
 .portal-frame > footer > div > div:first-child { margin-bottom: .35rem !important; padding-bottom: .35rem !important; }
 .portal-frame > footer > div > div:nth-child(2) { margin-bottom: .35rem !important; padding-bottom: .35rem !important; }
@@ -413,6 +414,7 @@ body:has(.webrtc-page) .portal-frame > footer { display: none !important; }
 .portal-frame > footer .rounded-xl { border-radius: .55rem !important; padding: .45rem !important; }
 .portal-frame > footer .grid { margin-top: .35rem !important; gap: .25rem !important; }
 .portal-frame > footer p, .portal-frame > footer nav { font-size: .62rem !important; }
+@media (min-width: 1024px) { .portal-frame > footer::before { left: -9rem; } }
 .tetris-modern-shell > header { background: transparent !important; }
 
 body.webrtc-compact-shell .portal-frame,
