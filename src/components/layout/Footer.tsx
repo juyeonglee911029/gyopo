@@ -26,40 +26,41 @@ export default function Footer() {
   }, []);
 
   return (
-    <footer className="bg-gray-50 border-t border-gray-200 mt-20">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="mt-16 border-t border-cyan-300/10 bg-[#060a14] text-white">
+      <div className="container mx-auto px-4 py-10">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-6">
+          <div><div className="text-[10px] font-black uppercase tracking-[.3em] text-cyan-300">Global gaming community</div><div className="mt-1 text-2xl font-black tracking-tight">GYOPO NETWORK</div></div>
+          <div className="flex gap-2 text-[10px] font-black"><Link href="/games" className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-cyan-200">LIVE ARENA</Link><Link href="/community" className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-slate-300">COMMUNITY</Link><Link href="/music" className="rounded-full border border-violet-300/20 bg-violet-300/10 px-3 py-2 text-violet-200">K-POP RADIO</Link></div>
+        </div>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           <div className="col-span-1 md:col-span-2">
-            <h3 className="text-xl font-black text-gray-800 mb-4">K-Global Portal</h3>
-            <p className="text-gray-500 text-sm leading-relaxed max-w-sm">
-              전 세계 한인 교민을 위한 정보 포털입니다. 구인/구직, 업소록, 장터, 커뮤니티를 한곳에서 만나보세요.
+            <h3 className="mb-3 text-lg font-black">PLAY · CONNECT · BELONG</h3>
+            <p className="max-w-md text-sm leading-6 text-slate-500">
+              전 세계 한인이 게임, 라이브 채팅, 음악과 지역 정보를 함께 나누는 글로벌 커뮤니티입니다.
             </p>
           </div>
           <div>
-            <h4 className="font-bold text-gray-800 mb-4">바로가기</h4>
-            <ul className="space-y-2 text-sm text-gray-500">
-              <li><Link href="/community?category=notice" className="hover:text-blue-600 transition-colors">공지사항</Link></li>
-              <li><Link href="/ads" className="hover:text-blue-600 transition-colors">광고 문의</Link></li>
-              <li><Link href="/community?category=partnership" className="hover:text-blue-600 transition-colors">제휴 제안</Link></li>
+            <h4 className="mb-4 text-xs font-black uppercase tracking-[.2em] text-slate-300">Network</h4>
+            <ul className="space-y-2 text-sm text-slate-500">
+              <li><Link href="/community?category=notice" className="transition-colors hover:text-cyan-200">공지사항</Link></li>
+              <li><Link href="/ads" className="transition-colors hover:text-cyan-200">광고 문의</Link></li>
+              <li><Link href="/community?category=partnership" className="transition-colors hover:text-cyan-200">제휴 제안</Link></li>
             </ul>
           </div>
           <div>
-            <h4 className="font-bold text-gray-800 mb-4">고객지원</h4>
-            <ul className="space-y-2 text-sm text-gray-500">
-              <li><Link href="/terms" className="hover:text-blue-600 transition-colors">이용약관</Link></li>
-              <li><Link href="/privacy" className="hover:text-blue-600 transition-colors">개인정보처리방침</Link></li>
-              <li><Link href="/help" className="hover:text-blue-600 transition-colors">고객센터</Link></li>
+            <h4 className="mb-4 text-xs font-black uppercase tracking-[.2em] text-slate-300">Support</h4>
+            <ul className="space-y-2 text-sm text-slate-500">
+              <li><Link href="/terms" className="transition-colors hover:text-cyan-200">이용약관</Link></li>
+              <li><Link href="/privacy" className="transition-colors hover:text-cyan-200">개인정보처리방침</Link></li>
+              <li><Link href="/help" className="transition-colors hover:text-cyan-200">고객센터</Link></li>
             </ul>
           </div>
         </div>
-        <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-          <div className="rounded-xl bg-white border border-gray-200 p-3"><div className="text-[11px] text-gray-400 font-bold">오늘 방문</div><div className="text-lg font-black text-gray-800">{stats.today.toLocaleString()}</div></div>
-          <div className="rounded-xl bg-white border border-gray-200 p-3"><div className="text-[11px] text-gray-400 font-bold">이번 달</div><div className="text-lg font-black text-gray-800">{stats.month.toLocaleString()}</div></div>
-          <div className="rounded-xl bg-white border border-gray-200 p-3"><div className="text-[11px] text-gray-400 font-bold">누적 방문</div><div className="text-lg font-black text-gray-800">{stats.total.toLocaleString()}</div></div>
-          <div className="rounded-xl bg-green-50 border border-green-100 p-3"><div className="text-[11px] text-green-600 font-bold">현재 접속</div><div className="text-lg font-black text-green-700">{onlineCount.toLocaleString()}</div></div>
+        <div className="mt-8 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+          {[['오늘 방문', stats.today], ['이번 달', stats.month], ['누적 방문', stats.total], ['현재 접속', onlineCount]].map(([label, value], index) => <div key={String(label)} className={`rounded-xl border p-3 ${index === 3 ? 'border-emerald-300/20 bg-emerald-300/[.07]' : 'border-white/10 bg-white/[.03]'}`}><div className="text-[10px] font-bold text-slate-500">{label}</div><div className={`text-lg font-black ${index === 3 ? 'text-emerald-300' : 'text-white'}`}>{Number(value).toLocaleString()}</div></div>)}
         </div>
-        <div className="border-t border-gray-200 mt-10 pt-8 text-center text-sm text-gray-400">
-          &copy; 2026 K-Global Portal. All rights reserved.
+        <div className="mt-8 border-t border-white/10 pt-6 text-center text-[11px] font-bold tracking-wider text-slate-600">
+          &copy; 2026 GYOPO GLOBAL NETWORK. ALL RIGHTS RESERVED.
         </div>
       </div>
     </footer>
