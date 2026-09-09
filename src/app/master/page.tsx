@@ -15,6 +15,8 @@ type SourceItem = { title: string; url: string; description?: string; body?: str
 type SourceSection = { category: ContentCategory; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
 
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
+
 async function retryPublish(action: () => Promise<void>) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -99,18 +101,21 @@ export default function MasterPage() {
       setSavingAction(null);
     }
   };
-  const syncSource = async (source: ContentSource) => {
+  const syncSource = async (source: ContentSource, requestedCategory?: ContentCategory) => {
     if (!token) return setMessage('로그인 세션이 없습니다. 다시 로그인해주세요.');
     const authorId = user?.id;
     if (!authorId) return setMessage('마스터 계정 정보를 확인할 수 없습니다. 다시 로그인해주세요.');
-    setSourceStatus((current) => ({ ...current, [source.id]: '확인 중...' }));
+    const statusKey = `${source.id}:${requestedCategory || 'all'}`;
+    const updateSourceStatus = (status: string) => setSourceStatus((current) => ({ ...current, [source.id]: status, [statusKey]: status }));
+    updateSourceStatus('확인 중...');
     try {
        if (disabledSourceIds.includes(source.id)) return;
-       const response = await fetch(`/api/content/preview?source=${encodeURIComponent(source.id)}`);
+       const query = requestedCategory ? `&category=${encodeURIComponent(requestedCategory)}` : '';
+       const response = await fetch(`/api/content/preview?source=${encodeURIComponent(source.id)}${query}`);
       const data = await response.json() as SourcePayload;
       if (!response.ok) throw new Error(String(data.error || '출처를 확인하지 못했습니다.'));
       if (data.status === 'unavailable') {
-        setSourceStatus((current) => ({ ...current, [source.id]: '연결 불가' }));
+         updateSourceStatus('연결 불가');
         setMessage(`${source.name}: 현재 원문 서버가 응답하지 않습니다. 원문 링크는 계속 열 수 있습니다.`);
         return;
       }
@@ -119,11 +124,12 @@ export default function MasterPage() {
         await retryPublish(() => mergeDocument('contentSnapshots', source.id, snapshot, token));
       } catch {
         // Production may still have the old Firestore rules. Posts is the public fallback publishing channel.
-        await retryPublish(() => mergeDocument('posts', `source-snapshot-${source.id}`, {
-          type: 'news',
-          sourceSnapshot: true,
-          sourceId: source.id,
-          title: data.title || source.name,
+          await retryPublish(() => mergeDocument('posts', `source-snapshot-${source.id}${requestedCategory ? `-${requestedCategory}` : ''}`, {
+           type: requestedCategory === 'community' ? 'general' : 'news',
+           sourceSnapshot: true,
+           sourceId: source.id,
+           sourceCategory: requestedCategory || source.categories[0] || 'news',
+           title: data.title || `${source.name} · ${requestedCategory ? categoryLabels[requestedCategory] : '전체 분류'}`,
           body: data.description || source.note,
           authorId,
           author: source.name,
@@ -139,9 +145,11 @@ export default function MasterPage() {
         }, token));
       }
       const publishErrors: string[] = [];
-      const sections = [...(data.sections || [])];
-      if (data.items?.length && source.categories[0] && !sections.some((section) => section.category === source.categories[0])) {
-        sections.unshift({ category: source.categories[0], label: source.categories[0] === 'news' ? '뉴스' : '출처 정보', url: data.url || source.url, items: data.items });
+       const sections = (data.sections || []).filter((section) => !requestedCategory || section.category === requestedCategory);
+       const items = requestedCategory ? (data.items || []).filter((item) => !item.category || item.category === requestedCategory) : (data.items || []);
+       const inferredCategory = requestedCategory || (items.find((item) => item.category)?.category as ContentCategory | undefined) || (items.length ? source.categories[0] : undefined);
+       if (items.length && inferredCategory && !sections.some((section) => section.category === inferredCategory)) {
+         sections.unshift({ category: inferredCategory, label: categoryLabels[inferredCategory], url: data.url || source.url, items });
       }
       for (const section of sections) {
         const curatedItems = curateSourceItems(section.items || [], section.category);
@@ -164,17 +172,17 @@ export default function MasterPage() {
         }
       }
       const partial = publishErrors.length > 0 || data.status === 'partial';
-      setSourceStatus((current) => ({ ...current, [source.id]: partial ? '부분 확인' : '게시 완료' }));
-      setMessage(`${source.name}: 제목·본문·이미지를 분리해 카테고리별로 게시했습니다${partial ? ' 일부 목록은 원문 서버 제한으로 부분 확인 상태입니다.' : '.'}`);
+       updateSourceStatus(partial ? '부분 확인' : '게시 완료');
+       setMessage(`${source.name}${requestedCategory ? ` · ${categoryLabels[requestedCategory]}` : ''}: 카테고리를 구분해 게시했습니다${partial ? ' 일부 목록은 원문 서버 제한으로 부분 확인 상태입니다.' : '.'}`);
     } catch (error) {
-      setSourceStatus((current) => ({ ...current, [source.id]: '확인 실패' }));
+      updateSourceStatus('확인 실패');
       setMessage(error instanceof Error ? `${source.name}: ${error.message.slice(0, 140)}` : `${source.name}: 확인 실패`);
     }
   };
   const syncAllSources = async () => {
     setMessage('등록된 공식·검증 출처를 순서대로 확인하고 있습니다.');
     for (const source of CONTENT_SOURCES.filter((item) => !disabledSourceIds.includes(item.id))) await syncSource(source);
-    setMessage('출처 확인이 끝났습니다. 확인된 결과만 뉴스 허브에 게시했습니다.');
+    setMessage('출처 확인이 끝났습니다. 확인된 결과를 뉴스·커뮤니티·구인구직 등 원래 카테고리에 나누어 게시했습니다.');
   };
   const syncAutoSources = async () => {
     for (const source of CONTENT_SOURCES.filter((item) => item.autoImport && !disabledSourceIds.includes(item.id))) await syncSource(source);
@@ -277,7 +285,9 @@ export default function MasterPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 text-slate-900 dark:text-white">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">Master Operations</p><h1 className="mt-2 text-4xl font-black">운영자 센터</h1><p className="mt-2 text-sm text-slate-500">회원 잔고·입출금 신청·입금 지갑 설정을 서버 기준으로 관리합니다.</p></div><button onClick={() => void load()} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCcw size={16} /> 새로고침</button></header>
+       <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">Master Operations</p><h1 className="mt-2 text-4xl font-black">운영자 센터</h1><p className="mt-2 text-sm text-slate-500">회원 잔고·입출금 신청·입금 지갑 설정을 서버 기준으로 관리합니다.</p></div><button onClick={() => void load()} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCcw size={16} /> 새로고침</button></header>
+       <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100"><strong>게시 기준:</strong> 뉴스는 뉴스로, 커뮤니티는 커뮤니티로만 게시됩니다. 아래 출처의 지원 카테고리를 확인한 뒤 전체 확인 또는 원하는 카테고리만 확인하세요.</div>
+       <section className="mb-6 rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm dark:border-cyan-300/20 dark:bg-[#10182b]"><div className="mb-3"><h2 className="font-black">카테고리별 빠른 게시</h2><p className="mt-1 text-xs text-slate-500">버튼에 표시된 분류만 가져와 해당 메뉴에 게시합니다.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{CONTENT_SOURCES.filter((source) => !disabledSourceIds.includes(source.id)).map((source) => <div key={source.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5"><div className="truncate text-xs font-black">{source.name}</div><div className="mt-2 flex flex-wrap gap-1.5">{source.categories.map((category) => <button key={category} onClick={() => void syncSource(source, category)} disabled={sourceStatus[`${source.id}:${category}`] === '확인 중...'} className="rounded-lg border border-cyan-200 px-2 py-1 text-[10px] font-black text-cyan-700 disabled:opacity-50 dark:border-cyan-300/20 dark:text-cyan-200">{sourceStatus[`${source.id}:${category}`] || `${categoryLabels[category]}만 게시`}</button>)}</div></div>)}</div></section>
        <div className="mb-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-7"><div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-300/20 dark:bg-emerald-300/10"><p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">전체 회원</p><p className="mt-2 text-3xl font-black">{profiles.length}</p></div><div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 dark:border-cyan-300/20 dark:bg-cyan-300/10"><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">회원 잔고 합계</p><p className="mt-2 text-3xl font-black">{totalBalance.toFixed(2)} USDT</p></div><div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-300/20 dark:bg-amber-300/10"><p className="text-xs font-bold text-amber-700 dark:text-amber-300">승인 입금 합계</p><p className="mt-2 text-3xl font-black">{totalDeposits.toFixed(2)} USDT</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5"><p className="text-xs font-bold text-slate-500">오늘 방문</p><p className="mt-2 text-3xl font-black">{siteStats.today.toLocaleString()}</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5"><p className="text-xs font-bold text-slate-500">이번 달</p><p className="mt-2 text-3xl font-black">{siteStats.month.toLocaleString()}</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5"><p className="text-xs font-bold text-slate-500">누적 방문</p><p className="mt-2 text-3xl font-black">{siteStats.total.toLocaleString()}</p></div><div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-300/20 dark:bg-emerald-300/10"><p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">현재 접속</p><p className="mt-2 text-3xl font-black">{onlineCount.toLocaleString()}</p></div></div>
        <section className="mb-6 rounded-3xl border border-teal-200 bg-white p-5 shadow-sm dark:border-teal-300/20 dark:bg-[#10182b]"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">실제 출처 뉴스 허브</h2><p className="mt-1 text-xs text-slate-500">운영자가 확인한 출처의 홈페이지 정보만 Firestore에 저장합니다. 검증되지 않은 국가는 자동 게시하지 않습니다.</p></div><button onClick={() => void syncAllSources()} className="rounded-xl bg-teal-400 px-4 py-2 text-xs font-black text-slate-950">전체 출처 확인</button></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{CONTENT_SOURCES.filter((source) => !disabledSourceIds.includes(source.id)).map((source) => <div key={source.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5"><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{source.name}</div><div className="mt-1 truncate text-[10px] text-slate-500">{source.region} · {source.trust === 'official' ? '공식' : '검증'}</div></div><button onClick={() => void syncSource(source)} disabled={sourceStatus[source.id] === '확인 중...'} className="shrink-0 rounded-lg border border-teal-200 px-2.5 py-1.5 text-[10px] font-black text-teal-700 disabled:opacity-50 dark:border-teal-300/20 dark:text-teal-200">{sourceStatus[source.id] || '확인'}</button><button onClick={() => void removeSource(source.id)} disabled={savingAction === `source-${source.id}`} className="shrink-0 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[10px] font-black text-rose-600 disabled:opacity-50 dark:border-rose-300/20 dark:text-rose-200">삭제</button></div>)}</div>{disabledSourceIds.length > 0 && <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-3 dark:border-white/10"><p className="text-xs font-bold text-slate-500">제외된 출처</p><div className="mt-2 flex flex-wrap gap-2">{CONTENT_SOURCES.filter((source) => disabledSourceIds.includes(source.id)).map((source) => <button key={source.id} onClick={() => void restoreSource(source.id)} disabled={savingAction === `source-${source.id}`} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500 hover:border-teal-300 hover:text-teal-300 disabled:opacity-50">{source.name} 복원</button>)}</div></div>}<p className="mt-4 text-xs leading-5 text-amber-700 dark:text-amber-200">출처 확인 대기: {REVIEW_REGIONS.map(regionLabel).join(' · ')}. 실제 공식 사이트를 확인하기 전에는 자동 게시하지 않습니다.</p></section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
