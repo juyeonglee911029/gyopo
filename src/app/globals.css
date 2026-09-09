@@ -122,6 +122,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .tetris-modern-shell { position: relative; }
 .tetris-modern-shell::before { position: absolute; top: -8rem; right: 5%; width: 32rem; height: 32rem; border-radius: 999px; background: rgba(34, 211, 238, .08); content: ""; filter: blur(70px); pointer-events: none; }
 .tetris-arena-card, .tetris-panel { position: relative; background: linear-gradient(145deg, rgba(16, 24, 43, .96), rgba(8, 14, 29, .96)); box-shadow: 0 25px 80px rgba(0, 0, 0, .2); }
+.tetris-chat-panel { overflow: hidden; }
+.tetris-chat-messages { scrollbar-width: thin; scrollbar-color: rgba(45, 212, 191, .45) transparent; }
+.tetris-chat-messages::-webkit-scrollbar { width: 6px; }
+.tetris-chat-messages::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(45, 212, 191, .45); }
 .tetris-battle-grid { min-width: 0; }
 .tetris-battle-grid > div:first-child .relative { touch-action: none; }
 .tetris-mobile-next { display: none; }
