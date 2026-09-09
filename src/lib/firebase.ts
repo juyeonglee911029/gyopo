@@ -110,7 +110,7 @@ type FirestoreDocument = {
 
 export type FirestoreFilter = {
   field: string;
-  op: 'EQUAL' | 'GREATER_THAN' | 'GREATER_THAN_OR_EQUAL' | 'LESS_THAN' | 'LESS_THAN_OR_EQUAL';
+  op: 'EQUAL' | 'GREATER_THAN' | 'GREATER_THAN_OR_EQUAL' | 'LESS_THAN' | 'LESS_THAN_OR_EQUAL' | 'ARRAY_CONTAINS';
   value: unknown;
 };
 
@@ -616,7 +616,7 @@ export async function claimTetrisLobbyRoom(profile: TetrisQueueProfile, token?: 
   for (let roomNumber = 1; roomNumber <= TETRIS_LOBBY_ROOM_COUNT; roomNumber += 1) {
     const document = await getRawDocument('tetrisLobby', tetrisLobbyId(roomNumber), token).catch(() => null);
     const room = document ? decodeDocument<TetrisLobbyRoom>(document) : null;
-    if (room?.status === 'occupied') {
+    if (room?.status === 'occupied' && isFreshTetrisLobbyRoom(room)) {
       if (room.playerAId === member.id && room.activeMatchId) {
         await setTetrisRoomAccess(roomNumber, room.activeMatchId, room.playerAId, room.playerBId, token).catch(() => undefined);
         return { roomNumber, matchId: room.activeMatchId, role: 'A', opponent: room.playerB };
@@ -1197,8 +1197,7 @@ export async function sendFriendRequest(addresseeId: string, token = getSessionT
   const existing = await getDocument<FriendConnection>('friendships', id, token).catch(() => null);
   if (existing?.status === 'accepted' || existing?.status === 'pending') return;
   if (existing?.status === 'declined') {
-    await mergeDocument('friendships', id, { status: 'pending', updatedAt: new Date() }, token);
-    return;
+    await deleteDocument('friendships', id, token);
   }
   const now = new Date();
   await createDocument('friendships', id, { requesterId, addresseeId, status: 'pending', createdAt: now, updatedAt: now }, token).catch(async (error) => {
