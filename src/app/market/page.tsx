@@ -104,7 +104,7 @@ export default function MarketPage() {
   const filteredProducts = products.filter((product) => (selectedCountry === 'Global' || product.country === selectedCountry) && product.title.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
+     <div className="market-page container mx-auto max-w-6xl px-4 py-8 text-slate-100">
        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4"><div><h1 className="text-3xl font-black text-gray-800">에스크로 중고장터</h1><p className="text-gray-500 mt-2">실제 등록 물품과 공식 출처 제품 정보를 확인하고 판매자에게 문의하세요.</p></div><div className="flex gap-2 w-full md:w-auto"><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="물품 검색..." className="flex-1 md:w-64 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:outline-none" /><button onClick={() => setIsWriting(true)} className="bg-orange-500 text-white px-5 py-2 rounded-lg font-bold hover:bg-orange-600 transition whitespace-nowrap shadow-md">내 물건 팔기</button></div></div>
        {orderNotice && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">{orderNotice}</div>}
         {filteredProducts.length === 0 && <div className="text-center py-20 bg-gray-50 rounded-xl border border-gray-100"><span className="text-4xl block mb-4">🛒</span><p className="text-gray-500">등록된 매물이 없습니다.</p></div>}
