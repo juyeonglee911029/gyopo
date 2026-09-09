@@ -15,7 +15,7 @@ type SourceItem = { title: string; url: string; description?: string; body?: str
 type SourceSection = { category: ContentCategory; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
 
-const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', events: '행사', community: '커뮤니티' };
 
 async function retryPublish(action: () => Promise<void>) {
   let lastError: unknown;
