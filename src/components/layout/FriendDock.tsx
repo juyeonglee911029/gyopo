@@ -77,7 +77,7 @@ export default function FriendDock() {
     const load = async () => {
       const token = getSessionToken();
       const rows = await queryDocumentsWhere<Omit<FriendMessage, 'id'>>(
-        'friendMessages',
+        'webrtcChatMessages',
         [{ field: 'participants', op: 'ARRAY_CONTAINS', value: user.id }],
         token,
         100,
@@ -112,7 +112,7 @@ export default function FriendDock() {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     };
     try {
-      await createDocument('friendMessages', crypto.randomUUID(), message, token);
+      await createDocument('webrtcChatMessages', crypto.randomUUID(), message, token);
       setMessages((rows) => [...rows, { id: crypto.randomUUID(), ...message }]);
       setInput('');
       setError('');
