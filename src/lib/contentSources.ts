@@ -1,6 +1,6 @@
 import type { RegionId } from '@/lib/regions';
 
-export type ContentCategory = 'news' | 'directory' | 'jobs' | 'market' | 'events' | 'community';
+export type ContentCategory = 'news' | 'directory' | 'jobs' | 'events' | 'community';
 export type SourceTrust = 'official' | 'verified' | 'review';
 
 export type ContentSource = {
@@ -40,16 +40,15 @@ export const CONTENT_SOURCES: ContentSource[] = [
     name: '한인투데이 · HANIN TODAY',
     url: 'https://hanintoday.com.br/',
     kind: 'news',
-    categories: ['news', 'jobs', 'directory', 'market', 'events', 'community'],
+    categories: ['news', 'jobs', 'directory', 'events', 'community'],
     trust: 'official',
     autoImport: true,
-    note: '브라질 한인 뉴스·구인구직·업소·공동구매·장터·한인광장 통합 사이트',
+    note: '브라질 한인 뉴스·구인구직·업소·공동구매·한인광장 통합 사이트',
     crawlPaths: [
       { category: 'news', label: '한인뉴스', path: '/news' },
       { category: 'jobs', label: '구인구직', path: '/jobs' },
       { category: 'directory', label: '업소', path: '/businesses' },
       { category: 'events', label: '공동구매', path: '/group-buying' },
-      { category: 'market', label: '중고장터', path: '/market' },
       { category: 'community', label: '한인광장', path: '/community' },
     ],
   },
