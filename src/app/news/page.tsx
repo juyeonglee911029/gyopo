@@ -14,6 +14,7 @@ type Snapshot = { id: string; sourceId: string; sourceName: string; region: stri
 type NewsStory = { entry: SnapshotItem; category: string; categoryLabel: string; source: Snapshot };
 
 const categoryLabels: Record<string, string> = { news: '뉴스', events: '행사', jobs: '구인구직', directory: '업소', market: '장터', community: '커뮤니티' };
+const navigationTitlePattern = /^(로그인|회원가입|전체보기|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|검색|한인회소개|임원소개|역대 회장|찾아오시는 길|주요 연락처|공지사항|한인회 소식지|대사관소식)$/i;
 
 function contentHref(sourceId: string, category: string, entry: SnapshotItem) {
   return `/content/${sourceItemId(sourceId, category, entry.url)}?source=${encodeURIComponent(sourceId)}&category=${encodeURIComponent(category)}&url=${encodeURIComponent(entry.url)}`;
@@ -24,6 +25,15 @@ function formatStoryDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '최신 업데이트';
   return new Intl.DateTimeFormat('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function isNewsEntry(entry: SnapshotItem, source: Snapshot) {
+  const title = entry.title.trim();
+  const entryUrl = entry.url.replace(/\/+$/, '');
+  const sourceUrl = source.url.replace(/\/+$/, '');
+  if (!title || navigationTitlePattern.test(title) || entryUrl === sourceUrl) return false;
+  if (!entry.publishedAt && entry.description && source.description && entry.description.trim() === source.description.trim()) return false;
+  return true;
 }
 
 async function loadStoredSources() {
@@ -68,7 +78,8 @@ export default function NewsPage() {
       }));
       const regionalResponse = await fetch(`/api/content/preview?region=${encodeURIComponent(selectedCountry)}`).catch(() => null);
       const regional = regionalResponse?.ok ? await regionalResponse.json() as Snapshot : null;
-      const next = [...direct.filter((snapshot): snapshot is Snapshot => Boolean(snapshot && (snapshot.items?.length || snapshot.sections?.some((section) => section.items.length)))), ...(regional?.items?.length ? [regional] : [])]
+      // Keep empty live responses so stale Firestore snapshots cannot reappear.
+      const next = [...direct.filter((snapshot): snapshot is Snapshot => Boolean(snapshot)), ...(regional ? [regional] : [])]
         .map((snapshot) => ({ ...snapshot, id: snapshot.id || snapshot.sourceId }));
       if (active) setLiveSources(next);
     };
@@ -81,14 +92,14 @@ export default function NewsPage() {
   const storyKeys = new Set<string>();
   const stories: NewsStory[] = [];
   visible.forEach((source) => {
-    source.sections?.filter((section) => section.category === 'news' && section.items.length).forEach((section) => section.items.forEach((entry) => {
+    source.sections?.filter((section) => section.category === 'news' && section.items.length).forEach((section) => section.items.filter((entry) => isNewsEntry(entry, source)).forEach((entry) => {
       const key = `${source.sourceId}:${entry.url}`;
       if (storyKeys.has(key)) return;
       storyKeys.add(key);
       stories.push({ entry, category: section.category, categoryLabel: section.label || categoryLabels[section.category] || '소식', source });
     }));
     const sourceCategory = CONTENT_SOURCES.find((item) => item.id === source.sourceId)?.categories[0];
-    source.items?.filter((entry) => (entry.category || sourceCategory || 'news') === 'news').forEach((entry) => {
+    source.items?.filter((entry) => (entry.category || sourceCategory || 'news') === 'news' && isNewsEntry(entry, source)).forEach((entry) => {
       const key = `${source.sourceId}:${entry.url}`;
       if (storyKeys.has(key)) return;
       storyKeys.add(key);
