@@ -130,7 +130,7 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#f5f7fb] px-4 py-8 md:py-12">
+    <div className="users-page min-h-[calc(100vh-64px)] bg-transparent px-4 py-8 md:py-12">
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 flex flex-wrap items-end justify-between gap-5">
           <div>
