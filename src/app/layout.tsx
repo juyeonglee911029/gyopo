@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from 'next';
 import { Manrope, Noto_Sans_KR } from 'next/font/google';
 import './globals.css';
-import Header from '@/components/layout/Header';
+import Header from '@/components/layout/header';
 import Footer from '@/components/layout/Footer';
-import GlobalChat from '@/components/layout/GlobalChat';
-import PortalFrame from '@/components/layout/PortalFrame';
-import MarketTicker from '@/components/layout/MarketTicker';
-import MusicPlayer from '@/components/layout/MusicPlayer';
+import GlobalChat from '@/components/layout/globalchat';
+import PortalFrame from '@/components/layout/portalframe';
+import MarketTicker from '@/components/layout/marketticker';
+import MusicPlayer from '@/components/layout/musicplayer';
 import SiteBackgroundVideo from '@/components/layout/SiteBackgroundVideo';
 import AppRuntime from '@/components/layout/AppRuntime';
-import FriendDock from '@/components/layout/FriendDock';
+import FriendDock from '@/components/layout/frienddock';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
 const notoSansKr = Noto_Sans_KR({
