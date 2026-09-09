@@ -49,9 +49,9 @@ export default function PortalSidebar() {
           <p className="mb-2 mt-7 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">{language === 'ko' ? '라이브 / LIVE & PLAY' : 'LIVE & PLAY / 라이브'}</p>
         <div className="space-y-1">
            {utilityLinks.map((link) => <LinkRow key={link.href} {...link} language={language} active={pathname.startsWith(link.href)} />)}
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/7 hover:text-white">
-            <UserRoundCheck size={17} className="text-slate-500 transition group-hover:text-teal-300" />
-             <span>{language === 'ko' ? '친구 채팅·통화' : 'Friends'} <small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {language === 'ko' ? 'Friends' : '친구 채팅·통화'}</small></span>
+           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold leading-5 text-slate-400 transition hover:bg-white/7 hover:text-white">
+             <UserRoundCheck size={17} className="text-slate-500 transition group-hover:text-teal-300" />
+              <span>{language === 'ko' ? '친구 채팅·통화' : 'Friends'} <small className="ml-1.5 text-[9px] font-semibold opacity-45">/ {language === 'ko' ? 'Friends' : '친구 채팅·통화'}</small></span>
           </button>
         </div>
       </nav>
