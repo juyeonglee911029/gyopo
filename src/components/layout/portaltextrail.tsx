@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import MarketTicker from '@/components/layout/MarketTicker';
 
 const links = [
   ['/', '홈'],
@@ -22,6 +23,7 @@ export default function PortalTextRail() {
   const pathname = usePathname();
   return (
     <aside className="portal-text-rail" aria-label="GYOPO 메뉴">
+      <MarketTicker />
       <div className="portal-rail-card">
         <div className="portal-text-rail-label">EXPLORE / LIVE</div>
         <nav className="portal-text-rail-nav">
@@ -29,7 +31,6 @@ export default function PortalTextRail() {
             const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? 'portal-text-link portal-text-link-active' : 'portal-text-link'}>{label}</Link>;
           })}
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-open-global-chat'))} className="portal-text-link portal-text-link-button">실시간 라운지</button>
           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button">친구 채팅·통화</button>
         </nav>
       </div>
