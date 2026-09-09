@@ -2,25 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { MapPin, PackageCheck, ShieldCheck, UserPlus, Users as UsersIcon, Video, X } from 'lucide-react';
-import { getDocument, getSessionToken, listEscrowOrdersForMember, listFriendConnections, listOnlineUsers, respondToFriendRequest, sendFriendRequest, type EscrowOrder, type FriendConnection, type OnlineUser, type PublicProfile } from '@/lib/firebase';
+import { MapPin, ShieldCheck, UserPlus, Users as UsersIcon, Video, X } from 'lucide-react';
+import { getDocument, listFriendConnections, listOnlineUsers, respondToFriendRequest, sendFriendRequest, type FriendConnection, type OnlineUser, type PublicProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type SelectedMember = Partial<PublicProfile> & Pick<OnlineUser, 'id' | 'name' | 'image'>;
 
-const STATUS_LABELS: Record<string, string> = {
-  PAYMENT_HELD: '결제 보관 완료',
-  SHIPPING: '배송 준비/시작',
-  IN_TRANSIT: '배송 중',
-  DELIVERED: '수령 완료',
-};
 
 export default function UsersPage() {
   const user = useGlobalStore((state) => state.user);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(null);
-  const [sharedOrders, setSharedOrders] = useState<EscrowOrder[]>([]);
-  const [profileLoading, setProfileLoading] = useState(false);
   const [friendships, setFriendships] = useState<FriendConnection[]>([]);
   const [friendProfiles, setFriendProfiles] = useState<Record<string, Partial<PublicProfile>>>({});
   const [friendBusy, setFriendBusy] = useState('');
@@ -109,24 +101,14 @@ export default function UsersPage() {
       country: online.country,
       age: online.age,
     });
-    setSharedOrders([]);
-    setProfileLoading(true);
-    const token = getSessionToken();
-    const [profile, orders] = await Promise.all([
-      getDocument<PublicProfile>('publicProfiles', online.id, token).catch(() => null),
-      user && token ? listEscrowOrdersForMember(online.id, token).catch(() => []) : Promise.resolve([]),
-    ]);
+    const profile = await getDocument<PublicProfile>('publicProfiles', online.id).catch(() => null);
     if (selectionRequest.current !== requestId) return;
     if (profile) setSelectedMember(profile);
-    setSharedOrders(orders);
-    setProfileLoading(false);
   };
 
   const closeMember = () => {
     selectionRequest.current += 1;
     setSelectedMember(null);
-    setSharedOrders([]);
-    setProfileLoading(false);
   };
 
   return (
@@ -197,26 +179,6 @@ export default function UsersPage() {
               <div className="rounded-2xl bg-slate-50 p-4"><span className="block text-xs font-bold text-slate-400">프로필</span><b className="mt-1 block">{selectedMember.gender === 'male' ? '남성' : selectedMember.gender === 'female' ? '여성' : '공개 정보 없음'}{selectedMember.age ? ` · ${selectedMember.age}세` : ''}</b></div>
             </div>
 
-            <div className="mt-7 border-t border-slate-200 pt-6">
-              <div className="flex items-center gap-2"><PackageCheck className="text-emerald-600" size={20} /><h3 className="font-black">{selectedMember.id === user?.id ? '내 에스크로 상태' : '나와의 에스크로 상태'}</h3></div>
-              <p className="mt-2 text-xs leading-5 text-slate-500">구매·배송 상태는 거래 당사자에게만 표시되며 금액과 비공개 정보는 공개하지 않습니다.</p>
-              {profileLoading ? (
-                <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">안전하게 정보를 확인하고 있습니다...</p>
-              ) : !user ? (
-                <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">로그인하면 이 회원과 직접 진행한 거래 상태만 확인할 수 있습니다.</p>
-              ) : sharedOrders.length === 0 ? (
-                <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">표시할 공동 거래가 없습니다.</p>
-              ) : (
-                <div className="mt-4 space-y-2">
-                  {sharedOrders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-4 text-sm">
-                      <div><b>{order.buyerId === user.id ? '구매' : '판매'}</b><div className="mt-1 text-xs text-slate-400">{new Date(order.updatedAt || order.createdAt).toLocaleDateString('ko-KR')}</div></div>
-                      <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">{STATUS_LABELS[order.status] || order.status}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </section>
         </div>
       )}
