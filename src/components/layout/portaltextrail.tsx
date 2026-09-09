@@ -16,6 +16,7 @@ const links = [
   ['/games', '테트리스', 'Tetris'],
   ['/webrtc', '화상채팅', 'Video'],
   ['/music', 'K-pop 음악', 'K-pop Music'],
+  ['/watch', '빈 화면', 'Watch'],
   ['/theater', '극장', 'Theater'],
   ['/assistant', 'AI 검색', 'AI Search'],
 ] as const;
@@ -39,3 +40,4 @@ export default function PortalTextRail() {
     </aside>
   );
 }
+
