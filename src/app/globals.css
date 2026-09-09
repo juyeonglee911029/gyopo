@@ -350,6 +350,29 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .webrtc-shell > section form input { padding-block: .55rem; }
 }
 
+/* Header controls use the same quiet, hover-only language as the rail. */
+.portal-chrome > header { border: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; }
+.portal-chrome > header a, .portal-chrome > header button { border: 0 !important; background: transparent !important; box-shadow: none !important; color: rgba(255, 255, 255, .68) !important; }
+.portal-chrome > header a:hover, .portal-chrome > header button:hover { background: rgba(255, 255, 255, .12) !important; color: #fff !important; }
+body:has(.tetris-modern-shell) .portal-chrome > header a[href="/games"], body:has(.webrtc-page) .portal-chrome > header a[href="/webrtc"] { color: #fde68a !important; background: rgba(250, 204, 21, .12) !important; }
+.portal-chrome > section b { font-size: .68rem !important; font-weight: 500 !important; }
+
+/* Tetris surfaces stay transparent so the music video remains visible behind them. */
+.tetris-modern-shell section, .tetris-modern-shell header, .tetris-modern-shell .tetris-arena-card, .tetris-modern-shell .tetris-panel, .tetris-modern-shell .tetris-battle-grid > div, .tetris-modern-shell .tetris-chat-panel, .tetris-modern-shell .tetris-stat-card { border-color: rgba(0, 0, 0, .78) !important; background: rgba(92, 98, 108, .2) !important; box-shadow: none !important; }
+.tetris-modern-shell > header { border: 0 !important; background: transparent !important; text-align: center !important; }
+.tetris-modern-shell > header > div:first-child { margin-inline: auto !important; text-align: center !important; }
+.tetris-modern-shell > .grid > aside > section { background: transparent !important; }
+.tetris-modern-shell [class*="bg-violet"], .tetris-modern-shell [class*="bg-purple"], .tetris-modern-shell [class*="bg-indigo"], .tetris-modern-shell [class*="bg-blue"] { background-color: rgba(92, 98, 108, .2) !important; }
+.tetris-modern-shell .tetris-stat-card { background: rgba(92, 98, 108, .22) !important; }
+.tetris-modern-shell .tetris-action-primary, .tetris-modern-shell .tetris-action-secondary, .tetris-modern-shell .tetris-action-start, .tetris-modern-shell .tetris-action-danger { border: 1px solid rgba(0, 0, 0, .78) !important; background: rgba(92, 98, 108, .24) !important; color: #f8fafc !important; }
+.tetris-modern-shell .tetris-action-primary:hover, .tetris-modern-shell .tetris-action-secondary:hover, .tetris-modern-shell .tetris-action-start:hover, .tetris-modern-shell .tetris-action-danger:hover { background: rgba(255, 255, 255, .12) !important; color: #fff !important; }
+
+/* Give the lounge header and composer the same clean white-on-glass treatment. */
+#global-lounge > div:first-child, #global-lounge > div:last-child { background: transparent !important; border-color: transparent !important; }
+#global-lounge > div:first-child .rounded-full { border-color: transparent !important; background: transparent !important; color: rgba(255, 255, 255, .75) !important; }
+#global-lounge input { border-color: transparent !important; background: rgba(255, 255, 255, .07) !important; }
+#global-lounge input:hover, #global-lounge input:focus { background: rgba(255, 255, 255, .13) !important; }
+
 /* Keep page content on one left edge and reserve the footer as a compact base. */
 .portal-frame > main .mx-auto { margin-left: 0 !important; margin-right: 0 !important; }
 .portal-frame main [class*="bg-white"], .portal-frame main [class*="bg-slate-50"], .portal-frame main [class*="bg-gray-50"], .portal-frame main [class*="bg-gray-100"] { background-color: rgba(8, 16, 31, .34) !important; }
@@ -424,7 +447,7 @@ body:has(.watch-page) .portal-frame > footer { display: none !important; }
 .portal-rail-card { background: rgba(8, 16, 31, .18) !important; }
 .portal-text-rail { background: transparent !important; }
 #global-lounge { top: 3.75rem !important; border-radius: 0 0 0 1rem !important; }
-#global-lounge.global-lounge-fullscreen { top: 0 !important; border-radius: 0 !important; }
+#global-lounge.global-lounge-fullscreen { top: 0 !important; right: 0 !important; left: 0 !important; width: 100vw !important; border-radius: 0 !important; }
 .portal-chrome #global-lounge ~ button { right: 1rem !important; left: auto !important; }
 .portal-chrome > header, .portal-chrome > header > div:first-child { height: 3.75rem !important; }
 body { padding-top: 5.75rem !important; }
