@@ -32,7 +32,7 @@ export default function AssistantPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#080d1c]/55 px-4 py-8 text-white backdrop-blur-xl sm:px-6 lg:px-10">
+    <div className="assistant-page min-h-[calc(100vh-64px)] bg-transparent px-4 py-8 text-white backdrop-blur-xl sm:px-6 lg:px-10">
       <div className="mx-auto flex min-h-[calc(100vh-128px)] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/15 bg-[#10182b]/60 shadow-2xl backdrop-blur-2xl">
         <header className="border-b border-white/10 bg-white/[.035] p-5 backdrop-blur-xl sm:p-7">
           <div className="flex items-center gap-3"><span className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-200/25 bg-cyan-300/10 text-lg font-black tracking-tight text-cyan-100">G</span><div><p className="text-xs font-black uppercase tracking-[.25em] text-cyan-300">GYOPO AI</p><h1 className="mt-1 text-2xl font-black sm:text-3xl">글로벌 정보 도우미</h1></div></div>
