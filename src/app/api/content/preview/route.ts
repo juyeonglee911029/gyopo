@@ -458,7 +458,7 @@ function fallbackItem(sourceName: string, sourceUrl: string, category: ContentCa
 }
 
 const regionNames: Record<string, string> = {
-  Global: '글로벌', USA: '미국', 'USA-LA': '로스앤젤레스', Brazil: '브라질', Argentina: '아르헨티나', Chile: '칠레', Colombia: '콜롬비아', Bolivia: '볼리비아', Paraguay: '파라과이', Panama: '파나마', Mexico: '멕시코', Portugal: '포르투갈', Spain: '스페인', Netherlands: '네덜란드', Germany: '독일', Romania: '루마니아', Hungary: '헝가리', Malta: '몰타', Thailand: '태국', Vietnam: '베트남',
+  Global: '글로벌', USA: '미국', 'USA-LA': '로스앤젤레스', Brazil: '브라질', Argentina: '아르헨티나', Chile: '칠레', Colombia: '콜롬비아', Bolivia: '볼리비아', Paraguay: '파라과이', Uruguay: '우루과이', Panama: '파나마', Mexico: '멕시코', Portugal: '포르투갈', Spain: '스페인', Netherlands: '네덜란드', Germany: '독일', Romania: '루마니아', Hungary: '헝가리', Malta: '몰타', Thailand: '태국', Vietnam: '베트남',
 };
 
 async function fetchRegionalNews(region: string) {
@@ -607,7 +607,14 @@ export async function GET(request: Request) {
         }
       }))
       : [];
-    if (!source.crawlPaths?.length || (requestedCategory && !crawlPaths.length)) items = curateSourceItems([sourceItem], requestedCategory || source.categories[0] || 'news').map((item) => ({ ...item, category: requestedCategory || source.categories[0] || 'news' }));
+    if (!source.crawlPaths?.length) {
+      const defaultCategory = source.categories[0] || 'news';
+      items = !requestedCategory || requestedCategory === defaultCategory
+        ? curateSourceItems([sourceItem], requestedCategory || defaultCategory).map((item) => ({ ...item, category: requestedCategory || defaultCategory }))
+        : [];
+    } else if (requestedCategory && !crawlPaths.length) {
+      items = [];
+    }
     const contentCount = items.length + sections.reduce((sum, section) => sum + section.items.length, 0);
     if (requestedCategory && contentCount === 0) warnings.push('카테고리 기준을 충족하는 실제 콘텐츠가 없습니다.');
     return Response.json({
