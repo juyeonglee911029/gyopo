@@ -19,6 +19,9 @@ export default function MusicPlayer() {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const pendingSyncRef = useRef<MusicSyncDetail | null>(null);
+  const syncTimerRef = useRef<number | null>(null);
+  const originRef = useRef('top-player');
+  const loadedVideoIdRef = useRef<string | null>(null);
   const localResults = useMemo(() => searchMusicTracks(query), [query]);
   const results = query.trim() ? (remoteResults.length ? remoteResults : localResults) : MUSIC_TRACKS;
 
@@ -52,11 +55,25 @@ export default function MusicPlayer() {
 
   const syncFrame = (detail?: MusicSyncDetail) => {
     const current = detail || pendingSyncRef.current;
-    sendPlayerCommand(frameRef.current, 'loadVideoById', [current?.track.videoId || track.videoId]);
-    sendPlayerCommand(frameRef.current, 'setVolume', [current?.volume ?? volume]);
-    if (current?.position) sendPlayerCommand(frameRef.current, 'seekTo', [current.position, true]);
-    if (current?.playing ?? playing) sendPlayerCommand(frameRef.current, 'playVideo');
-    else sendPlayerCommand(frameRef.current, 'pauseVideo');
+    const videoId = current?.track.videoId || track.videoId;
+    const nextVolume = current?.volume ?? volume;
+    const nextPlaying = current?.playing ?? playing;
+    const needsLoad = loadedVideoIdRef.current !== videoId;
+    const applyPlayback = () => {
+      if (nextPlaying) sendPlayerCommand(frameRef.current, 'unMute');
+      sendPlayerCommand(frameRef.current, 'setVolume', [nextVolume]);
+      if (current?.position) sendPlayerCommand(frameRef.current, 'seekTo', [current.position, true]);
+      sendPlayerCommand(frameRef.current, nextPlaying ? 'playVideo' : 'pauseVideo');
+    };
+
+    if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
+    if (needsLoad) {
+      loadedVideoIdRef.current = videoId;
+      sendPlayerCommand(frameRef.current, 'loadVideoById', [videoId]);
+      syncTimerRef.current = window.setTimeout(applyPlayback, 160);
+    } else {
+      applyPlayback();
+    }
     pendingSyncRef.current = null;
   };
 
@@ -65,22 +82,23 @@ export default function MusicPlayer() {
       const detail = (event as CustomEvent<MusicSyncDetail>).detail;
       if (!detail?.track?.videoId) return;
       if (detail.player === 'radio') return;
+      if (detail.origin === originRef.current) return;
       pendingSyncRef.current = detail;
       setTrack(detail.track);
       setPlaying(detail.playing);
       if (typeof detail.volume === 'number') setVolume(detail.volume);
-      window.setTimeout(() => syncFrame(detail), 180);
+      syncFrame(detail);
     };
     window.addEventListener('gyopo-music-sync', receiveMusicSync);
     window.addEventListener('gyopo-music-local', receiveMusicSync);
-    const sendCurrentMusic = () => emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', track, playing, position: 0, startedAt: Date.now(), volume });
+     const sendCurrentMusic = () => emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing, position: 0, startedAt: Date.now(), volume });
     window.addEventListener('gyopo-music-request-state', sendCurrentMusic);
     return () => {
       window.removeEventListener('gyopo-music-sync', receiveMusicSync);
       window.removeEventListener('gyopo-music-local', receiveMusicSync);
       window.removeEventListener('gyopo-music-request-state', sendCurrentMusic);
     };
-  }, [playing, track, volume]);
+    }, [playing, track, volume]);
 
   useEffect(() => {
     const resumeAudio = () => {
@@ -99,11 +117,9 @@ export default function MusicPlayer() {
   const selectTrack = (next: MusicTrack) => {
     setTrack(next);
     setPlaying(true);
-    const detail: MusicSyncDetail = { source: 'local', player: 'top', track: next, playing: true, position: 0, startedAt: Date.now(), volume };
+    const detail: MusicSyncDetail = { source: 'local', player: 'top', origin: originRef.current, track: next, playing: true, position: 0, startedAt: Date.now(), volume };
     pendingSyncRef.current = detail;
-    sendPlayerCommand(frameRef.current, 'loadVideoById', [next.videoId]);
-    sendPlayerCommand(frameRef.current, 'setVolume', [volume]);
-    sendPlayerCommand(frameRef.current, 'playVideo');
+    syncFrame(detail);
     emitMusicEvent('gyopo-music-local', detail);
     emitMusicPlayerEvent({ player: 'top', playing: true });
   };
@@ -116,8 +132,9 @@ export default function MusicPlayer() {
   const togglePlaying = () => {
     const next = !playing;
     setPlaying(next);
+    if (next) sendPlayerCommand(frameRef.current, 'unMute');
     sendPlayerCommand(frameRef.current, next ? 'playVideo' : 'pauseVideo');
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', track, playing: next, position: 0, startedAt: Date.now(), volume });
+    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing: next, position: 0, startedAt: Date.now(), volume });
     emitMusicPlayerEvent({ player: 'top', playing: next });
   };
 
@@ -125,7 +142,7 @@ export default function MusicPlayer() {
     setVolume(next);
     window.localStorage.setItem('gyopo-music-volume', String(next));
     sendPlayerCommand(frameRef.current, 'setVolume', [next]);
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', track, playing, position: 0, startedAt: Date.now(), volume: next });
+    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing, position: 0, startedAt: Date.now(), volume: next });
   };
 
   const toggleFavorite = (item: MusicTrack) => {
@@ -136,8 +153,7 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     sendPlayerCommand(frameRef.current, 'setVolume', [volume]);
-    if (playing) sendPlayerCommand(frameRef.current, 'playVideo');
-  }, [track.videoId, playing, volume]);
+  }, [volume]);
 
   return (
     <section className="border-b border-white/10 bg-[#0b1222] px-3 py-2 text-white shadow-[0_8px_30px_rgba(0,0,0,.18)] sm:px-5">
