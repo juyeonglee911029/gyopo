@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, CheckCircle2, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, ShieldCheck, Users, VideoOff } from 'lucide-react';
+import { Camera, CheckCircle2, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, Users, VideoOff } from 'lucide-react';
 import {
   deleteDocument,
   deleteWebrtcRoomData,
@@ -751,7 +751,6 @@ export default function WebRTCPage() {
       <div className="webrtc-shell mx-auto max-w-6xl">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
            <div className="webrtc-title-stack"><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">LIVE CHAT</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">LIVE CHAT</h1><p className="mt-2 text-sm text-slate-400">현재 접속 중인 인증 회원과 자동으로 연결됩니다.</p></div>
-          <div className="flex items-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-200"><ShieldCheck size={17} /> 브라우저 간 암호화 연결</div>
         </header>
 
         <div className="webrtc-grid grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
