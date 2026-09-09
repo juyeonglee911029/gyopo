@@ -145,7 +145,6 @@ export default function MusicPlayer() {
             <b className="truncate text-sm">{track.title}</b>
             <span className="hidden truncate text-xs text-slate-400 sm:block">{track.artist}</span>
           </div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">GYOPO K-POP RADIO</div>
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => selectRelativeTrack(-1)} aria-label="이전 곡" className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"><SkipBack size={15} /></button>
