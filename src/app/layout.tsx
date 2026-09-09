@@ -3,7 +3,7 @@ import { Manrope, Noto_Sans_KR } from 'next/font/google';
 import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/footer';
-import GlobalChat from '@/components/layout/globalchat';
+import GlobalChat from '@/components/layout/GlobalChat';
 import PortalFrame from '@/components/layout/portalframe';
 import MarketTicker from '@/components/layout/MarketTicker';
 import MusicPlayer from '@/components/layout/musicplayer';
