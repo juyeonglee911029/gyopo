@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { createDocument, deleteDocument, getSessionToken, listDocuments, mergeDocument } from '@/lib/firebase';
+import { createDocument, deleteDocument, getSessionToken, isMasterUser, listDocuments, mergeDocument } from '@/lib/firebase';
 import { CONTENT_SOURCES, sourceItemId } from '@/lib/contentSources';
 import { fetchSourceCategory, isSubstantiveCommunityItem, normalizeSourceBody, normalizeSourceText, normalizeSourceTitle } from '@/lib/sourcepreview';
 import { useGlobalStore } from '@/store/useGlobalStore';
@@ -130,7 +130,7 @@ export default function CommunityPage() {
   };
 
   const handleDelete = async (post: Post) => {
-    if (!user || user.id !== post.authorId || !window.confirm('이 게시글을 삭제할까요?')) return;
+    if (!user || (user.id !== post.authorId && !isMasterUser(user)) || !window.confirm('이 게시글을 삭제할까요?')) return;
     const token = getSessionToken();
     if (!token) return;
     try {
@@ -190,7 +190,7 @@ export default function CommunityPage() {
                 <div className="col-span-1 text-xs md:text-sm text-gray-400 text-center hidden md:block">{post.views || 0}</div>
               </div>
               </Link>
-              {user?.id === post.authorId && !post.id.startsWith('seed-') && <div className="absolute right-3 bottom-2 flex gap-2 text-xs"><button onClick={() => openWrite(post)} className="font-bold text-blue-600 hover:underline">수정</button><button onClick={() => void handleDelete(post)} className="font-bold text-red-500 hover:underline">삭제</button></div>}
+              {user && (user.id === post.authorId || isMasterUser(user)) && !post.id.startsWith('seed-') && <div className="absolute right-3 bottom-2 flex gap-2 text-xs">{user.id === post.authorId && <button onClick={() => openWrite(post)} className="font-bold text-blue-600 hover:underline">수정</button>}<button onClick={() => void handleDelete(post)} className="font-bold text-red-500 hover:underline">삭제</button></div>}
              </div>
           ))}
         </div>
