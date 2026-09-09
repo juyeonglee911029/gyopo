@@ -11,7 +11,6 @@ import PortalTextRail from '@/components/layout/portaltextrail';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
 import PageTransition from '@/components/layout/PageTransition';
-import StartupExperience from '@/components/layout/StartupExperience';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
 const notoSansKr = Noto_Sans_KR({
@@ -60,9 +59,8 @@ export default function RootLayout({
     <html lang="ko">
       <body className={`${notoSansKr.variable} ${manrope.variable} font-sans bg-[#070b17] text-slate-100 pt-24 min-h-screen flex flex-col`}>
         <AppRuntime>
-          <StartupExperience>
-            <AdSenseScript />
-            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          <AdSenseScript />
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'WebSite',
             name: 'GYOPO',
@@ -71,23 +69,22 @@ export default function RootLayout({
             description: '전 세계 한인을 위한 커뮤니티, 구인구직, 업소록, 장터, 화상채팅, K-POP 라디오 포털',
             inLanguage: ['ko', 'en'],
             potentialAction: { '@type': 'SearchAction', target: 'https://gyopo.pages.dev/assistant?q={search_term_string}', 'query-input': 'required name=search_term_string' },
-            }) }} />
-            <SiteBackgroundVideo />
-            <div className="portal-chrome">
-              <Header />
-              <MusicPlayer />
-              <PortalTextRail />
-              <GlobalChat />
-              <FriendDock />
-            </div>
+          }) }} />
+          <SiteBackgroundVideo />
+          <div className="portal-chrome">
+            <Header />
+            <MusicPlayer />
+            <PortalTextRail />
+            <GlobalChat />
+            <FriendDock />
+          </div>
 
-            <PortalFrame>
-              <main className="min-w-0 flex-grow">
-                <PageTransition>{children}</PageTransition>
-              </main>
-              <Footer />
-            </PortalFrame>
-          </StartupExperience>
+          <PortalFrame>
+            <main className="min-w-0 flex-grow">
+              <PageTransition>{children}</PageTransition>
+            </main>
+            <Footer />
+          </PortalFrame>
         </AppRuntime>
       </body>
     </html>
