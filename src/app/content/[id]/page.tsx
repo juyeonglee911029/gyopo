@@ -33,7 +33,7 @@ type ContentRecord = {
 type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string };
 
 function categoryLabel(category?: string) {
-  return ({ news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '공동구매·행사', community: '커뮤니티' } as Record<string, string>)[category || ''] || '출처 콘텐츠';
+  return ({ news: '뉴스', directory: '업소록', jobs: '구인구직', events: '공동구매·행사', community: '커뮤니티' } as Record<string, string>)[category || ''] || '출처 콘텐츠';
 }
 
 async function findLiveContent(sourceId: string, category: string, sourceUrl: string) {
@@ -55,7 +55,7 @@ async function findContent(id: string, sourceId?: string, category?: string, sou
     if (live) return live;
   }
   const token = getSessionToken();
-  const collections = ['posts', 'jobs', 'directories', 'marketItems'];
+  const collections = ['posts', 'jobs', 'directories'];
   for (const collection of collections) {
     const record = await getDocument<Omit<ContentRecord, 'id'>>(collection, id, token).catch(() => null);
     if (record) return { ...record, id };
@@ -82,7 +82,7 @@ export default function ContentDetailPage() {
   const body = content.body?.trim() || content.desc?.trim() || '';
   const description = content.description?.trim() || '';
   const images = [content.image, ...(content.images || [])].filter((image, index, values): image is string => Boolean(image) && values.indexOf(image) === index);
-  const backHref = content.sourceCategory === 'jobs' ? '/jobs' : content.sourceCategory === 'directory' ? '/directory' : content.sourceCategory === 'market' ? '/market' : content.sourceCategory === 'community' ? '/community' : '/news';
+  const backHref = content.sourceCategory === 'jobs' ? '/jobs' : content.sourceCategory === 'directory' ? '/directory' : content.sourceCategory === 'community' ? '/community' : '/news';
 
   return (
     <article className="w-full px-4 py-8 sm:px-6 lg:px-10">
