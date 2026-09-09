@@ -34,6 +34,7 @@ html[data-theme="dark"] select { color: #f8fafc; background-color: #0b1221; bord
 html, body { max-width: 100%; overflow-x: hidden; }
 body { text-rendering: optimizeLegibility; }
 html, body { background-color: transparent !important; }
+html[data-theme="dark"] body, html[data-theme="light"] body { background-color: transparent !important; }
 body { background-image: none; }
 .portal-chrome { position: relative; z-index: 100; }
 .portal-frame, .portal-frame > main { background: transparent; }
@@ -49,6 +50,9 @@ body { background-image: none; }
 .site-background-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #050914; pointer-events: none; }
 .site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .78; filter: brightness(1) saturate(1.08) contrast(1.02); }
 .site-background-video-shade { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(3, 7, 18, .25), rgba(3, 13, 26, .18) 50%, rgba(12, 5, 28, .28)); }
+#global-lounge { z-index: 240 !important; border-color: rgba(165, 243, 252, .15) !important; background-color: rgba(10, 17, 32, .46) !important; box-shadow: 0 24px 90px rgba(0, 0, 0, .35) !important; backdrop-filter: blur(18px); }
+#global-lounge > div:first-child, #global-lounge > div:last-child { background-color: rgba(13, 22, 40, .45) !important; }
+.portal-chrome #global-lounge ~ button { z-index: 250 !important; border-color: rgba(165, 243, 252, .15) !important; background-color: rgba(16, 24, 43, .52) !important; }
 body.webrtc-compact-shell { padding-top: 0 !important; overflow: hidden; }
 body.webrtc-compact-shell > header,
 body.webrtc-compact-shell > section,
