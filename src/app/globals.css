@@ -350,6 +350,42 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .webrtc-shell > section form input { padding-block: .55rem; }
 }
 
+/* Keep page content on one left edge and reserve the footer as a compact base. */
+.portal-frame > main .mx-auto { margin-left: 0 !important; margin-right: 0 !important; }
+.portal-frame main [class*="bg-white"], .portal-frame main [class*="bg-slate-50"], .portal-frame main [class*="bg-gray-50"], .portal-frame main [class*="bg-gray-100"] { background-color: rgba(8, 16, 31, .34) !important; }
+.portal-frame > footer { margin-top: 1.5rem !important; background: rgba(6, 10, 20, .38) !important; }
+.portal-frame > footer > div { padding-top: 1.15rem !important; padding-bottom: 1rem !important; }
+.portal-frame > footer > div > div:first-child { margin-bottom: .7rem !important; padding-bottom: .7rem !important; }
+.portal-frame > footer > div > div:nth-child(2) { margin-bottom: .7rem !important; padding-bottom: .7rem !important; }
+.portal-frame > footer .text-2xl { font-size: 1rem !important; }
+.portal-frame > footer .text-lg { font-size: .9rem !important; }
+.portal-frame > footer .rounded-xl { border-radius: .55rem !important; padding: .45rem !important; }
+.tetris-modern-shell > header { background: transparent !important; }
+
+body.webrtc-compact-shell .portal-frame,
+body.webrtc-compact-shell .portal-frame > main,
+body.webrtc-compact-shell .portal-frame > main > div { height: 100dvh !important; min-height: 0 !important; }
+body.webrtc-compact-shell .portal-frame > main > div > div > div:first-child { padding-top: .4rem !important; padding-bottom: .4rem !important; }
+body.webrtc-compact-shell .portal-frame > main > div > div > div:nth-child(3) { gap: .25rem !important; padding: .4rem !important; }
+body.webrtc-compact-shell .portal-frame > main > div > div > div:nth-child(3) button,
+body.webrtc-compact-shell .portal-frame > main > div > div > div:nth-child(3) > span { min-height: 2rem !important; font-size: .5rem !important; }
+body.webrtc-compact-shell .portal-frame > main > div > div > div:nth-child(3) svg { width: 11px !important; height: 11px !important; }
+
+@media (min-width: 1024px) {
+  .webrtc-page { height: calc(100dvh - 7rem) !important; min-height: 0 !important; margin-right: 0 !important; overflow: hidden !important; padding: 1rem !important; }
+  .portal-frame > main .webrtc-shell { width: 85% !important; max-width: 72rem !important; margin-left: auto !important; margin-right: auto !important; }
+  .webrtc-shell > header { margin-bottom: .75rem !important; }
+  .webrtc-shell > header h1 { font-size: 2.4rem !important; }
+  .webrtc-grid { height: calc(100dvh - 12rem) !important; min-height: 0 !important; grid-template-columns: minmax(0, 1fr) 280px !important; gap: .75rem !important; }
+  .webrtc-grid > section { height: 100% !important; min-height: 0 !important; aspect-ratio: auto !important; border-radius: 1rem !important; }
+  .webrtc-grid > aside { width: 117.65%; margin-right: -17.65%; min-height: 0; overflow: hidden !important; zoom: .85; scrollbar-width: none; }
+  .webrtc-grid > aside::-webkit-scrollbar { display: none; }
+  .webrtc-grid > aside.space-y-5 > :not([hidden]) ~ :not([hidden]) { margin-top: .5rem !important; }
+  .webrtc-grid > aside > section { border-radius: 1rem !important; padding: .65rem !important; }
+  .webrtc-grid button { min-height: 2.25rem !important; font-size: .68rem !important; padding-top: .5rem !important; padding-bottom: .5rem !important; }
+  .webrtc-grid > aside .webrtc-sidebar-screen { padding: .55rem !important; }
+}
+
 @layer utilities {
   .glass {
     @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl;
