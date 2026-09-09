@@ -309,6 +309,17 @@ export default function GamesPage() {
   const currentUserId = user ? (getSessionUserId() || user.id) : '';
   const [, setRoomBetConfigured] = useState(false);
 
+  useEffect (() => {
+    const htmlOverflow = document.documentElement.style.overflow;
+    const bodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = htmlOverflow;
+      document.body.style.overflow = bodyOverflow;
+    };
+  }, []);
+
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
