@@ -40,21 +40,24 @@ body { padding-top: 7rem !important; }
 .portal-chrome { position: relative; z-index: 100; }
 .portal-frame, .portal-frame > main { background: transparent; transition: margin-right .28s ease, width .28s ease; }
 .portal-frame > main > div, .portal-frame > main > section { background-color: transparent !important; }
-.portal-text-rail { position: fixed; top: 9.7rem; bottom: 1.5rem; left: 1.25rem; z-index: 220; display: none; width: 8rem; overflow-y: auto; background: transparent; pointer-events: auto; scrollbar-width: none; }
+.portal-text-rail { position: fixed; top: 7.5rem; bottom: 1rem; left: 1rem; z-index: 220; display: none; width: 9rem; overflow-y: auto; background: transparent; pointer-events: auto; scrollbar-width: none; }
 .portal-text-rail::-webkit-scrollbar { display: none; }
-.portal-text-rail-label { margin-bottom: .9rem; color: rgba(103, 232, 249, .65); font-size: .58rem; font-weight: 900; letter-spacing: .22em; }
-.portal-text-rail-nav { display: grid; gap: .15rem; }
-.portal-text-link { display: block; border-left: 1px solid transparent; padding: .4rem .55rem; color: rgba(255, 255, 255, .62); font-size: .72rem; font-weight: 800; line-height: 1.35; text-decoration: none; transition: color .2s ease, border-color .2s ease, transform .2s ease; }
-.portal-text-link:hover, .portal-text-link-active { border-left-color: #2dd4bf; color: #fff; transform: translateX(3px); }
-.portal-text-link-active { text-shadow: 0 0 18px rgba(45, 212, 191, .3); }
-.portal-text-link-button { width: 100%; background: transparent; text-align: left; }
+.portal-rail-card { overflow: hidden; border: 1px solid rgba(165, 243, 252, .14); border-radius: 0; background: rgba(8, 16, 31, .46); box-shadow: 0 20px 55px rgba(0, 0, 0, .18); backdrop-filter: blur(18px); }
+.portal-text-rail-label { margin: 0; border-bottom: 1px solid rgba(165, 243, 252, .1); padding: .8rem .7rem .65rem; color: rgba(103, 232, 249, .72); font-size: .56rem; font-weight: 900; letter-spacing: .16em; }
+.portal-text-rail-nav { display: grid; gap: 0; padding: .4rem; }
+.portal-text-link { display: block; border: 0; border-bottom: 1px solid rgba(255, 255, 255, .055); border-radius: 0; padding: .43rem .5rem; color: rgba(255, 255, 255, .62); font-size: .7rem; font-weight: 800; line-height: 1.35; text-decoration: none; transition: none; }
+.portal-text-link:last-child { border-bottom: 0; }
+.portal-text-link:hover, .portal-text-link-active { border-left: 2px solid #2dd4bf; color: #fff; background: rgba(45, 212, 191, .09); transform: none; }
+.portal-text-link-active { text-shadow: none; }
+.portal-text-link-button { width: 100%; background: transparent; text-align: left; font: inherit; }
 .site-background-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #050914; pointer-events: none; }
 .site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .78; filter: brightness(1) saturate(1.08) contrast(1.02); }
 .site-background-video-shade { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(3, 7, 18, .25), rgba(3, 13, 26, .18) 50%, rgba(12, 5, 28, .28)); }
-#global-lounge { z-index: 240 !important; top: 7.5rem !important; right: 1rem !important; bottom: 1rem !important; width: 21rem !important; border-color: rgba(165, 243, 252, .14) !important; background-color: rgba(10, 17, 32, .42) !important; box-shadow: 0 24px 90px rgba(0, 0, 0, .28) !important; backdrop-filter: blur(18px); }
+#global-lounge { z-index: 240 !important; top: 7.5rem !important; right: 1rem !important; bottom: 1rem !important; width: 21rem !important; border-color: rgba(165, 243, 252, .14) !important; border-radius: 0 !important; background-color: rgba(10, 17, 32, .42) !important; box-shadow: 0 24px 90px rgba(0, 0, 0, .28) !important; backdrop-filter: blur(18px); }
 #global-lounge > div:first-child { border-bottom-color: rgba(255, 255, 255, .08) !important; background-color: transparent !important; }
 #global-lounge > div:last-child { border-top-color: rgba(255, 255, 255, .08) !important; background-color: rgba(10, 17, 32, .3) !important; }
 #global-lounge input { background-color: rgba(255, 255, 255, .06) !important; }
+#global-lounge .rounded, #global-lounge .rounded-xl, #global-lounge .rounded-3xl, #global-lounge .rounded-full { border-radius: 0 !important; }
 .portal-chrome #global-lounge ~ button { z-index: 250 !important; top: 8.25rem !important; right: 1rem !important; bottom: auto !important; height: 2.7rem !important; width: 2.25rem !important; border-color: rgba(165, 243, 252, .14) !important; border-radius: .85rem 0 0 .85rem !important; background-color: rgba(16, 24, 43, .48) !important; }
 .portal-chrome > section { position: fixed; top: 0; left: 18rem; z-index: 60; width: 23rem; height: 4rem; border: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
 .portal-chrome > section > div:first-child { height: 4rem; max-width: none; margin: 0; padding: 0 .35rem; }
@@ -81,6 +84,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .surface { background: rgba(15, 23, 42, .24); }
 .home-route-card { background: rgba(255, 255, 255, .04); }
 .games-page, .webrtc-page, .music-page { background-color: rgba(7, 11, 23, .16) !important; }
+.portal-frame main .surface, .portal-frame main .home-video-hero, .portal-frame main .home-route-card, .portal-frame main .bg-white, .portal-frame main .bg-slate-50, .portal-frame main .bg-gray-50, .portal-frame main .bg-gray-100, .portal-frame main .bg-gray-900 { background-color: rgba(8, 16, 31, .34) !important; }
+.portal-frame main .border-white\/10, .portal-frame main .border-white\/8 { border-color: rgba(165, 243, 252, .1) !important; }
 .tetris-modern-shell section, .tetris-modern-shell header { background-color: rgba(13, 21, 38, .34) !important; }
 .music-page section, .music-page aside { background-color: rgba(16, 24, 43, .24) !important; }
 .games-page { background-color: transparent !important; }
@@ -137,6 +142,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .header-mobile-menu { position: absolute; top: 4rem; right: .75rem; left: .75rem; display: grid; gap: .75rem; border: 1px solid rgba(148, 163, 184, .16); border-radius: 1rem; background: rgba(7, 11, 23, .97); padding: .75rem; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); backdrop-filter: blur(20px); }
 .header-mobile-menu a { border-radius: .75rem; padding: .7rem .75rem; background: rgba(255, 255, 255, .05); }
 .market-bar { box-shadow: 0 12px 32px rgba(0, 0, 0, .14); }
+.market-bar { top: 4rem !important; left: auto !important; right: 1rem !important; width: min(42rem, calc(100vw - 2rem)) !important; border: 1px solid rgba(165, 243, 252, .14) !important; border-radius: 0 !important; background: rgba(8, 16, 31, .48) !important; box-shadow: none !important; }
 .market-bar-inner { scrollbar-width: none; }
 .market-bar-inner::-webkit-scrollbar, .market-scroll::-webkit-scrollbar { display: none; }
 .market-toggle { display: inline-flex; align-items: center; gap: .35rem; border-right: 1px solid rgba(148, 163, 184, .13); padding-right: .75rem; color: #cbd5e1; font-size: .62rem; font-weight: 900; letter-spacing: .13em; }
@@ -146,7 +152,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .market-select option { background: #0b1221; color: #f8fafc; }
 .market-result { min-width: max-content; color: #67e8f9; font-size: .7rem; }
 .market-result span { color: #64748b; font-size: .58rem; }
-.market-chip { display: flex; min-width: 0; align-items: center; gap: .35rem; border: 1px solid rgba(148, 163, 184, .1); border-radius: .55rem; background: rgba(255, 255, 255, .035); padding: .25rem .5rem; color: #94a3b8; font-size: .62rem; white-space: nowrap; }
+.market-chip { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .35rem; border: 1px solid rgba(165, 243, 252, .1); border-radius: 0; background: rgba(255, 255, 255, .035); padding: .4rem .5rem; color: #94a3b8; font-size: .62rem; white-space: nowrap; }
 .market-chip > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .market-chip b { color: #f8fafc; font-size: .68rem; }
 .market-up, .market-down { display: inline-flex; align-items: center; gap: .08rem; font-size: .6rem; font-weight: 900; }
@@ -154,7 +160,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .market-down { color: #fb7185; }
 .market-loading, .market-updated { display: inline-flex; align-items: center; gap: .3rem; color: #64748b; font-size: .6rem; font-weight: 800; white-space: nowrap; }
 .market-detail { border-top: 1px solid rgba(148, 163, 184, .09); }
-.market-detail-card { border: 1px solid rgba(148, 163, 184, .12); border-radius: 1rem; background: rgba(255, 255, 255, .035); padding: .8rem 1rem; }
+.market-detail-card { border: 1px solid rgba(165, 243, 252, .1); border-radius: 0; background: rgba(8, 16, 31, .34); padding: .8rem 1rem; }
+.market-detail-card > div.grid > div { border: 1px solid rgba(165, 243, 252, .08); border-radius: 0 !important; background: rgba(255, 255, 255, .035) !important; }
 .market-detail-label { color: #64748b; font-size: .62rem; font-weight: 900; letter-spacing: .15em; }
 .touch-control { border: 1px solid rgba(45, 212, 191, .24); border-radius: .75rem; background: rgba(45, 212, 191, .1); padding: .6rem .35rem; font-size: .72rem; font-weight: 900; color: #ccfbf1; }
 .touch-control:disabled { opacity: .35; }
@@ -162,7 +169,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .games-page > .mx-auto:not(.tetris-modern-shell) { display: none; }
 .tetris-modern-shell { position: relative; }
 .tetris-modern-shell::before { position: absolute; top: -8rem; right: 5%; width: 32rem; height: 32rem; border-radius: 999px; background: rgba(34, 211, 238, .08); content: ""; filter: blur(70px); pointer-events: none; }
-.tetris-arena-card, .tetris-panel { position: relative; background: linear-gradient(145deg, rgba(16, 24, 43, .34), rgba(8, 14, 29, .34)); box-shadow: 0 25px 80px rgba(0, 0, 0, .2); }
+.tetris-arena-card, .tetris-panel { position: relative; border-radius: 0 !important; background: rgba(8, 16, 31, .34); box-shadow: none; }
 .tetris-chat-panel { overflow: hidden; }
 .tetris-chat-messages { scrollbar-width: thin; scrollbar-color: rgba(45, 212, 191, .45) transparent; }
 .tetris-chat-messages::-webkit-scrollbar { width: 6px; }
@@ -170,7 +177,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .tetris-battle-grid { min-width: 0; }
 .tetris-battle-grid > div:first-child .relative { touch-action: none; }
 .tetris-mobile-next { display: none; }
-.tetris-stat-card { display: flex; min-height: 4.25rem; flex-direction: column; justify-content: center; gap: .25rem; border: 1px solid rgba(148, 163, 184, .12); border-radius: 1rem; background: rgba(255, 255, 255, .035); padding: .75rem 1rem; }
+.tetris-stat-card { display: flex; min-height: 4.25rem; flex-direction: column; justify-content: center; gap: .25rem; border: 1px solid rgba(165, 243, 252, .1); border-radius: 0 !important; background: rgba(255, 255, 255, .035); padding: .75rem 1rem; }
 .tetris-stat-card span { color: #64748b; font-size: .62rem; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
 .tetris-stat-card b { font-size: 1.1rem; }
 .tetris-battle-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; text-align: center; }
@@ -178,6 +185,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .lounge-empty-mark { display: grid; min-height: 10rem; place-items: center; color: rgba(45, 212, 191, .36); }
 .tetris-action-primary, .tetris-action-secondary, .tetris-action-start, .tetris-action-danger { display: inline-flex; min-height: 2.85rem; align-items: center; justify-content: center; gap: .45rem; border-radius: .9rem; padding: .7rem .85rem; font-size: .75rem; font-weight: 900; transition: transform .2s ease, filter .2s ease, opacity .2s ease; }
 .tetris-action-primary:hover, .tetris-action-secondary:hover, .tetris-action-start:hover, .tetris-action-danger:hover { transform: translateY(-1px); filter: brightness(1.08); }
+.tetris-modern-shell header, .tetris-modern-shell section, .tetris-modern-shell .tetris-battle-grid > div, .tetris-modern-shell .grid.grid-cols-10, .tetris-modern-shell .grid.grid-cols-10 > div, .tetris-modern-shell button, .tetris-modern-shell a, .tetris-modern-shell input { border-radius: 0 !important; }
+.tetris-modern-shell button, .tetris-modern-shell a { transition: none !important; }
+.tetris-modern-shell button:hover, .tetris-modern-shell a:hover { transform: none !important; filter: none !important; background-image: none; }
 .tetris-action-primary:disabled, .tetris-action-secondary:disabled, .tetris-action-start:disabled, .tetris-action-danger:disabled { cursor: not-allowed; opacity: .35; transform: none; }
 .tetris-action-primary { background: linear-gradient(135deg, #67e8f9, #2dd4bf); color: #04202a; }
 .tetris-action-secondary { border: 1px solid rgba(148, 163, 184, .16); background: rgba(255, 255, 255, .05); color: #cbd5e1; }
@@ -196,6 +206,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .portal-text-rail { display: block; }
   body:has(#global-lounge.translate-x-0) .portal-frame { margin-right: 23rem; }
   body:has(#global-lounge.translate-x-0) .portal-chrome #global-lounge ~ button { right: 22rem !important; }
+  body:has(#global-lounge.translate-x-0) .market-bar { right: 23rem !important; }
+  body:has(.market-bar-expanded) #global-lounge { top: 18rem !important; }
+  body:has(.market-bar-expanded) .portal-chrome #global-lounge ~ button { top: 18.75rem !important; }
   .webrtc-page { margin-right: -20rem; }
   .webrtc-shell > section { display: none; }
 }
@@ -203,6 +216,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 @media (max-width: 1023px) {
   .portal-chrome > section { left: 8.5rem; right: .5rem; width: auto; }
   .portal-chrome > section .min-w-0.flex-1 { display: none; }
+  .market-bar { left: .5rem !important; right: .5rem !important; width: auto !important; }
+  .portal-text-rail { top: 7.5rem; left: .5rem; width: 8.5rem; }
 }
 
 @media (max-width: 1279px) {
@@ -241,9 +256,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .touch-control { min-height: 2.75rem; touch-action: manipulation; }
   .tetris-modern-shell [class*="grid-cols-\[minmax"] { min-width: 0; }
   .tetris-modern-shell h1 { font-size: 1.8rem; }
-  .tetris-modern-shell .tetris-arena-card, .tetris-modern-shell .tetris-panel { border-radius: 1.25rem; }
+  .tetris-modern-shell .tetris-arena-card, .tetris-modern-shell .tetris-panel { border-radius: 0; }
   .tetris-battle-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: .45rem; }
-  .tetris-battle-grid > div { padding: .45rem; border-radius: .9rem; }
+  .tetris-battle-grid > div { padding: .45rem; border-radius: 0; }
   .tetris-battle-grid > div:first-child .max-w-\[430px\] { max-width: none; }
   .tetris-battle-grid > div:nth-child(2) .max-w-\[330px\] { max-width: none; }
   .tetris-battle-grid .grid.grid-cols-10 { gap: 1px; padding: .2rem; }
