@@ -831,12 +831,13 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
     const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
     const candidateMatches = candidatePreference === 'any' || profile.gender === candidatePreference;
     const candidateAge = Number(candidate.age || 0);
-    const requesterAgeMatches = (!profile.ageMin && !profile.ageMax)
-      || (candidateAge >= (profile.ageMin || 13) && candidateAge <= (profile.ageMax || 130));
-    const candidateAgeMatches = (!candidate.ageMin && !candidate.ageMax)
-      || (Number(profile.age || 0) >= (candidate.ageMin || 13) && Number(profile.age || 0) <= (candidate.ageMax || 130));
     const targetMatches = (!profile.targetUserId || candidateId === profile.targetUserId)
       && (!candidate.targetUserId || candidate.targetUserId === profile.id);
+    const directCall = Boolean(profile.targetUserId || candidate.targetUserId);
+    const requesterAgeMatches = directCall || ((!profile.ageMin && !profile.ageMax)
+      || (candidateAge >= (profile.ageMin || 18) && candidateAge <= (profile.ageMax || 60)));
+    const candidateAgeMatches = directCall || ((!candidate.ageMin && !candidate.ageMax)
+      || (Number(profile.age || 0) >= (candidate.ageMin || 18) && Number(profile.age || 0) <= (candidate.ageMax || 60)));
     return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && requesterAgeMatches && candidateAgeMatches && targetMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
@@ -1241,6 +1242,7 @@ export type FriendCallRequest = {
   status: 'pending' | 'accepted' | 'declined' | 'expired';
   createdAt: string;
   expiresAt: string;
+  sourceCollection?: string;
 };
 
 const friendCallRequestCollection = 'friendCallRequests';
@@ -1249,7 +1251,7 @@ export async function createFriendCallRequest(calleeId: string, caller: Pick<Por
   if (!token || !caller.id || !calleeId || caller.id === calleeId) throw new Error('통화 요청 대상을 확인해주세요.');
   const id = `call-request-${caller.id}-${calleeId}-${crypto.randomUUID()}`;
   const createdAt = new Date();
-  await createDocument(friendCallRequestCollection, id, {
+  const request = {
     callerId: caller.id,
     callerName: caller.name,
     callerImage: caller.image,
@@ -1257,20 +1259,34 @@ export async function createFriendCallRequest(calleeId: string, caller: Pick<Por
     status: 'pending',
     createdAt,
     expiresAt: new Date(createdAt.getTime() + 90_000),
-  }, token);
+  };
+  try {
+    await createDocument(friendCallRequestCollection, id, request, token);
+  } catch (error) {
+    // Older deployments may not have the dedicated collection rule yet.
+    await createDocument(legacyFriendConnectionCollection, id, { ...request, kind: 'friendCallRequest' }, token).catch(() => { throw error; });
+  }
   return id;
 }
 
 export async function listIncomingFriendCallRequests(userId: string, token = getSessionToken()): Promise<FriendCallRequest[]> {
   if (!token) return [];
-  const rows = await queryDocumentsWhere<Omit<FriendCallRequest, 'id'>>(friendCallRequestCollection, [{ field: 'calleeId', op: 'EQUAL', value: userId }], token, 20).catch(() => []);
-  return rows.filter((request) => request.status === 'pending' && new Date(request.expiresAt).getTime() > Date.now());
+  const rows = await Promise.all([
+    queryDocumentsWhere<Omit<FriendCallRequest, 'id'>>(friendCallRequestCollection, [{ field: 'calleeId', op: 'EQUAL', value: userId }], token, 20).then((items) => items.map((item) => ({ ...item, sourceCollection: friendCallRequestCollection }))).catch(() => []),
+    queryDocumentsWhere<Omit<FriendCallRequest, 'id'> & { kind?: string }>(legacyFriendConnectionCollection, [{ field: 'calleeId', op: 'EQUAL', value: userId }], token, 20).then((items) => items.filter((item) => item.kind === 'friendCallRequest').map((item) => ({ ...item, sourceCollection: legacyFriendConnectionCollection }))).catch(() => []),
+  ]);
+  return [...new Map(rows.flat().map((request) => [request.id, request])).values()].filter((request) => request.status === 'pending' && new Date(request.expiresAt).getTime() > Date.now());
 }
 
 export async function respondToFriendCallRequest(request: FriendCallRequest, status: Extract<FriendCallRequest['status'], 'accepted' | 'declined'>, token = getSessionToken()): Promise<void> {
   const viewerId = getTokenUserId(token);
   if (!token || viewerId !== request.calleeId) throw new Error('통화 요청 권한을 확인해주세요.');
-  await mergeDocument(friendCallRequestCollection, request.id, { status, respondedAt: new Date() }, token);
+  try {
+    await mergeDocument(request.sourceCollection || friendCallRequestCollection, request.id, { status, respondedAt: new Date() }, token);
+  } catch (error) {
+    if (request.sourceCollection) throw error;
+    await mergeDocument(legacyFriendConnectionCollection, request.id, { status, respondedAt: new Date() }, token);
+  }
 }
 
 export function getStoredSession(): StoredSession | null {
