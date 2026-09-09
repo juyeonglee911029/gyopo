@@ -562,3 +562,50 @@ body { padding-top: 5.75rem !important; }
 /* Match the Friends dock heading to the compact sidebar reading scale. */
 #friend-dock header, #friend-dock header * { font-size: .68rem !important; }
 #friend-dock .text-sm { font-size: .68rem !important; }
+
+/* Category pages sit on the shared background; their content uses a light glass surface. */
+.news-page [class~="bg-[#0d1527]"],
+.jobs-page [class~="bg-[#10182b]"],
+.community-page > div:not(.fixed) [class~="bg-white"],
+.directory-page > div:not(.fixed) [class~="bg-white"],
+.market-page > div:not(.fixed) [class~="bg-white"],
+.master-page [class~="bg-white"] {
+  background-color: rgba(255, 255, 255, .045) !important;
+}
+
+.community-page > div:not(.fixed) [class~="bg-gray-50"],
+.community-page > div:not(.fixed) [class~="bg-gray-100"],
+.directory-page > div:not(.fixed) [class~="bg-slate-50"],
+.directory-page > div:not(.fixed) [class~="bg-slate-100"],
+.market-page > div:not(.fixed) [class~="bg-gray-50"],
+.market-page > div:not(.fixed) [class~="bg-gray-100"],
+.market-page > [class~="bg-white"],
+.master-page [class~="bg-slate-50"] {
+  background-color: rgba(255, 255, 255, .035) !important;
+}
+
+.news-page, .jobs-page, .community-page, .directory-page, .market-page, .master-page,
+.music-page, .games-page, .webrtc-page, .assistant-page {
+  background-color: transparent !important;
+}
+
+.music-page [class~="bg-[#10182b]"],
+.games-page [class~="bg-[#10182b]"],
+.webrtc-page [class~="bg-[#10182b]"],
+.assistant-page [class~="bg-[#10182b]/60"] {
+  background-color: rgba(255, 255, 255, .045) !important;
+}
+
+.community-page [class~="text-gray-800"],
+.directory-page [class~="text-slate-900"],
+.market-page [class~="text-gray-900"] {
+  color: rgb(248 250 252) !important;
+}
+
+.community-page [class~="text-gray-500"],
+.community-page [class~="text-gray-400"],
+.directory-page [class~="text-slate-500"],
+.directory-page [class~="text-slate-600"],
+.market-page [class~="text-gray-500"] {
+  color: rgb(148 163 184) !important;
+}
