@@ -48,9 +48,11 @@ function collectVideos(value: unknown, result: YouTubeResult[]) {
 
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get('q')?.trim();
-  if (!query) return NextResponse.json({ results: [] });
+  const videoId = request.nextUrl.searchParams.get('videoId')?.trim();
+  const searchQuery = query || videoId;
+  if (!searchQuery) return NextResponse.json({ results: [] });
   try {
-    const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+    const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GYOPO Music Search/1.0)' },
       next: { revalidate: 120 },
     });
@@ -60,7 +62,8 @@ export async function GET(request: NextRequest) {
     if (!match) return NextResponse.json({ results: [] });
     const results: YouTubeResult[] = [];
     collectVideos(JSON.parse(match[1]), results);
-    return NextResponse.json({ results: results.slice(0, 12) });
+    const selected = videoId ? results.filter((item) => item.videoId === videoId) : results;
+    return NextResponse.json({ results: selected.slice(0, 12) });
   } catch {
     return NextResponse.json({ results: [], error: 'YouTube 검색 결과를 불러오지 못했습니다.' }, { status: 200 });
   }
