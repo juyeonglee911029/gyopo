@@ -4,8 +4,9 @@
 'use client';
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type TouchEvent, type CSSProperties } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Swords, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUp, Camera, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Sparkles, Swords, Timer, Users, X, Zap } from 'lucide-react';
 import { claimTetrisLobbyRoom, claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, heartbeatTetrisLobbyRoom, joinTetrisLobbyRoom, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, releaseTetrisLobbyRoom, reserveGameStake, reserveTetrisLobbyRoom, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisLobbyRoom, type TetrisQueueProfile } from '@/lib/firebase';
+import { emitMusicPlayerEvent } from '@/lib/music';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 function formatUsdt(value: number | string) {
@@ -57,6 +58,9 @@ type GameState = {
   lines: number;
   attackTotal: number;
   garbageReceived: number;
+  lastCleared: number;
+  lastAttack: number;
+  combo: number;
   notice: string;
   noticeId: number;
 };
@@ -150,6 +154,9 @@ const createGame = (): GameState => ({
   lines: 0,
   attackTotal: 0,
   garbageReceived: 0,
+  lastCleared: 0,
+  lastAttack: 0,
+  combo: 0,
   notice: '',
   noticeId: 0,
 });
@@ -192,6 +199,17 @@ function NextBlock({ piece, compact = false }: { piece: Piece; compact?: boolean
   );
 }
 
+function BattleMetrics({ state, elapsed }: { state: Pick<GameState, 'attackTotal' | 'lines' | 'lastAttack'> | null; elapsed: string }) {
+  return (
+    <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
+      <div className="rounded-lg border border-cyan-300/15 bg-cyan-300/[0.06] px-1 py-1.5"><span className="block text-[8px] font-black text-slate-500">보낸 줄</span><b className="text-xs text-cyan-100">{state?.attackTotal || 0}</b></div>
+      <div className="rounded-lg border border-violet-300/15 bg-violet-300/[0.06] px-1 py-1.5"><span className="block text-[8px] font-black text-slate-500">깬 줄</span><b className="text-xs text-violet-100">{state?.lines || 0}</b></div>
+      <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.06] px-1 py-1.5"><span className="block text-[8px] font-black text-slate-500">공격</span><b className="text-xs text-amber-100">+{state?.lastAttack || 0}</b></div>
+      <div className="rounded-lg border border-emerald-300/15 bg-emerald-300/[0.06] px-1 py-1.5"><span className="flex items-center justify-center gap-0.5 text-[8px] font-black text-slate-500"><Timer size={9} />경과</span><b className="text-xs text-emerald-100">{elapsed}</b></div>
+    </div>
+  );
+}
+
 function lockPiece(state: GameState, landed: Piece): GameState {
   const merged = state.board.map((row) => [...row]);
   landed.shape.forEach((row, y) => row.forEach((cell, x) => {
@@ -204,6 +222,7 @@ function lockPiece(state: GameState, landed: Piece): GameState {
   const gameOver = collides(nextBoard, spawned);
   const points = [0, 100, 300, 500, 800][cleared];
   const attackLines = Math.max(0, cleared - 1);
+  const combo = cleared ? state.combo + 1 : 0;
   return {
     ...state,
     board: nextBoard,
@@ -213,7 +232,10 @@ function lockPiece(state: GameState, landed: Piece): GameState {
     score: state.score + points,
     lines: state.lines + cleared,
     attackTotal: state.attackTotal + attackLines,
-    notice: gameOver ? '게임 오버 · 새 게임을 시작하세요' : cleared ? `${cleared}줄 클리어 · ${attackLines ? `상대에게 ${attackLines}줄 공격` : `+${points}`}` : '',
+    lastCleared: cleared,
+    lastAttack: attackLines,
+    combo,
+    notice: gameOver ? '게임 오버 · 새 게임을 시작하세요' : cleared ? `${cleared}줄 클리어 · ${combo > 1 ? `${combo} COMBO · ` : ''}${attackLines ? `상대에게 ${attackLines}줄 공격` : `+${points}`}` : '',
     noticeId: Date.now(),
   };
 }
@@ -232,6 +254,9 @@ function addGarbageLines(state: GameState, lines: number): GameState {
     board,
     running: gameOver ? false : state.running,
     garbageReceived: state.garbageReceived + safeLines,
+    lastCleared: 0,
+    lastAttack: 0,
+    combo: 0,
     notice: gameOver ? '상대 공격으로 게임 오버' : `상대 공격 · ${safeLines}줄 수신`,
     noticeId: Date.now(),
   };
@@ -292,6 +317,8 @@ export default function GamesPage() {
   const [matchResult, setMatchResult] = useState<'WIN' | 'LOSE' | null>(null);
   const [roomNumber, setRoomNumber] = useState<number | null>(null);
   const [roomStartAt, setRoomStartAt] = useState<string | null>(null);
+  const [battleClock, setBattleClock] = useState(Date.now());
+  const [battleFx, setBattleFx] = useState<{ id: number; kind: 'clear' | 'attack' | 'incoming'; title: string; subtitle: string } | null>(null);
   const toastTimer = useRef<number | null>(null);
   const firstChatLoad = useRef(true);
   const lastMessageId = useRef<string | null>(null);
@@ -312,6 +339,9 @@ export default function GamesPage() {
   const resultNoticeRef = useRef<string | null>(null);
   const opponentAttackTotalRef = useRef(0);
   const opponentAttackInitializedRef = useRef(false);
+  const lastNoticeIdRef = useRef(0);
+  const soundContextRef = useRef<AudioContext | null>(null);
+  const lastCountdownSoundRef = useRef<number | null>(null);
   const lobbyReleaseRequestedRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const roomMusicKeyRef = useRef('');
@@ -332,6 +362,61 @@ export default function GamesPage() {
   }, []);
 
   useEffect(() => {
+    emitMusicPlayerEvent({ player: 'game', playing: false });
+  }, []);
+
+  useEffect(() => {
+    if (matchPhase !== 'playing' || !roomStartAt) {
+      setBattleClock(Date.now());
+      return;
+    }
+    const tick = () => setBattleClock(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [matchPhase, roomStartAt]);
+
+  const playGameSound = (kind: 'start' | 'clear' | 'attack' | 'incoming') => {
+    if (typeof window === 'undefined') return;
+    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = soundContextRef.current || new AudioContextClass();
+    soundContextRef.current = context;
+    void context.resume();
+    const notes = kind === 'start' ? [392, 523, 659] : kind === 'attack' ? [220, 330, 494] : kind === 'incoming' ? [660, 440, 330] : [523, 659, 784];
+    notes.forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = context.currentTime + index * 0.07;
+      oscillator.type = kind === 'attack' || kind === 'incoming' ? 'sawtooth' : 'square';
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.045, start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.18);
+    });
+  };
+
+  useEffect(() => {
+    if (!game.noticeId || game.noticeId === lastNoticeIdRef.current) return;
+    lastNoticeIdRef.current = game.noticeId;
+    if (game.notice.includes('줄 클리어')) {
+      const cleared = game.lastCleared || 1;
+      const attacking = game.lastAttack > 0;
+      setBattleFx({ id: Date.now(), kind: attacking ? 'attack' : 'clear', title: attacking ? `ATTACK +${game.lastAttack}` : `${cleared} LINE CLEAR`, subtitle: game.combo > 1 ? `${game.combo} COMBO` : `${cleared}줄 클리어` });
+      playGameSound(attacking ? 'attack' : 'clear');
+    }
+  }, [game.noticeId, game.notice, game.lastAttack, game.lastCleared, game.combo]);
+
+  useEffect(() => {
+    if (!battleFx) return;
+    const timer = window.setTimeout(() => setBattleFx(null), 1200);
+    return () => window.clearTimeout(timer);
+  }, [battleFx?.id]);
+
+  useEffect(() => {
     gameRef.current = game;
   }, [game]);
 
@@ -340,6 +425,9 @@ export default function GamesPage() {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 4200);
   };
+
+  const elapsedSeconds = roomStartAt && matchPhase === 'playing' ? Math.max(0, Math.floor((battleClock - new Date(roomStartAt).getTime()) / 1000)) : 0;
+  const elapsedLabel = `${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
 
   useEffect(() => {
     if (game.notice) showToast(game.notice);
@@ -458,7 +546,7 @@ export default function GamesPage() {
     const onLocalMusicChange = (event: Event) => {
       if (!matchId || !togetherListeningRef.current) return;
       const detail = (event as CustomEvent<{ track?: { videoId?: string; title?: string; artist?: string }; playing?: boolean; position?: number; startedAt?: number; volume?: number; source?: string }>).detail;
-      if (!detail.track?.videoId || detail.source === 'room') return;
+       if (!detail.track?.videoId || detail.source === 'room' || detail.player === 'radio') return;
       void updateRoom({
         musicVideoId: detail.track.videoId,
         musicTitle: detail.track.title || 'GYOPO MUSIC',
@@ -481,13 +569,13 @@ export default function GamesPage() {
     if (next) window.dispatchEvent(new CustomEvent('gyopo-music-request-state'));
   };
 
-  const beginCountdown = (startAt = new Date(Date.now() + 5000).toISOString()) => {
+  const beginCountdown = (startAt = new Date(Date.now() + 10_000).toISOString()) => {
     if (countdownRoomRef.current === startAt) return;
     countdownRoomRef.current = startAt;
     setMatchResult(null);
     setMatchPhase('countdown');
     setRoomStartAt(startAt);
-    setCountdown(Math.max(1, Math.min(5, Math.ceil((new Date(startAt).getTime() - Date.now()) / 1000))));
+    setCountdown(Math.max(1, Math.min(10, Math.ceil((new Date(startAt).getTime() - Date.now()) / 1000))));
   };
 
   useEffect(() => {
@@ -508,11 +596,19 @@ export default function GamesPage() {
     const tick = () => {
       const remaining = Math.ceil((startTime - Date.now()) / 1000);
       if (remaining > 0) {
-        setCountdown(Math.min(5, remaining));
+        setCountdown(Math.min(10, remaining));
+        if (lastCountdownSoundRef.current !== remaining) {
+          lastCountdownSoundRef.current = remaining;
+          playGameSound('clear');
+        }
         timer = window.setTimeout(tick, 100);
         return;
       }
       setCountdown('START');
+      if (lastCountdownSoundRef.current !== 0) {
+        lastCountdownSoundRef.current = 0;
+        playGameSound('start');
+      }
       timer = window.setTimeout(finish, 450);
     };
     if (Number.isFinite(startTime)) tick();
@@ -1350,11 +1446,13 @@ export default function GamesPage() {
            opponentAttackInitializedRef.current = true;
          } else if (nextAttackTotal < opponentAttackTotalRef.current) {
            opponentAttackTotalRef.current = nextAttackTotal;
-         } else if (nextAttackTotal > opponentAttackTotalRef.current) {
-           const incomingLines = nextAttackTotal - opponentAttackTotalRef.current;
-           opponentAttackTotalRef.current = nextAttackTotal;
-           dispatch({ type: 'RECEIVE_GARBAGE', lines: incomingLines });
-           showToast(`상대 공격 · ${incomingLines}줄이 내 보드에 추가되었습니다`);
+          } else if (nextAttackTotal > opponentAttackTotalRef.current) {
+            const incomingLines = nextAttackTotal - opponentAttackTotalRef.current;
+            opponentAttackTotalRef.current = nextAttackTotal;
+            dispatch({ type: 'RECEIVE_GARBAGE', lines: incomingLines });
+            setBattleFx({ id: Date.now(), kind: 'incoming', title: `INCOMING +${incomingLines}`, subtitle: '상대 공격 수신' });
+            playGameSound('incoming');
+            showToast(`상대 공격 · ${incomingLines}줄이 내 보드에 추가되었습니다`);
          }
          setOpponentState(nextState);
          setMatchStatus('실시간 대전 중 · 상대 화면 동기화됨');
@@ -1516,7 +1614,8 @@ export default function GamesPage() {
                 <div className="relative mx-auto w-full max-w-[430px]" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
                   <BoardGrid cells={visual} />
                   {toast && <div key={toast.id} className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-2xl border border-cyan-200/30 bg-slate-950/90 px-4 py-3 text-sm font-black text-cyan-100 shadow-2xl animate-[portal-toast_4.2s_ease-out_forwards]">{toast.text}</div>}
-                 {countdown && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-slate-950/45"><span className="text-6xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)]">{countdown}</span></div>}
+                  {battleFx && <div key={battleFx.id} className={`battle-fx ${battleFx.kind === 'incoming' ? 'battle-fx-incoming' : battleFx.kind === 'attack' ? 'battle-fx-attack' : 'battle-fx-clear'}`}><span className="battle-fx-stars">✦ ✦ ✦</span>{battleFx.kind === 'incoming' ? <Zap size={22} /> : <Sparkles size={22} />}<b>{battleFx.title}</b><span>{battleFx.subtitle}</span></div>}
+                 {countdown && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-slate-950/45"><span key={String(countdown)} className="tetris-countdown-number text-6xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)]">{countdown}</span></div>}
                    {matchResult && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/55"><span className={`text-6xl font-black tracking-widest ${matchResult === 'WIN' ? 'text-emerald-300' : 'text-rose-300'}`}>{matchResult}</span></div>}
                  </div>
                  <div className="tetris-mobile-next"><span className="text-[9px] font-black uppercase tracking-[.12em] text-slate-500">다음 블록</span><div><NextBlock piece={game.nextPiece} compact /></div></div>
@@ -1525,7 +1624,8 @@ export default function GamesPage() {
               <div className="rounded-[1.5rem] border border-violet-300/20 bg-gradient-to-b from-violet-300/[0.08] to-[#050914] p-3 md:p-4">
                 <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-violet-200"><Swords size={15} /> 상대 보드</div><span className="flex items-center gap-1 text-[10px] font-bold text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> SYNC 1.2s</span></div>
                 {opponent ? <div className="mb-3 flex items-center gap-2"><img src={opponent.image} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-violet-300/30" /><div className="min-w-0"><div className="truncate text-sm font-black">{opponent.name}</div><div className="text-[10px] text-slate-500">{opponent.country || 'Global'} · {opponentState ? '상대 화면 수신 중' : '연결 대기'}</div></div></div> : <div className="mb-3 rounded-xl border border-dashed border-white/10 px-3 py-3 text-xs text-slate-500">매칭 후 상대 블록이 이 화면에 크게 표시됩니다.</div>}
-                <div className="relative mx-auto w-full max-w-[330px] rounded-2xl border border-violet-300/20 bg-[#030611] p-2 shadow-[0_0_45px_rgba(139,92,246,.12)]"><BoardGrid cells={opponentVisual} compact />{!opponentState && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-950/45 px-5 text-center text-xs font-bold text-slate-400">상대방이 게임을 시작하면 블록이 실시간으로 보입니다.</div>}</div>
+                 <div className="relative mx-auto w-full max-w-[330px] rounded-2xl border border-violet-300/20 bg-[#030611] p-2 shadow-[0_0_45px_rgba(139,92,246,.12)]"><BoardGrid cells={opponentVisual} compact />{!opponentState && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-950/45 px-5 text-center text-xs font-bold text-slate-400">상대방이 게임을 시작하면 블록이 실시간으로 보입니다.</div>}</div>
+                 <BattleMetrics state={opponentState} elapsed={elapsedLabel} />
                </div>
             </div>
 
@@ -1535,8 +1635,8 @@ export default function GamesPage() {
               <button onClick={() => void requestBattleStart()} disabled={!matchId || !readyForBattle || !opponentReady || !['betting', 'holding'].includes(matchPhase)} className="tetris-action-start"><Gamepad2 size={16} /> 게임 시작하기</button>
               <button onClick={() => void leaveBattleRoom()} disabled={!matchId} className="tetris-action-danger"><X size={16} /> 방 나가기</button>
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4"><button onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="tetris-action-secondary">{game.paused ? <Play size={15} /> : <Pause size={15} />}{game.paused ? '계속' : '일시정지'}</button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="tetris-action-secondary"><RotateCw size={15} /> 회전</button><div className="col-span-2 hidden items-center justify-center rounded-xl border border-white/5 bg-white/[0.03] px-3 text-center text-[11px] text-slate-500 md:flex">2줄 클리어 = 상대 1줄 공격 · 이후 클리어 줄마다 1줄 추가</div></div>
-            <div className="mt-3 grid grid-cols-4 gap-2 sm:hidden"><button onClick={() => dispatch({ type: 'MOVE', dx: -1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowLeft size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'MOVE', dx: 0, dy: 1 })} disabled={!game.running || game.paused} className="touch-control"><ArrowDown size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="touch-control"><ArrowUp size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'MOVE', dx: 1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowRight size={16} className="mx-auto" /></button></div>
+             <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5"><button onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="tetris-action-secondary">{game.paused ? <Play size={15} /> : <Pause size={15} />}{game.paused ? '계속' : '일시정지'}</button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="tetris-action-secondary"><RotateCw size={15} /> 회전</button><button onClick={() => dispatch({ type: 'SWAP_NEXT' })} disabled={!game.running || game.paused} className="tetris-action-secondary"><ArrowRightLeft size={15} /> C 다음</button><div className="col-span-2 hidden items-center justify-center rounded-xl border border-white/5 bg-white/[0.03] px-3 text-center text-[11px] text-slate-500 md:flex">2줄 클리어 = 상대 1줄 공격 · 이후 클리어 줄마다 1줄 추가</div></div>
+             <div className="mt-3 grid grid-cols-5 gap-2 sm:hidden"><button onClick={() => dispatch({ type: 'MOVE', dx: -1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowLeft size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'MOVE', dx: 0, dy: 1 })} disabled={!game.running || game.paused} className="touch-control"><ArrowDown size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="touch-control"><ArrowUp size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'SWAP_NEXT' })} disabled={!game.running || game.paused} className="touch-control">C</button><button onClick={() => dispatch({ type: 'MOVE', dx: 1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowRight size={16} className="mx-auto" /></button></div>
              <p className="tetris-touch-hint mt-3 text-center text-[11px] text-slate-500">모바일: 좌우 슬라이드 이동 · 위로 슬라이드 블록 교체 · 화면 탭 즉시 내리기 · 회전 버튼</p>
           </section>
 
