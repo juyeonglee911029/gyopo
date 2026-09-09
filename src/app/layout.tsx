@@ -71,7 +71,7 @@ export default function RootLayout({
             potentialAction: { '@type': 'SearchAction', target: 'https://gyopo.pages.dev/assistant?q={search_term_string}', 'query-input': 'required name=search_term_string' },
           }) }} />
           <SiteBackgroundVideo />
-          <div className="portal-chrome relative z-10">
+          <div className="portal-chrome">
             <Header />
             <MarketTicker />
             <MusicPlayer />

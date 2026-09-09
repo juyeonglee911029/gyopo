@@ -50,7 +50,7 @@ export default function Home() {
   const regionName = selectedCountry === 'Global' ? '전 세계' : selectedCountry;
 
   return (
-    <div className="home-page min-h-screen overflow-hidden bg-[#070b17] text-slate-100">
+    <div className="home-page min-h-screen overflow-hidden bg-transparent text-slate-100">
       <section className="relative mx-auto max-w-7xl px-4 pb-7 pt-5 sm:px-6 sm:pt-7 lg:px-8">
         <div className="home-grid pointer-events-none absolute inset-0 opacity-35" />
         <div className="home-video-hero relative isolate overflow-hidden rounded-[30px] border border-white/10 2xl:grid 2xl:min-h-[530px] 2xl:grid-cols-[1.08fr_.92fr]">
