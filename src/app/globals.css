@@ -418,3 +418,40 @@ html[data-theme="dark"] .glass { background: rgba(15, 23, 42, .72); border-color
   30% { opacity: 1; transform: scale(1.25) rotate(0); }
   100% { opacity: 0; transform: scale(1.5) rotate(12deg); }
 }
+
+/* The watch route leaves the video and music layer unobstructed. */
+body:has(.watch-page) .portal-frame > footer { display: none !important; }
+.portal-rail-card { background: rgba(8, 16, 31, .18) !important; }
+.portal-text-rail { background: transparent !important; }
+#global-lounge { top: 3.75rem !important; border-radius: 0 0 0 1rem !important; }
+#global-lounge.global-lounge-fullscreen { top: 0 !important; border-radius: 0 !important; }
+.portal-chrome #global-lounge ~ button { right: 1rem !important; left: auto !important; }
+.portal-chrome > header, .portal-chrome > header > div:first-child { height: 3.75rem !important; }
+body { padding-top: 5.75rem !important; }
+
+@media (max-width: 1023px) {
+  body { padding-top: 5.4rem !important; }
+  .portal-chrome > header, .portal-chrome > header > div:first-child { height: 3.25rem !important; }
+  .portal-chrome > section { top: 3.25rem !important; left: .4rem !important; right: .4rem !important; width: auto !important; height: 2.1rem !important; }
+  .portal-chrome > section > div:first-child { height: 2.1rem !important; }
+  .portal-text-rail { top: 5.65rem !important; right: .4rem; bottom: auto !important; left: .4rem !important; display: flex !important; width: auto !important; height: 2.2rem; overflow-x: auto; overflow-y: hidden; background: rgba(8, 16, 31, .12) !important; }
+  .portal-text-rail .market-bar { display: none !important; }
+  .portal-text-rail .portal-rail-card { display: flex; min-width: max-content; }
+  .portal-text-rail-label { display: none; }
+  .portal-text-rail-nav { display: flex; align-items: center; gap: .15rem; padding: .2rem; }
+  .portal-text-link { padding: .3rem .4rem; font-size: .58rem; white-space: nowrap; }
+  .portal-frame { padding-left: 0 !important; }
+  #global-lounge { top: 3.25rem !important; right: .4rem !important; bottom: 4.4rem !important; width: min(21rem, calc(100vw - .8rem)) !important; border-radius: 0 0 1rem 1rem !important; }
+  #global-lounge.global-lounge-fullscreen { top: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; }
+  .global-lounge-fullscreen + button { right: .75rem !important; }
+}
+
+@media (max-width: 639px) {
+  .portal-chrome > header .header-action { padding: .35rem .45rem !important; font-size: .56rem !important; }
+  .portal-chrome > header .translate-control, .portal-chrome > header .usdt-balance { padding: .35rem .4rem !important; font-size: .56rem !important; }
+  .portal-chrome > header .header-action svg { width: 13px; height: 13px; }
+  .portal-chrome > section > div:first-child { padding-inline: .25rem !important; }
+  .portal-chrome > section b { font-size: .66rem !important; }
+  .portal-frame > footer { display: none !important; }
+  .watch-page { min-height: calc(100dvh - 5.4rem) !important; }
+}
