@@ -10,6 +10,7 @@ import SiteBackgroundVideo from '@/components/layout/sitebackgroundvideo';
 import PortalTextRail from '@/components/layout/portaltextrail';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
+import PageTransition from '@/components/layout/PageTransition';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
 const notoSansKr = Noto_Sans_KR({
@@ -80,7 +81,7 @@ export default function RootLayout({
 
           <PortalFrame>
             <main className="min-w-0 flex-grow">
-              {children}
+              <PageTransition>{children}</PageTransition>
             </main>
             <Footer />
           </PortalFrame>
