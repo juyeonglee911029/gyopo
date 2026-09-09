@@ -36,8 +36,9 @@ body { text-rendering: optimizeLegibility; }
 html, body { background-color: transparent !important; }
 html[data-theme="dark"] body, html[data-theme="light"] body { background-color: transparent !important; }
 body { background-image: none; }
+body { padding-top: 7rem !important; }
 .portal-chrome { position: relative; z-index: 100; }
-.portal-frame, .portal-frame > main { background: transparent; }
+.portal-frame, .portal-frame > main { background: transparent; transition: margin-right .28s ease, width .28s ease; }
 .portal-frame > main > div, .portal-frame > main > section { background-color: transparent !important; }
 .portal-text-rail { position: fixed; top: 9.7rem; bottom: 1.5rem; left: 1.25rem; z-index: 220; display: none; width: 8rem; overflow-y: auto; background: transparent; pointer-events: auto; scrollbar-width: none; }
 .portal-text-rail::-webkit-scrollbar { display: none; }
@@ -50,9 +51,15 @@ body { background-image: none; }
 .site-background-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #050914; pointer-events: none; }
 .site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .78; filter: brightness(1) saturate(1.08) contrast(1.02); }
 .site-background-video-shade { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(3, 7, 18, .25), rgba(3, 13, 26, .18) 50%, rgba(12, 5, 28, .28)); }
-#global-lounge { z-index: 240 !important; border-color: rgba(165, 243, 252, .15) !important; background-color: rgba(10, 17, 32, .46) !important; box-shadow: 0 24px 90px rgba(0, 0, 0, .35) !important; backdrop-filter: blur(18px); }
-#global-lounge > div:first-child, #global-lounge > div:last-child { background-color: rgba(13, 22, 40, .45) !important; }
-.portal-chrome #global-lounge ~ button { z-index: 250 !important; border-color: rgba(165, 243, 252, .15) !important; background-color: rgba(16, 24, 43, .52) !important; }
+#global-lounge { z-index: 240 !important; top: 7.5rem !important; right: 1rem !important; bottom: 1rem !important; width: 21rem !important; border-color: rgba(165, 243, 252, .14) !important; background-color: rgba(10, 17, 32, .42) !important; box-shadow: 0 24px 90px rgba(0, 0, 0, .28) !important; backdrop-filter: blur(18px); }
+#global-lounge > div:first-child { border-bottom-color: rgba(255, 255, 255, .08) !important; background-color: transparent !important; }
+#global-lounge > div:last-child { border-top-color: rgba(255, 255, 255, .08) !important; background-color: rgba(10, 17, 32, .3) !important; }
+#global-lounge input { background-color: rgba(255, 255, 255, .06) !important; }
+.portal-chrome #global-lounge ~ button { z-index: 250 !important; top: 8.25rem !important; right: 1rem !important; bottom: auto !important; height: 2.7rem !important; width: 2.25rem !important; border-color: rgba(165, 243, 252, .14) !important; border-radius: .85rem 0 0 .85rem !important; background-color: rgba(16, 24, 43, .48) !important; }
+.portal-chrome > section { position: fixed; top: 0; left: 18rem; z-index: 60; width: 23rem; height: 4rem; border: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+.portal-chrome > section > div:first-child { height: 4rem; max-width: none; margin: 0; padding: 0 .35rem; }
+.portal-chrome > section > div:first-child > div:nth-child(2) { min-width: 0; }
+.portal-chrome > section > div:nth-child(2) { position: absolute; top: 4rem; left: 0; width: min(28rem, calc(100vw - 2rem)); margin: 0; border: 1px solid rgba(165, 243, 252, .14); border-radius: 1rem; background: rgba(9, 17, 32, .72); padding: .7rem; box-shadow: 0 24px 70px rgba(0, 0, 0, .28); backdrop-filter: blur(18px); }
 body.webrtc-compact-shell { padding-top: 0 !important; overflow: hidden; }
 body.webrtc-compact-shell > header,
 body.webrtc-compact-shell > section,
@@ -76,6 +83,13 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .games-page, .webrtc-page, .music-page { background-color: rgba(7, 11, 23, .16) !important; }
 .tetris-modern-shell section, .tetris-modern-shell header { background-color: rgba(13, 21, 38, .34) !important; }
 .music-page section, .music-page aside { background-color: rgba(16, 24, 43, .24) !important; }
+.games-page { background-color: transparent !important; }
+.tetris-modern-shell > header { border-color: rgba(165, 243, 252, .08) !important; background: rgba(10, 18, 32, .22) !important; box-shadow: none !important; }
+.tetris-modern-shell > .grid > section { border-color: rgba(165, 243, 252, .08) !important; background: rgba(7, 14, 29, .2) !important; box-shadow: 0 22px 70px rgba(0, 0, 0, .16) !important; }
+.tetris-modern-shell > .grid > section > div, .tetris-modern-shell .tetris-battle-grid > div { border-color: transparent !important; background-color: rgba(5, 9, 20, .14) !important; }
+.tetris-modern-shell .grid.grid-cols-10 { background-color: rgba(7, 11, 23, .32) !important; }
+.tetris-modern-shell .tetris-chat-panel > div:first-child { border-bottom-color: rgba(255, 255, 255, .06) !important; background: transparent !important; }
+.tetris-modern-shell .tetris-chat-panel > div:nth-last-child(2) { border-top-color: rgba(255, 255, 255, .06) !important; }
 .home-video-stage { background: linear-gradient(145deg, rgba(16, 185, 129, .82), rgba(14, 165, 233, .7) 46%, rgba(124, 58, 237, .78)); }
 .home-video-stage::before { position: absolute; inset: 0; content: ""; background-image: linear-gradient(rgba(255, 255, 255, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .09) 1px, transparent 1px); background-size: 34px 34px; mask-image: linear-gradient(to bottom, black, transparent 85%); }
 .home-video-stage::after { position: absolute; right: -22%; bottom: -26%; width: 75%; aspect-ratio: 1; border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px; content: ""; box-shadow: 0 0 0 38px rgba(255, 255, 255, .035), 0 0 0 76px rgba(255, 255, 255, .025); }
@@ -180,8 +194,15 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 
 @media (min-width: 1024px) {
   .portal-text-rail { display: block; }
+  body:has(#global-lounge.translate-x-0) .portal-frame { margin-right: 23rem; }
+  body:has(#global-lounge.translate-x-0) .portal-chrome #global-lounge ~ button { right: 22rem !important; }
   .webrtc-page { margin-right: -20rem; }
   .webrtc-shell > section { display: none; }
+}
+
+@media (max-width: 1023px) {
+  .portal-chrome > section { left: 8.5rem; right: .5rem; width: auto; }
+  .portal-chrome > section .min-w-0.flex-1 { display: none; }
 }
 
 @media (max-width: 1279px) {
