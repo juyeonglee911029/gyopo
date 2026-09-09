@@ -1148,6 +1148,7 @@ export async function reserveEscrowPurchase(
   token?: string,
 ): Promise<string> {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('유효한 상품 금액이 아닙니다.');
+  if (buyerId === sellerId) throw new Error('내가 등록한 물품은 구매할 수 없습니다.');
   const orderId = `order-${buyerId}-${productId}-${crypto.randomUUID()}`;
   const buyerDocument = await getRawDocument('profiles', buyerId, token);
   if (!buyerDocument?.name) throw new Error('구매자 프로필을 찾을 수 없습니다.');
