@@ -351,7 +351,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 }
 
 /* Header controls use the same quiet, hover-only language as the rail. */
-.portal-chrome > header { border: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; }
+html[data-theme="dark"] .portal-chrome > header, html[data-theme="light"] .portal-chrome > header { border: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; }
 .portal-chrome > header a, .portal-chrome > header button { border: 0 !important; background: transparent !important; box-shadow: none !important; color: rgba(255, 255, 255, .68) !important; }
 .portal-chrome > header a:hover, .portal-chrome > header button:hover { background: rgba(255, 255, 255, .12) !important; color: #fff !important; }
 body:has(.tetris-modern-shell) .portal-chrome > header a[href="/games"], body:has(.webrtc-page) .portal-chrome > header a[href="/webrtc"] { color: #fde68a !important; background: rgba(250, 204, 21, .12) !important; }
@@ -359,7 +359,7 @@ body:has(.tetris-modern-shell) .portal-chrome > header a[href="/games"], body:ha
 
 /* Tetris surfaces stay transparent so the music video remains visible behind them. */
 .tetris-modern-shell section, .tetris-modern-shell header, .tetris-modern-shell .tetris-arena-card, .tetris-modern-shell .tetris-panel, .tetris-modern-shell .tetris-battle-grid > div, .tetris-modern-shell .tetris-chat-panel, .tetris-modern-shell .tetris-stat-card { border-color: rgba(0, 0, 0, .78) !important; background: rgba(92, 98, 108, .2) !important; box-shadow: none !important; }
-.tetris-modern-shell > header { border: 0 !important; background: transparent !important; text-align: center !important; }
+html[data-theme="dark"] .tetris-modern-shell > header, html[data-theme="light"] .tetris-modern-shell > header { border: 0 !important; background: transparent !important; text-align: center !important; }
 .tetris-modern-shell > header > div:first-child { margin-inline: auto !important; text-align: center !important; }
 .tetris-modern-shell > .grid > aside > section { background: transparent !important; }
 .tetris-modern-shell [class*="bg-violet"], .tetris-modern-shell [class*="bg-purple"], .tetris-modern-shell [class*="bg-indigo"], .tetris-modern-shell [class*="bg-blue"] { background-color: rgba(92, 98, 108, .2) !important; }
