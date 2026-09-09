@@ -14,9 +14,15 @@ function formatUsdt(value: number) {
 function TranslateMenu() {
   const selectedCountry = useGlobalStore((state) => state.selectedCountry);
   const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
+  const language = useGlobalStore((state) => state.language);
+  const setLanguage = useGlobalStore((state) => state.setLanguage);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const selectedRegion = REGIONS.find((region) => region.id === selectedCountry) || REGIONS[0];
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     if (!open) return;
@@ -29,14 +35,19 @@ function TranslateMenu() {
 
   return (
     <div ref={menuRef} className="relative">
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Translate country selector" className="translate-control">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label={language === 'ko' ? '언어 및 지역 선택' : 'Language and region selector'} className="translate-control">
         <Languages size={15} className="text-teal-300" />
-        <span className="hidden sm:inline">Translate</span>
+        <span className="hidden sm:inline">{language === 'ko' ? '언어' : 'Language'}</span>
         <span aria-hidden="true">{selectedRegion.flag}</span>
       </button>
       {open && <div className="translate-menu">
-        <div className="border-b border-white/8 px-3 py-2"><p className="text-[10px] font-black uppercase tracking-[.18em] text-teal-300">Translate</p><p className="mt-0.5 text-[11px] text-slate-500">지역을 선택하세요 / Choose a region</p></div>
-        <div className="max-h-72 overflow-y-auto p-1.5">
+        <div className="border-b border-white/8 px-3 py-2"><p className="text-[10px] font-black uppercase tracking-[.18em] text-teal-300">{language === 'ko' ? '언어 / Language' : 'Language'}</p><p className="mt-0.5 text-[11px] text-slate-500">{language === 'ko' ? '사이트 표시 언어를 선택하세요.' : 'Choose the display language.'}</p></div>
+        <div className="grid grid-cols-2 gap-1.5 p-1.5">
+          <button type="button" onClick={() => setLanguage('ko')} className={`translate-option justify-center ${language === 'ko' ? 'translate-option-active' : ''}`}>한국어</button>
+          <button type="button" onClick={() => setLanguage('en')} className={`translate-option justify-center ${language === 'en' ? 'translate-option-active' : ''}`}>English</button>
+        </div>
+        <div className="border-t border-white/8 px-3 py-2"><p className="text-[10px] font-black uppercase tracking-[.18em] text-teal-300">{language === 'ko' ? '지역' : 'Region'}</p><p className="mt-0.5 text-[11px] text-slate-500">{language === 'ko' ? '콘텐츠 지역을 선택하세요.' : 'Choose the content region.'}</p></div>
+        <div className="max-h-60 overflow-y-auto p-1.5">
           {REGIONS.map((region) => <button key={region.id} type="button" onClick={() => { setSelectedCountry(region.id); setOpen(false); }} className={`translate-option ${region.id === selectedCountry ? 'translate-option-active' : ''}`}>
             <span className="text-base" aria-hidden="true">{region.flag}</span>
             <span className="min-w-0 flex-1 truncate text-left"><b>{region.label}</b><small>{region.short}</small></span>
@@ -50,6 +61,7 @@ function TranslateMenu() {
 
 export default function Header() {
   const { user, setUser } = useGlobalStore();
+  const language = useGlobalStore((state) => state.language);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -73,13 +85,13 @@ export default function Header() {
 
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
            <TranslateMenu />
-           <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
-             <Gamepad2 size={16} />
-             <span>테트리스 <em>/ Tetris</em></span>
-           </Link>
-           <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
-             <Video size={17} />
-             <span>화상채팅 <em>/ Video</em></span>
+            <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
+              <Gamepad2 size={16} />
+              <span>{language === 'ko' ? '테트리스' : 'Tetris'} <em>/ {language === 'ko' ? 'Tetris' : '테트리스'}</em></span>
+            </Link>
+            <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
+              <Video size={17} />
+              <span>{language === 'ko' ? '화상채팅' : 'Video'} <em>/ {language === 'ko' ? 'Video' : '화상채팅'}</em></span>
            </Link>
 
            {user ? (
@@ -113,7 +125,7 @@ export default function Header() {
       {menuOpen && <div className="header-mobile-menu lg:hidden">
        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm font-bold text-slate-200">
            <TranslateMenu />
-           <span className="text-slate-400">지역 / Region</span>
+            <span className="text-slate-400">{language === 'ko' ? '지역 / Region' : 'Region / 지역'}</span>
          </div>
          <nav className="grid grid-cols-2 gap-2 text-sm font-bold text-slate-200">
            <Link onClick={() => setMenuOpen(false)} href="/jobs">구인구직 / Jobs</Link>
