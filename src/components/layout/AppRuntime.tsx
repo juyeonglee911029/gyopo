@@ -51,6 +51,20 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   }, [setDarkMode]);
 
   useEffect(() => {
+    const enterFullscreen = () => {
+      if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+      void document.documentElement.requestFullscreen().catch(() => undefined);
+    };
+    void Promise.resolve().then(enterFullscreen);
+    window.addEventListener('pointerdown', enterFullscreen, { once: true });
+    window.addEventListener('keydown', enterFullscreen, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', enterFullscreen);
+      window.removeEventListener('keydown', enterFullscreen);
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = 'dark';
     document.documentElement.style.colorScheme = 'dark';
     window.localStorage.setItem('gyopo-dark-mode', '1');
