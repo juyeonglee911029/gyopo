@@ -2,7 +2,7 @@
 
 import { Pause, Play, Search, Music2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { emitMusicEvent, emitMusicPlayerEvent, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicTrack } from '@/lib/music';
+import { emitMusicEvent, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
 
 export default function MusicPage() {
   const [track, setTrack] = useState<MusicTrack>(MUSIC_TRACKS[0]);
@@ -17,7 +17,16 @@ export default function MusicPage() {
   useEffect(() => {
     const saved = Number(window.localStorage.getItem('gyopo-music-volume'));
     if (Number.isFinite(saved)) setVolume(Math.min(100, Math.max(0, saved)));
-    emitMusicPlayerEvent({ player: 'radio', playing: true });
+    const syncTopPlayer = (event: Event) => {
+      const detail = (event as CustomEvent<MusicSyncDetail>).detail;
+      if (!detail?.track?.videoId || detail.player !== 'top') return;
+      setTrack(detail.track);
+      setPlaying(detail.playing);
+      if (typeof detail.volume === 'number') setVolume(detail.volume);
+    };
+    window.addEventListener('gyopo-music-local', syncTopPlayer);
+    window.dispatchEvent(new Event('gyopo-music-request-state'));
+    return () => window.removeEventListener('gyopo-music-local', syncTopPlayer);
   }, []);
 
   useEffect(() => {
@@ -41,23 +50,21 @@ export default function MusicPage() {
   const selectTrack = (item: MusicTrack) => {
     setTrack(item);
     setPlaying(true);
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'radio', track: item, playing: true, position: 0, startedAt: Date.now(), volume });
-    emitMusicPlayerEvent({ player: 'radio', playing: true });
+    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', track: item, playing: true, position: 0, startedAt: Date.now(), volume });
   };
 
   const togglePlaying = () => {
     const next = !playing;
     setPlaying(next);
     frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: next ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com');
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'radio', track, playing: next, position: 0, startedAt: Date.now(), volume });
-    emitMusicPlayerEvent({ player: 'radio', playing: next });
+    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', track, playing: next, position: 0, startedAt: Date.now(), volume });
   };
 
   const changeVolume = (next: number) => {
     setVolume(next);
     window.localStorage.setItem('gyopo-music-volume', String(next));
     frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [next] }), 'https://www.youtube.com');
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'radio', track, playing, position: 0, startedAt: Date.now(), volume: next });
+    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', track, playing, position: 0, startedAt: Date.now(), volume: next });
   };
 
   return (
@@ -70,7 +77,7 @@ export default function MusicPage() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
           <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
-             <div className="aspect-video bg-black"><iframe ref={frameRef} key={track.videoId} onLoad={() => { const frame = frameRef.current?.contentWindow; frame?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [volume] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: playing ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com'); }} src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&rel=0`} title={track.title} className="h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>
+             <div className="aspect-video bg-black"><iframe ref={frameRef} key={track.videoId} onLoad={() => { const frame = frameRef.current?.contentWindow; frame?.postMessage(JSON.stringify({ event: 'command', func: 'mute', args: [] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [volume] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: playing ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com'); }} src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&rel=0`} title={track.title} className="h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>
               <div className="flex flex-wrap items-center justify-between gap-3 p-5 md:p-7"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-teal-300">Now playing</div><h2 className="mt-2 text-3xl font-black">{track.title}</h2><p className="mt-1 text-sm font-bold text-slate-400">{track.artist}</p><div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500"><span className="rounded-full border border-white/10 bg-white/[.04] px-2.5 py-1.5">조회수 · {track.views || '집계 중'}</span><span className="rounded-full border border-white/10 bg-white/[.04] px-2.5 py-1.5">공개일 · {track.published || '정보 확인 중'}</span></div></div><div className="flex items-center gap-3"><button type="button" onClick={togglePlaying} className="flex items-center gap-2 rounded-xl bg-teal-300 px-3 py-2 text-xs font-black text-slate-950">{playing ? <Pause size={14} /> : <Play size={14} />}{playing ? '일시정지' : '재생'}</button><label className="flex items-center gap-2 text-xs text-slate-400">볼륨<input type="range" min="0" max="100" value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="accent-teal-300" /></label></div></div>
           </section>
 
