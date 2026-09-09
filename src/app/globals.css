@@ -34,6 +34,32 @@ html[data-theme="dark"] select { color: #f8fafc; background-color: #0b1221; bord
 html, body { max-width: 100%; overflow-x: hidden; }
 body { text-rendering: optimizeLegibility; }
 html, body { background-color: transparent !important; }
+
+
+/* Keep LIVE CHAT as one contained responsive workspace. */
+.webrtc-shell > section:last-child { display: none !important; }
+.webrtc-grid { position: relative; }
+.webrtc-grid video { object-fit: contain !important; background: #030611 !important; }
+.webrtc-grid > section .webrtc-mobile-controls { display: none !important; }
+.webrtc-grid > aside .webrtc-sidebar-screen { display: block !important; }
+
+@media (min-width: 1024px) {
+  .portal-frame > main .webrtc-shell { transform: translateX(-5rem); }
+  .webrtc-shell > header h1 { font-size: 1.95rem !important; }
+  .webrtc-grid { height: calc(100dvh - 14rem) !important; }
+  .webrtc-grid > section { height: calc(100% - .35rem) !important; max-height: calc(100dvh - 14.5rem) !important; }
+  .webrtc-grid > aside { width: 280px !important; margin-right: 0 !important; zoom: 1 !important; max-height: 100%; overflow-y: auto !important; }
+  .webrtc-grid > aside .webrtc-sidebar-screen { overflow: hidden !important; }
+}
+
+@media (max-width: 1023px) {
+  .webrtc-shell > header h1 { font-size: 1.25rem !important; }
+  .webrtc-grid > aside { position: absolute; right: .75rem; bottom: .75rem; left: .75rem; z-index: 6; display: block !important; max-height: 34%; overflow-y: auto !important; border-radius: 1rem; }
+  .webrtc-grid > aside > section:not(.webrtc-sidebar-screen) { display: none !important; }
+  .webrtc-grid > aside .webrtc-sidebar-screen { display: block !important; max-height: none; border-radius: 1rem !important; background: rgba(8, 13, 28, .88) !important; padding: .55rem !important; backdrop-filter: blur(16px); }
+  .webrtc-grid > aside .webrtc-sidebar-screen > div.relative { max-height: 8rem; }
+  .webrtc-grid > aside .webrtc-sidebar-screen > div.max-h-36 { max-height: 3.5rem; }
+}
 html[data-theme="dark"] body, html[data-theme="light"] body { background-color: transparent !important; }
 body { background-image: none; }
 body { padding-top: 7rem !important; }
