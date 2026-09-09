@@ -12,6 +12,7 @@ export type MusicTrack = {
 export type MusicSyncDetail = {
   source?: 'local' | 'room';
   player?: 'top' | 'radio' | 'game';
+  origin?: string;
   track: MusicTrack;
   playing: boolean;
   position?: number;
