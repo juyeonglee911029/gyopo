@@ -373,16 +373,39 @@ html[data-theme="dark"] .tetris-modern-shell > header, html[data-theme="light"] 
 #global-lounge input { border-color: transparent !important; background: rgba(255, 255, 255, .07) !important; }
 #global-lounge input:hover, #global-lounge input:focus { background: rgba(255, 255, 255, .13) !important; }
 
+/* Normalize the legacy friend dock and page shells to the same reading scale. */
+#friend-dock { font-size: .72rem !important; }
+#friend-dock header { padding: .65rem .8rem !important; font-size: .74rem !important; }
+#friend-dock .text-sm { font-size: .72rem !important; }
+#friend-dock .text-xs { font-size: .62rem !important; }
+#friend-dock .text-\[10px\] { font-size: .58rem !important; }
+#friend-dock input, #friend-dock button { font-size: .68rem !important; }
+#friend-dock h1, #friend-dock h2, #friend-dock h3 { font-size: .8rem !important; }
+.portal-frame > main > .container { width: 100% !important; max-width: 72rem !important; margin-left: 0 !important; margin-right: 0 !important; padding-top: 1.5rem !important; padding-right: 1rem !important; padding-bottom: 2rem !important; padding-left: 1rem !important; }
+.portal-frame > main > .music-page, .portal-frame > main > .news-page, .portal-frame > main > .webrtc-page { padding-top: 1.5rem !important; padding-right: 1rem !important; padding-left: 1rem !important; }
+.portal-frame > main > .music-page > .max-w-7xl, .portal-frame > main > .news-page > main, .portal-frame > main > .webrtc-page > .webrtc-shell { width: 100% !important; max-width: 72rem !important; margin-left: 0 !important; margin-right: 0 !important; }
+.portal-frame > main > .container h1, .portal-frame > main > .music-page h1, .portal-frame > main > .news-page h1 { font-size: 2.35rem !important; line-height: 1.12 !important; }
+.portal-frame > main > div[class*="min-h-[calc(100vh-64px)]"] { width: 100% !important; padding: 1.5rem 1rem !important; }
+.portal-frame > main > div[class*="min-h-[calc(100vh-64px)]"] > .mx-auto { max-width: 72rem !important; margin-left: 0 !important; margin-right: 0 !important; }
+.portal-frame > main > .news-page > section > .mx-auto { max-width: 72rem !important; margin-left: 0 !important; margin-right: 0 !important; }
+.portal-frame > main > .news-page > section { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+
+/* LIVE CHAT is a contained workspace, not a page that needs a second scrollbar. */
+body:has(.webrtc-page) { overflow: hidden !important; }
+body:has(.webrtc-page) .portal-frame > footer { display: none !important; }
+
 /* Keep page content on one left edge and reserve the footer as a compact base. */
 .portal-frame > main .mx-auto { margin-left: 0 !important; margin-right: 0 !important; }
 .portal-frame main [class*="bg-white"], .portal-frame main [class*="bg-slate-50"], .portal-frame main [class*="bg-gray-50"], .portal-frame main [class*="bg-gray-100"] { background-color: rgba(8, 16, 31, .34) !important; }
 .portal-frame > footer { margin-top: 1.5rem !important; background: rgba(6, 10, 20, .38) !important; }
-.portal-frame > footer > div { padding-top: 1.15rem !important; padding-bottom: 1rem !important; }
-.portal-frame > footer > div > div:first-child { margin-bottom: .7rem !important; padding-bottom: .7rem !important; }
-.portal-frame > footer > div > div:nth-child(2) { margin-bottom: .7rem !important; padding-bottom: .7rem !important; }
+.portal-frame > footer > div { padding-top: .6rem !important; padding-bottom: .55rem !important; }
+.portal-frame > footer > div > div:first-child { margin-bottom: .35rem !important; padding-bottom: .35rem !important; }
+.portal-frame > footer > div > div:nth-child(2) { margin-bottom: .35rem !important; padding-bottom: .35rem !important; }
 .portal-frame > footer .text-2xl { font-size: 1rem !important; }
 .portal-frame > footer .text-lg { font-size: .9rem !important; }
 .portal-frame > footer .rounded-xl { border-radius: .55rem !important; padding: .45rem !important; }
+.portal-frame > footer .grid { margin-top: .35rem !important; gap: .25rem !important; }
+.portal-frame > footer p, .portal-frame > footer nav { font-size: .62rem !important; }
 .tetris-modern-shell > header { background: transparent !important; }
 
 body.webrtc-compact-shell .portal-frame,
@@ -401,12 +424,17 @@ body.webrtc-compact-shell .portal-frame > main > div > div > div:nth-child(3) sv
   .webrtc-shell > header h1 { font-size: 2.4rem !important; }
   .webrtc-grid { height: calc(100dvh - 12rem) !important; min-height: 0 !important; grid-template-columns: minmax(0, 1fr) 280px !important; gap: .75rem !important; }
   .webrtc-grid > section { height: 100% !important; min-height: 0 !important; aspect-ratio: auto !important; border-radius: 1rem !important; }
-  .webrtc-grid > aside { width: 117.65%; margin-right: -17.65%; min-height: 0; overflow: hidden !important; zoom: .85; scrollbar-width: none; }
+  .webrtc-grid > aside { width: 138.9%; margin-right: -28.9%; min-height: 0; overflow: hidden !important; zoom: .72; scrollbar-width: none; }
   .webrtc-grid > aside::-webkit-scrollbar { display: none; }
   .webrtc-grid > aside.space-y-5 > :not([hidden]) ~ :not([hidden]) { margin-top: .5rem !important; }
   .webrtc-grid > aside > section { border-radius: 1rem !important; padding: .65rem !important; }
   .webrtc-grid button { min-height: 2.25rem !important; font-size: .68rem !important; padding-top: .5rem !important; padding-bottom: .5rem !important; }
   .webrtc-grid > aside .webrtc-sidebar-screen { padding: .55rem !important; }
+  .webrtc-grid > aside .webrtc-sidebar-screen { display: none !important; }
+  .webrtc-grid > section .webrtc-mobile-controls { position: absolute; right: 1rem; bottom: 1rem; left: 1rem; z-index: 5; display: block !important; border: 1px solid rgba(255, 255, 255, .12); border-radius: 1rem; background: rgba(8, 13, 28, .72); padding: .55rem; box-shadow: 0 14px 35px rgba(0, 0, 0, .28); backdrop-filter: blur(16px); }
+  .webrtc-grid > section .webrtc-mobile-controls .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .35rem; }
+  .webrtc-grid > section .webrtc-mobile-controls .grid button:first-child { grid-column: span 1; }
+  .webrtc-grid > section .webrtc-mobile-controls button { min-height: 2.25rem !important; border-radius: .65rem !important; padding: .4rem !important; font-size: .62rem !important; }
 }
 
 @layer utilities {
