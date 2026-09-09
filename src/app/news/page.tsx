@@ -99,7 +99,7 @@ export default function NewsPage() {
   const regionName = selectedCountry === 'Global' ? '글로벌' : regionLabel(selectedCountry);
 
   return (
-    <div className="min-h-screen bg-[#070b17] text-slate-100">
+    <div className="news-page min-h-screen bg-transparent text-slate-100">
       <header className="border-b border-white/10 px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-6xl items-end justify-between gap-5">
           <div>
@@ -115,7 +115,7 @@ export default function NewsPage() {
         <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-teal-300">Latest stories</p><h2 className="mt-1 text-lg font-black text-white">최신 소식 <span className="text-slate-500">{stories.length}</span></h2></div><span className="text-xs text-slate-500">행을 클릭하면 원문을 확인합니다</span></div>
         {loading && stories.length === 0 && <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm font-bold text-slate-500">확인된 출처를 불러오는 중입니다...</div>}
         {!loading && stories.length === 0 && <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm font-bold text-slate-500"><Newspaper size={26} className="mx-auto mb-3 text-slate-600" />선택한 지역의 뉴스가 없습니다.</div>}
-        {stories.length > 0 && <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0d1527]">
+        {stories.length > 0 && <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[.045]">
           <div className="hidden grid-cols-[100px_minmax(0,1fr)_160px_110px] gap-4 border-b border-white/10 px-4 py-3 text-[10px] font-black uppercase tracking-[.14em] text-slate-500 md:grid"><span>분류</span><span>제목</span><span>출처</span><span>업데이트</span></div>
           <div className="divide-y divide-white/7">{stories.map((story) => <Link key={`${story.source.sourceId}-${story.category}-${story.entry.url}`} href={contentHref(story.source.sourceId, story.category, story.entry)} className="grid gap-2 px-4 py-3 transition hover:bg-white/[.05] md:grid-cols-[100px_minmax(0,1fr)_160px_110px] md:items-center md:gap-4"><div className="flex items-center gap-2 text-[10px] font-black"><span className="rounded-full bg-teal-300/10 px-2 py-1 text-teal-200">{story.categoryLabel}</span><span className="text-slate-500 md:hidden">{regionLabel(story.source.region)}</span></div><div className="min-w-0"><h3 className="truncate text-sm font-bold text-white">{story.entry.title}</h3><p className="mt-1 line-clamp-1 text-xs text-slate-400">{story.entry.description || story.entry.body || '원문에서 자세한 내용을 확인하세요.'}</p></div><div className="flex min-w-0 items-center gap-1.5 text-xs text-slate-300"><span className="truncate">{story.source.sourceName}</span>{story.source.verified && <ShieldCheck size={12} className="shrink-0 text-emerald-300" />}</div><div className="flex items-center gap-1.5 text-[11px] text-slate-500"><Clock3 size={12} />{formatStoryDate(story.entry.publishedAt || story.source.fetchedAt)}</div></Link>)}</div>
         </div>}
