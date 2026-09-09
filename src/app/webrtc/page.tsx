@@ -60,9 +60,12 @@ const stunServers = [
   { urls: 'stun:stun4.l.google.com:19302' },
 ];
 const turnServers = [
+  { urls: 'turn:openrelay.metered.ca:3478?transport=udp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:3478?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 const iceServers = [...stunServers, ...turnServers];
 const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise.race([
@@ -108,6 +111,10 @@ export default function WebRTCPage() {
   const appliedCandidates = useRef(new Set<string>());
   const offerApplied = useRef(false);
   const answerApplied = useRef(false);
+  const appliedOfferFingerprint = useRef('');
+  const appliedAnswerFingerprint = useRef('');
+  const iceRestartAttempts = useRef(0);
+  const iceRestartInFlight = useRef(false);
   const chargedMatchIds = useRef(new Set<string>());
   const flipRef = useRef(flip);
   const outgoingVideoTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -125,6 +132,10 @@ export default function WebRTCPage() {
     appliedCandidates.current.clear();
     offerApplied.current = false;
     answerApplied.current = false;
+    appliedOfferFingerprint.current = '';
+    appliedAnswerFingerprint.current = '';
+    iceRestartAttempts.current = 0;
+    iceRestartInFlight.current = false;
   };
 
   useEffect(() => {
@@ -284,8 +295,8 @@ export default function WebRTCPage() {
     return new MediaStream(tracks);
   };
 
-  /* The caller's camera is mirrored in the outgoing canvas, so the peer sees the same orientation. */
-  const createOutgoingStream = () => getOutgoingStream() || streamRef.current;
+  /* Send the real camera track so mobile browsers do not drop canvas capture frames. */
+  const createOutgoingStream = () => streamRef.current;
 
   const closeCallForRematch = (message: string) => {
     const callId = callRef.current?.callId;
@@ -353,7 +364,6 @@ export default function WebRTCPage() {
       }
       return;
     }
-    getOutgoingStream();
     resetSignalingState();
     callRef.current = null;
     setPeer(null);
@@ -472,9 +482,9 @@ export default function WebRTCPage() {
 
     const ensureConnection = (call: ActiveCall) => {
       if (connectionRef.current) return connectionRef.current;
-       const connection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
-      connectionRef.current = connection;
-      const outgoing = createOutgoingStream();
+       const connection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle' });
+       connectionRef.current = connection;
+       const outgoing = createOutgoingStream();
       outgoing?.getTracks().forEach((track) => {
         const sender = connection.addTrack(track, outgoing);
         if (track.kind === 'video') videoSenderRef.current = sender;
@@ -488,7 +498,7 @@ export default function WebRTCPage() {
           candidate: candidate.toJSON(),
         }, token);
       };
-      connection.ontrack = (event) => {
+       connection.ontrack = (event) => {
         const remoteStream = event.streams[0] || remoteStreamRef.current || new MediaStream();
         if (!event.streams[0]) remoteStream.addTrack(event.track);
         remoteStreamRef.current = remoteStream;
@@ -501,26 +511,55 @@ export default function WebRTCPage() {
           void sidebarVideoRef.current.play().catch(() => undefined);
         }
         setHasRemoteVideo(true);
-        setStatus('상대 영상 수신 중');
-      };
-      connection.onconnectionstatechange = () => {
+         setStatus('상대 영상 수신 중');
+       };
+       const restartIce = async () => {
+         if (!call.initiator || iceRestartInFlight.current || iceRestartAttempts.current >= 2) return false;
+         iceRestartInFlight.current = true;
+         iceRestartAttempts.current += 1;
+         connectionStartedAt.current = Date.now();
+         setStatus('네트워크 경로를 다시 연결하는 중');
+         try {
+           const offer = await connection.createOffer({ iceRestart: true });
+           await connection.setLocalDescription(offer);
+           appliedAnswerFingerprint.current = '';
+           await mergeDocument('webrtcCalls', call.callId, { status: 'offer', offer, answer: null }, token);
+           return true;
+         } catch {
+           return false;
+         } finally {
+           iceRestartInFlight.current = false;
+         }
+       };
+       const handleIceFailure = () => {
+         if (!call.initiator) {
+           setStatus('상대방의 네트워크 재연결을 기다리는 중');
+           return;
+         }
+         if (iceRestartInFlight.current) return;
+         void restartIce().then((restarted) => {
+           if (!restarted) closeCallForRematch('네트워크 연결 실패, 다른 상대를 자동으로 찾는 중');
+         });
+       };
+       connection.onconnectionstatechange = () => {
         if (connection.connectionState === 'connecting') setStatus('보안 연결을 설정하는 중');
         if (connection.connectionState === 'connected') {
           setIsConnected(true);
-          connectedRef.current = true;
-          setIsMatching(false);
-          connectionStartedAt.current = null;
-          setStatus('연결 성공');
-          void mergeDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
+           connectedRef.current = true;
+           setIsMatching(false);
+           connectionStartedAt.current = null;
+           iceRestartAttempts.current = 0;
+           setStatus('연결 성공');
+           void mergeDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
         }
         if (connection.connectionState === 'disconnected') {
           connectedRef.current = false;
           setStatus('연결이 불안정합니다');
-        }
-        if (connection.connectionState === 'failed') {
-          connectedRef.current = false;
-          closeCallForRematch('연결 실패, 다른 상대를 자동으로 찾는 중');
-        }
+         }
+         if (connection.connectionState === 'failed') {
+           connectedRef.current = false;
+           handleIceFailure();
+         }
         if (connection.connectionState === 'closed') setStatus('연결 종료');
       };
       connection.oniceconnectionstatechange = () => {
@@ -528,7 +567,7 @@ export default function WebRTCPage() {
         if (connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed') {
           setStatus('상대 영상 연결 중');
         }
-        if (connection.iceConnectionState === 'failed') closeCallForRematch('네트워크 연결 실패, 다른 상대를 자동으로 찾는 중');
+         if (connection.iceConnectionState === 'failed') handleIceFailure();
       };
       return connection;
     };
@@ -603,7 +642,7 @@ export default function WebRTCPage() {
 
         await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
         const connection = ensureConnection(current);
-        if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 20_000) {
+         if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 45_000) {
            await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
            closeCallForRematch('연결 시간이 초과되어 다른 상대를 자동으로 찾는 중');
            return;
@@ -622,17 +661,22 @@ export default function WebRTCPage() {
           closeCallForRematch('상대가 연결을 종료했습니다. 다른 상대를 자동으로 찾는 중');
           return;
         }
-        if (!current.initiator && call.offer && !offerApplied.current) {
-          await connection.setRemoteDescription(call.offer);
-          offerApplied.current = true;
-          const answer = await connection.createAnswer();
-          await connection.setLocalDescription(answer);
-          await mergeDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
-        }
-        if (current.initiator && call.answer && !answerApplied.current) {
-          await connection.setRemoteDescription(call.answer);
-          answerApplied.current = true;
-        }
+         const offerFingerprint = call.offer ? JSON.stringify(call.offer) : '';
+         if (!current.initiator && call.offer && offerFingerprint !== appliedOfferFingerprint.current) {
+           await connection.setRemoteDescription(call.offer);
+           offerApplied.current = true;
+           appliedOfferFingerprint.current = offerFingerprint;
+           appliedAnswerFingerprint.current = '';
+           const answer = await connection.createAnswer();
+           await connection.setLocalDescription(answer);
+           await mergeDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
+         }
+         const answerFingerprint = call.answer ? JSON.stringify(call.answer) : '';
+         if (current.initiator && call.answer && answerFingerprint !== appliedAnswerFingerprint.current) {
+           await connection.setRemoteDescription(call.answer);
+           answerApplied.current = true;
+           appliedAnswerFingerprint.current = answerFingerprint;
+         }
         const candidates = await queryDocumentsWhere<CandidateDocument>('webrtcCandidates', [{ field: 'callId', op: 'EQUAL', value: current.callId }], token).catch(() => []);
         if (!connection.remoteDescription) return;
         for (const item of candidates.filter((candidate) => candidate.callId === current.callId && candidate.fromUserId !== user.id)) {
