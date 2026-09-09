@@ -24,4 +24,3 @@ export default function StartupExperience({ children }: { children: React.ReactN
     </>
   );
 }
-
