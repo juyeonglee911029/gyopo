@@ -483,6 +483,29 @@ html[data-theme="dark"] .glass { background: rgba(15, 23, 42, .72); border-color
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* News and directory are content layers over the shared video background. */
+.portal-frame main .news-page,
+.portal-frame main .directory-page,
+.portal-frame main .news-page .surface,
+.portal-frame main .directory-page .surface,
+.portal-frame main .news-page .bg-white,
+.portal-frame main .news-page .bg-slate-50,
+.portal-frame main .directory-page > .mx-auto > .overflow-hidden,
+.portal-frame main .directory-page > .mx-auto > .rounded-2xl,
+.portal-frame main .directory-page > .mx-auto > .rounded-3xl { background-color: transparent !important; background-image: none !important; box-shadow: none !important; }
+
+/* Page title rows sit directly on the moving background. */
+.portal-frame main .news-page > header,
+.portal-frame main .directory-page header,
+.portal-frame main .webrtc-page .webrtc-shell > header,
+.portal-frame main .webrtc-title-stack { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.portal-frame main .news-page > header::before,
+.portal-frame main .news-page > header::after,
+.portal-frame main .directory-page header::before,
+.portal-frame main .directory-page header::after,
+.portal-frame main .webrtc-page .webrtc-shell > header::before,
+.portal-frame main .webrtc-page .webrtc-shell > header::after { display: none !important; }
+
 @keyframes battle-fx-burst {
   0% { opacity: 0; transform: translateY(1.5rem) scale(.45); }
   18% { opacity: 1; transform: translateY(0) scale(1.08); }
