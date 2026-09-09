@@ -34,6 +34,13 @@ html[data-theme="dark"] select { color: #f8fafc; background-color: #0b1221; bord
 html, body { max-width: 100%; overflow-x: hidden; }
 body { text-rendering: optimizeLegibility; }
 body { background-image: radial-gradient(circle at 50% -18%, rgba(34, 211, 238, .07), transparent 35%), linear-gradient(180deg, #070b17 0%, #060a14 100%); }
+body.webrtc-compact-shell { padding-top: 0 !important; overflow: hidden; }
+body.webrtc-compact-shell > header,
+body.webrtc-compact-shell > section,
+body.webrtc-compact-shell > aside,
+body.webrtc-compact-shell > div:not(.portal-frame) { display: none !important; }
+body.webrtc-compact-shell .portal-frame { padding-left: 0 !important; padding-right: 0 !important; }
+body.webrtc-compact-shell .portal-frame > footer { display: none !important; }
 a, button, select, input, textarea { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid #2dd4bf; outline-offset: 3px; }
 
@@ -116,6 +123,13 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .tetris-action-start { background: linear-gradient(135deg, #fcd34d, #fb923c); color: #271300; }
 .tetris-action-danger { border: 1px solid rgba(251, 113, 133, .3); background: rgba(244, 63, 94, .1); color: #fecdd3; }
 .webrtc-mobile-controls { display: none; }
+.tetris-countdown-number { display: inline-block; animation: tetris-countdown-pop .9s cubic-bezier(.16, 1.4, .3, 1) both; }
+.battle-fx { position: absolute; inset: 18% 8% auto; z-index: 20; display: flex; flex-direction: column; align-items: center; gap: .2rem; border: 1px solid rgba(103, 232, 249, .45); border-radius: 1.25rem; background: rgba(2, 6, 23, .84); padding: .8rem 1rem; color: #cffafe; text-align: center; box-shadow: 0 0 35px rgba(34, 211, 238, .35); pointer-events: none; animation: battle-fx-burst 1.2s ease-out both; }
+.battle-fx b { font-size: 1.15rem; font-weight: 1000; letter-spacing: .08em; }
+.battle-fx > span:not(.battle-fx-stars) { color: #cbd5e1; font-size: .65rem; font-weight: 900; }
+.battle-fx-stars { color: #fef08a; font-size: 1rem; letter-spacing: .7rem; line-height: 1; animation: battle-fx-stars 1.2s ease-out both; }
+.battle-fx-attack { border-color: rgba(251, 146, 60, .7); color: #fed7aa; box-shadow: 0 0 45px rgba(249, 115, 22, .45); }
+.battle-fx-incoming { border-color: rgba(244, 63, 94, .7); color: #fecdd3; box-shadow: 0 0 45px rgba(244, 63, 94, .45); }
 
 @media (min-width: 1024px) {
   .webrtc-page { margin-right: -20rem; }
@@ -236,4 +250,23 @@ html[data-theme="dark"] .glass { background: rgba(15, 23, 42, .72); border-color
   0% { opacity: 0; transform: translate(-50%, -42%) scale(.96); }
   12%, 68% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -58%) scale(1.02); }
+}
+
+@keyframes tetris-countdown-pop {
+  0% { opacity: 0; transform: scale(.35) rotate(-8deg); filter: blur(5px); }
+  55% { opacity: 1; transform: scale(1.22) rotate(2deg); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes battle-fx-burst {
+  0% { opacity: 0; transform: translateY(1.5rem) scale(.45); }
+  18% { opacity: 1; transform: translateY(0) scale(1.08); }
+  72% { opacity: 1; transform: translateY(-.2rem) scale(1); }
+  100% { opacity: 0; transform: translateY(-1.5rem) scale(.92); }
+}
+
+@keyframes battle-fx-stars {
+  0% { opacity: 0; transform: scale(.2) rotate(-18deg); }
+  30% { opacity: 1; transform: scale(1.25) rotate(0); }
+  100% { opacity: 0; transform: scale(1.5) rotate(12deg); }
 }
