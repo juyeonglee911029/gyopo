@@ -352,6 +352,10 @@ async function fetchHaninCommunity(source: ContentSource) {
 function extractLinks(html: string, pageUrl: string, pathPrefix: string, category: ContentCategory): CrawlItem[] {
   const items: CrawlItem[] = [];
   const seen = new Set<string>();
+  const pageOrigin = new URL(pageUrl).origin;
+  const prefixUrl = new URL(pathPrefix, pageUrl);
+  const prefixPath = prefixUrl.pathname.replace(/\/+$/, '') || '/';
+  const rootArticlePattern = /\/(?:article|articles|blog|news|noticia|noticias|post|posts|story|stories|view|read|detail|entry)(?:\/|$)/i;
   const anchorPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchorPattern)) {
     let url: URL;
@@ -362,8 +366,10 @@ function extractLinks(html: string, pageUrl: string, pathPrefix: string, categor
     }
     const heading = match[2].match(/<(h[1-6]|strong|b)[^>]*>([\s\S]*?)<\/\1>/i)?.[2];
     const title = clean(heading || match[2]);
-    if (url.origin !== new URL(pageUrl).origin || !url.pathname.startsWith(pathPrefix) || url.pathname === pathPrefix || url.hash || title.length < 4 || title.length > 280) continue;
-    if (seen.has(url.href) || /^(로그인|회원가입|전체보기|전체 상품|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|이용약관|개인정보처리방침|커뮤니티 운영정책|편집·정정정책|제보·문의|검색|앱 설치하기)$/i.test(title) || /(운영정책|이용약관|개인정보|편집·정정|제보·문의)/i.test(title)) continue;
+    const isRootArticle = prefixPath === '/' && (rootArticlePattern.test(url.pathname) || url.searchParams.has('p') || url.searchParams.has('post_id'));
+    const isPathArticle = prefixPath !== '/' && url.pathname.startsWith(`${prefixPath}/`) && url.pathname !== prefixPath;
+    if (url.origin !== pageOrigin || (!isRootArticle && !isPathArticle) || url.hash || title.length < 4 || title.length > 280) continue;
+    if (seen.has(url.href) || /^(로그인|회원가입|전체보기|전체 상품|더보기|기사 보기|상품 등록|공고 등록|업체 등록|관심 상품|내 거래|글쓰기|이용약관|개인정보처리방침|커뮤니티 운영정책|편집·정정정책|제보·문의|검색|앱 설치하기|한인회소개|임원소개|역대 회장|찾아오시는 길|주요 연락처|공지사항|한인회 소식지|대사관소식)$/i.test(title) || /(운영정책|이용약관|개인정보|편집·정정|제보·문의)/i.test(title)) continue;
     seen.add(url.href);
     items.push({ title, url: url.href, category });
     if (items.length >= 8) break;
@@ -596,13 +602,13 @@ export async function GET(request: Request) {
           const page = await fetchHtml(url);
            const extracted = extractLinks(page, url, crawlPath.path, crawlPath.category);
            const enriched = curateSourceItems(await enrichItems(extracted), crawlPath.category);
-           const fallback = source.categories.includes(crawlPath.category) && enriched.length === 0 && !['jobs', 'community'].includes(crawlPath.category)
+            const fallback = source.categories.includes(crawlPath.category) && crawlPath.path !== '/' && enriched.length === 0 && !['jobs', 'community'].includes(crawlPath.category)
               ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}`, url: canonical }]
               : [];
             return { category: crawlPath.category, label: crawlPath.label, url, items: curateSourceItems(enriched.length ? enriched : fallback, crawlPath.category) };
         } catch (error) {
           warnings.push(`${crawlPath.label}: ${error instanceof Error ? error.message : '목록을 읽지 못했습니다.'}`);
-          const fallback = source.categories.includes(crawlPath.category) && !['jobs', 'community'].includes(crawlPath.category) ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}` }] : [];
+            const fallback = source.categories.includes(crawlPath.category) && crawlPath.path !== '/' && !['jobs', 'community'].includes(crawlPath.category) ? [{ ...sourceItem, category: crawlPath.category, title: `${source.name} · ${crawlPath.label}` }] : [];
           return { category: crawlPath.category, label: crawlPath.label, url: new URL(crawlPath.path, source.url).href, items: curateSourceItems(fallback, crawlPath.category) };
         }
       }))
