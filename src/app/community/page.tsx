@@ -42,6 +42,7 @@ function curateCommunityPosts(items: Post[]) {
   for (const post of items) {
     if (!post.authorId) continue;
     if (!isImportedPost(post)) {
+      if (post.type === 'news') continue;
       byOrigin.set(post.id, post);
       continue;
     }
