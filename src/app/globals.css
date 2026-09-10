@@ -662,10 +662,13 @@ body { padding-top: 5.75rem !important; }
   color: rgb(148 163 184) !important;
 }
 
-/* Final responsive pass: keep search and conversation controls quiet and translucent. */
-.music-player-search { border: 0 !important; background: rgba(255, 255, 255, .08) !important; box-shadow: none !important; backdrop-filter: blur(14px); }
+/* Final responsive pass: keep search and conversation controls square and quiet. */
+.music-player-search { border: 1px solid rgba(165, 243, 252, .18) !important; border-radius: 0 !important; background: rgba(255, 255, 255, .08) !important; box-shadow: none !important; backdrop-filter: blur(14px); }
 .music-player-search input { background: transparent !important; border: 0 !important; }
 .music-player-results { border: 0 !important; box-shadow: 0 18px 50px rgba(0, 0, 0, .25); }
+.portal-frame input, .portal-frame textarea, .portal-frame select { border-radius: 0 !important; }
+.delete-action { display: inline-flex !important; align-items: center !important; justify-content: center !important; min-width: 5.5rem; min-height: 2.25rem; text-align: center; line-height: 1.2; }
+button[class*="text-red"], button[class*="text-rose"] { display: inline-flex !important; align-items: center !important; justify-content: center !important; text-align: center; line-height: 1.2; }
 .assistant-page > div { background: rgba(8, 16, 31, .26) !important; border-color: rgba(165, 243, 252, .12) !important; }
 .assistant-page form > div { border: 0 !important; background: rgba(255, 255, 255, .08) !important; box-shadow: none !important; }
 .assistant-page form input { background: transparent !important; }
@@ -813,6 +816,7 @@ body { padding-top: 5.75rem !important; }
   border-bottom-color: transparent !important;
   background: transparent !important;
 }
+.jobs-page { background: transparent !important; }
 
 /* Keep the global header transparent and borderless in every viewport. */
 html[data-theme="dark"] .portal-chrome > header,
@@ -823,11 +827,307 @@ html[data-theme="light"] .portal-chrome > header {
   backdrop-filter: none !important;
 }
 
+/* Shared glass-mosaic language for content pages. */
+:root {
+  --glass-white: rgba(255, 255, 255, .08);
+  --glass-black: rgba(0, 0, 0, .28);
+  --glass-blur: blur(24px);
+}
 
-/* Crisp angular controls */
-input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea, select { border-radius: 0 !important; }
-button[aria-label*="ì­ì "], button[title*="ì­ì "], [data-delete="true"] { border-radius: 0 !important; }
-.music-player-search, .music-player-search input, .music-page .music-search-field, .music-page .music-video-card, .music-page .music-search-aside { border-radius: 0 !important; }
-#friend-dock, #friend-dock header, #friend-dock input, #friend-dock textarea { border-radius: 0 !important; }
+.portal-chrome > header .local-clock {
+  color: rgba(255, 255, 255, .78) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  letter-spacing: .01em;
+}
 
-#global-lounge input { border-radius: 0 !important; }
+.portal-chrome > header .brand-mark,
+.portal-chrome > header .header-action,
+.portal-chrome > header .translate-control,
+.portal-chrome > header .usdt-balance,
+.portal-chrome > header .header-profile-button,
+.portal-chrome > header .header-profile-button img {
+  border-radius: 0 !important;
+}
+
+.portal-frame main h1,
+.portal-frame main h2,
+.portal-frame main h3 {
+  font-weight: 500 !important;
+  letter-spacing: -.02em;
+}
+
+.portal-frame main [class*="rounded-"]:not([class*="rounded-full"]),
+.portal-chrome aside [class*="rounded-"]:not([class*="rounded-full"]) {
+  border-radius: 0 !important;
+}
+
+.portal-frame main [class*="border-"],
+.portal-chrome aside [class*="border-"] {
+  border-color: transparent !important;
+}
+
+.portal-frame main input:not([type="range"]),
+.portal-frame main textarea,
+.portal-frame main select,
+#friend-dock input,
+#friend-dock textarea,
+#global-lounge input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--glass-white) !important;
+  backdrop-filter: var(--glass-blur);
+}
+
+.portal-frame main input:not([type="range"]):focus,
+.portal-frame main textarea:focus,
+.portal-frame main select:focus,
+#friend-dock input:focus,
+#global-lounge input:focus {
+  border: 0 !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .14) !important;
+}
+
+.news-page,
+.jobs-page,
+.community-page,
+.users-page,
+.assistant-page,
+.master-page {
+  background: transparent !important;
+}
+
+.master-page section,
+.master-page > div > section,
+.master-page > div > aside > section,
+.master-page > div > div > section {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: rgba(0, 0, 0, .3) !important;
+  box-shadow: none !important;
+  backdrop-filter: var(--glass-blur);
+}
+
+.master-page section > div[class*="rounded"],
+.master-page section > div[class*="border"] {
+  border-radius: 0 !important;
+  border-color: transparent !important;
+}
+
+.news-page > header,
+.jobs-page > div > header,
+.community-page > div:first-child,
+.users-page > .mx-auto > header,
+.assistant-page > div > header {
+  border-color: transparent !important;
+}
+
+.news-page .overflow-hidden,
+.community-page .overflow-hidden,
+.jobs-page main > a > div,
+.users-page > .mx-auto > section,
+.users-page > .mx-auto > .grid > article,
+.users-page > .mx-auto > .grid > div.rounded-\[2rem\],
+.assistant-page > div,
+#friend-dock,
+#global-lounge {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--glass-black) !important;
+  box-shadow: none !important;
+  backdrop-filter: var(--glass-blur);
+}
+
+.news-page .divide-y > *,
+.community-page .divide-y > *,
+.jobs-page main > a > div,
+.users-page > .mx-auto > .grid > article {
+  border-color: transparent !important;
+  background: var(--glass-white) !important;
+}
+
+.news-page .divide-y > *:hover,
+.community-page .divide-y > *:hover,
+.jobs-page main > a > div:hover,
+.users-page > .mx-auto > .grid > article:hover {
+  background: rgba(255, 255, 255, .13) !important;
+}
+
+.news-page .rounded-full,
+.community-page .rounded-full,
+.jobs-page .rounded-full,
+.users-page .rounded-full,
+.assistant-page .rounded-full,
+.news-page .rounded-xl,
+.news-page .rounded-2xl,
+.community-page .rounded-xl,
+.community-page .rounded-2xl,
+.jobs-page .rounded-xl,
+.jobs-page .rounded-2xl,
+.users-page .rounded-xl,
+.users-page .rounded-2xl,
+.assistant-page .rounded-xl,
+.assistant-page .rounded-2xl {
+  border-radius: 0 !important;
+}
+
+.news-page [class*="border-"],
+.jobs-page [class*="border-"],
+.community-page [class*="border-"],
+.users-page [class*="border-"],
+.assistant-page [class*="border-"] {
+  border-color: transparent !important;
+}
+
+.music-player-shell,
+.music-player-search,
+.music-favorites-popover,
+.music-player-results {
+  border-radius: 0 !important;
+  border-color: transparent !important;
+}
+
+.music-player-shell {
+  background: rgba(0, 0, 0, .28) !important;
+  backdrop-filter: var(--glass-blur);
+}
+
+.music-player-search {
+  background: var(--glass-white) !important;
+}
+
+.music-favorites-popover {
+  max-height: min(20rem, calc(100vh - 6rem));
+  overflow-y: auto;
+}
+
+.users-page > .mx-auto > .grid > article > div > div:first-child {
+  height: 3rem !important;
+}
+
+.users-page > .mx-auto > .grid > article > div > div:nth-child(2) {
+  padding: 0 1rem 1rem !important;
+}
+
+.users-page > .mx-auto > .grid > article img {
+  height: 3rem !important;
+  width: 3rem !important;
+  margin-top: -1.5rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.users-page > .mx-auto > .grid > article .mt-4 {
+  margin-top: .65rem !important;
+}
+
+#global-lounge > div:first-child,
+#global-lounge > div:last-child,
+#friend-dock header {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+#global-lounge input,
+#friend-dock input {
+  background: var(--glass-white) !important;
+}
+
+@media (max-width: 639px) {
+  .portal-chrome > header .local-clock {
+    display: inline-block !important;
+    font-size: 12px !important;
+  }
+
+  .portal-chrome > header .translate-control span,
+  .portal-chrome > header .header-action-secondary span {
+    display: none;
+  }
+
+  .portal-frame main h1 {
+    font-size: 1.75rem !important;
+  }
+
+  .assistant-page,
+  .users-page,
+  .jobs-page,
+  .community-page {
+    padding-inline: .75rem !important;
+  }
+
+  #friend-dock {
+    left: .5rem !important;
+    right: .5rem !important;
+    bottom: .5rem !important;
+  }
+}
+
+/* Keep the requested cleanup after all legacy theme overrides. */
+.portal-chrome > header .header-action em { display: none !important; }
+.portal-chrome > header .header-action { font-family: var(--font-sans) !important; }
+.portal-chrome > section a[href="/music"] {
+  font-family: var(--font-sans) !important;
+  font-size: .64rem !important;
+  font-weight: 500 !important;
+}
+.music-player-shell .music-player-search {
+  border: 1px solid rgba(165, 243, 252, .28) !important;
+  border-radius: 0 !important;
+}
+.music-player-shell .music-player-search input::placeholder { color: transparent !important; }
+.music-search-box {
+  border: 1px solid rgba(165, 243, 252, .2) !important;
+  border-radius: 0 !important;
+  background: rgba(255, 255, 255, .05) !important;
+}
+.assistant-page,
+.assistant-page > div,
+.assistant-page > div > header,
+.assistant-page > div > form,
+.assistant-page form > div,
+.assistant-page input,
+.assistant-page button {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.jobs-page main > a > div,
+.jobs-page main > a > div:hover,
+.jobs-page .job-row,
+.jobs-page .job-row:hover {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.job-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  padding: .35rem .75rem .45rem;
+}
+.post-actions { position: static !important; }
+.delete-action {
+  display: inline-flex !important;
+  min-width: 4.5rem !important;
+  min-height: 2rem !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: .45rem .75rem !important;
+  text-align: center !important;
+  line-height: 1 !important;
+}
+#friend-dock,
+#friend-dock header,
+#friend-dock button,
+#friend-dock input,
+#friend-dock textarea { border: 0 !important; border-radius: 0 !important; }
+.tetris-video-pane { min-width: 0 !important; }
+
+@media (min-width: 1024px) {
+  .webrtc-grid { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr) !important; }
+  .webrtc-grid > section { min-width: 0 !important; }
+}
