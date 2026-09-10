@@ -155,7 +155,15 @@ service cloud.firestore {
     }
      match /depositRequests/{requestId} {
        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+       allow create: if request.auth != null && (
+         request.resource.data.userId == request.auth.uid
+         || (isMaster()
+           && request.resource.data.source == 'TRONCHAIN'
+           && request.resource.data.txHash is string
+           && request.resource.data.sourceWalletAddress is string
+           && request.resource.data.amount is number
+           && request.resource.data.amount > 0)
+       );
        allow update: if isMaster();
        allow delete: if false;
     }
