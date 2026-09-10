@@ -1345,7 +1345,18 @@ export async function getFriendCallRequest(requestId: string, token = getSession
     getDocument<Omit<FriendCallRequest, 'id'> & { kind?: string }>(legacyFriendConnectionCollection, requestId, token).catch(() => null),
   ]);
   const request = dedicated || (legacy?.kind === 'friendCallRequest' ? legacy : null);
-  return request ? { id: requestId, ...request, sourceCollection: dedicated ? friendCallRequestCollection : legacyFriendConnectionCollection } : null;
+  if (!request) return null;
+  return {
+    id: requestId,
+    callerId: request.callerId,
+    callerName: request.callerName,
+    callerImage: request.callerImage,
+    calleeId: request.calleeId,
+    status: request.status,
+    createdAt: request.createdAt,
+    expiresAt: request.expiresAt,
+    sourceCollection: dedicated ? friendCallRequestCollection : legacyFriendConnectionCollection,
+  };
 }
 
 export async function listIncomingFriendCallRequests(userId: string, token = getSessionToken()): Promise<FriendCallRequest[]> {
