@@ -1235,7 +1235,7 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
 #friend-dock.friend-dock-call-active .friend-call-video { height: min(70dvh, 680px); aspect-ratio: auto !important; }
 
 /* The Tetris workspace is the one route that intentionally reaches both viewport edges. */
-.portal-frame > main > .games-page { padding-left: 0 !important; padding-right: 0 !important; }
+.portal-frame .games-page { padding-left: 0 !important; padding-right: 0 !important; }
 
 @media (max-width: 639px) {
   body { padding-bottom: 3.35rem !important; }
