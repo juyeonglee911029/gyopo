@@ -31,7 +31,7 @@ export type PortalUser = {
   country?: string;
   walletAddress?: string;
   walletNetwork?: string;
-  walletStatus?: 'READY' | 'CONNECTED';
+  walletStatus?: 'READY' | 'CONNECTED' | 'CUSTODIAL';
   walletCreatedAt?: string;
   transferPinHash?: string;
   transferPinSalt?: string;
@@ -1562,7 +1562,7 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     country: savedProfile?.country,
     walletAddress: savedProfile?.walletAddress,
     walletNetwork: savedProfile?.walletNetwork,
-    walletStatus: savedProfile?.walletStatus === 'CONNECTED' || savedProfile?.walletAddress ? 'CONNECTED' : 'READY',
+    walletStatus: savedProfile?.walletStatus === 'CUSTODIAL' ? 'CUSTODIAL' : savedProfile?.walletStatus === 'CONNECTED' || savedProfile?.walletAddress ? 'CONNECTED' : 'READY',
     walletCreatedAt: savedProfile?.walletCreatedAt || new Date().toISOString(),
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
