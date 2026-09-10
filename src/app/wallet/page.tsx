@@ -80,6 +80,7 @@ export default function WalletPage() {
   }, [user?.id]);
 
   const connectWallet = async () => {
+    if (!user) return;
     try {
       const address = await connectTronWallet();
       const balance = await getUsdtBalance(address);
@@ -96,6 +97,7 @@ export default function WalletPage() {
   };
 
   const handleChainSend = async () => {
+    if (!user) return setChainSendError('로그인이 필요합니다.');
     const value = Number(chainSendAmount);
     if (!chainWalletAddress) return setChainSendError('먼저 TronLink 지갑을 연결해주세요.');
     if (!isValidTronAddress(chainSendAddress.trim())) return setChainSendError('받는 사람의 TRON 주소가 올바르지 않습니다.');
