@@ -31,6 +31,8 @@ export type PortalUser = {
   country?: string;
   walletAddress?: string;
   walletNetwork?: string;
+  walletStatus?: 'READY' | 'CONNECTED';
+  walletCreatedAt?: string;
   transferPinHash?: string;
   transferPinSalt?: string;
   transferPinSetAt?: string;
@@ -1421,6 +1423,8 @@ function privateProfileData(user: PortalUser): Record<string, unknown> {
     ...(isCountry(user.country) ? { country: user.country.trim() } : {}),
     ...(user.walletAddress ? { walletAddress: user.walletAddress.trim() } : {}),
     ...(user.walletNetwork ? { walletNetwork: user.walletNetwork.trim() } : {}),
+    walletStatus: user.walletStatus || (user.walletAddress ? 'CONNECTED' : 'READY'),
+    walletCreatedAt: user.walletCreatedAt || new Date().toISOString(),
     ...(user.transferPinHash && user.transferPinSalt ? {
       transferPinHash: user.transferPinHash,
       transferPinSalt: user.transferPinSalt,
@@ -1558,6 +1562,8 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     country: savedProfile?.country,
     walletAddress: savedProfile?.walletAddress,
     walletNetwork: savedProfile?.walletNetwork,
+    walletStatus: savedProfile?.walletStatus === 'CONNECTED' || savedProfile?.walletAddress ? 'CONNECTED' : 'READY',
+    walletCreatedAt: savedProfile?.walletCreatedAt || new Date().toISOString(),
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
   await upsertDocument('profiles', user.id, privateProfileData(user), result.idToken).catch(() => undefined);
