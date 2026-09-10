@@ -54,7 +54,9 @@ export default function MusicPage() {
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('gyopo-music-video-volume', { detail: { volume } }));
-    return () => window.dispatchEvent(new CustomEvent('gyopo-music-video-volume', { detail: { volume: 0 } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('gyopo-music-video-volume', { detail: { volume: 0 } }));
+    };
   }, [volume]);
 
   useEffect(() => {
