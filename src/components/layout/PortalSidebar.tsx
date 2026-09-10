@@ -27,7 +27,7 @@ function LinkRow({ href, label, english, icon: Icon, active, language }: { href:
   return (
     <Link href={href} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${active ? 'bg-teal-300 text-slate-950 shadow-[0_8px_24px_rgba(45,212,191,.16)]' : 'text-slate-400 hover:bg-white/7 hover:text-white'}`}>
       <Icon size={17} className={active ? 'text-slate-950' : 'text-slate-500 transition group-hover:text-teal-300'} />
-       <span>{language === 'ko' ? label : english}<small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {language === 'ko' ? english : label}</small></span>
+       <span>{language === 'ko' ? label : english}<small className="ml-1.5 text-[9px] font-normal opacity-45">/ {language === 'ko' ? english : label}</small></span>
     </Link>
   );
 }
@@ -49,9 +49,9 @@ export default function PortalSidebar() {
           <p className="mb-2 mt-7 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">{language === 'ko' ? 'ë¼ì´ë¸ / LIVE & PLAY' : 'LIVE & PLAY / ë¼ì´ë¸'}</p>
         <div className="space-y-1">
            {utilityLinks.map((link) => <LinkRow key={link.href} {...link} language={language} active={pathname.startsWith(link.href)} />)}
-             <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/7 hover:text-white">
+             <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-none px-3 py-2.5 text-[11px] font-medium text-slate-400 transition hover:bg-white/7 hover:text-white">
              <UserRoundCheck size={17} className="text-slate-500 transition group-hover:text-teal-300" />
-               <span>{language === 'ko' ? 'ì¹êµ¬ ì±íÂ·íµí' : 'Friends'} <small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {language === 'ko' ? 'Friends' : 'ì¹êµ¬ ì±íÂ·íµí'}</small></span>
+               <span>{language === 'ko' ? 'ì¹êµ¬ ì±íÂ·íµí' : 'Friends Chat / Call'} <small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {language === 'ko' ? 'Friends Chat / Call' : 'ì¹êµ¬ ì±íÂ·íµí'}</small></span>
           </button>
         </div>
       </nav>
