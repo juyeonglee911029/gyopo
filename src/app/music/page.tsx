@@ -2,7 +2,7 @@
 
 import { Heart, Pause, Play, Search, Music2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { emitMusicEvent, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
+import { emitMusicPlayerEvent, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
 import { getSessionToken, saveProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
@@ -18,7 +18,6 @@ export default function MusicPage() {
   const [favoriteLoop, setFavoriteLoop] = useState(false);
   const metadataLoadedRef = useRef(new Set<string>());
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const originRef = useRef('music-page');
   const localResults = useMemo(() => searchMusicTracks(query), [query]);
   const results = query.trim() ? (remoteResults.length ? remoteResults : localResults) : MUSIC_TRACKS;
   const favoriteIds = favoriteTracks.map((item) => item.id);
@@ -38,9 +37,15 @@ export default function MusicPage() {
       if (!detail?.track?.videoId || detail.player !== 'top') return;
       setTrack(detail.track);
       setPlaying(detail.playing);
-      if (typeof detail.volume === 'number') setVolume(detail.volume);
+    };
+    const stopForTop = (event: Event) => {
+      const detail = (event as CustomEvent<{ player?: string; playing?: boolean }>).detail;
+      if (detail?.player !== 'top' || !detail.playing) return;
+      setPlaying(false);
+      frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), 'https://www.youtube.com');
     };
     window.addEventListener('gyopo-music-local', syncTopPlayer);
+    window.addEventListener('gyopo-music-player', stopForTop);
     window.dispatchEvent(new Event('gyopo-music-request-state'));
     const initialPause = window.setTimeout(() => {
       setPlaying(false);
@@ -49,15 +54,9 @@ export default function MusicPage() {
     return () => {
       window.clearTimeout(initialPause);
       window.removeEventListener('gyopo-music-local', syncTopPlayer);
+      window.removeEventListener('gyopo-music-player', stopForTop);
     };
   }, [user?.id, user?.musicFavorites]);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('gyopo-music-video-volume', { detail: { volume } }));
-    return () => {
-      window.dispatchEvent(new CustomEvent('gyopo-music-video-volume', { detail: { volume: 0 } }));
-    };
-  }, [volume]);
 
   useEffect(() => {
     const receiveFavorites = (event: Event) => setFavoriteTracks((event as CustomEvent<{ tracks?: MusicTrack[] }>).detail?.tracks || []);
@@ -101,7 +100,7 @@ export default function MusicPage() {
   const selectTrack = (item: MusicTrack) => {
     setTrack(item);
     setPlaying(true);
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track: item, playing: true, position: 0, startedAt: Date.now(), volume });
+    emitMusicPlayerEvent({ player: 'video', playing: true });
   };
 
   useEffect(() => {
@@ -131,15 +130,13 @@ export default function MusicPage() {
     setPlaying(next);
     if (next) frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'unMute', args: [] }), 'https://www.youtube.com');
     frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: next ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com');
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing: next, position: 0, startedAt: Date.now(), volume });
+    emitMusicPlayerEvent({ player: 'video', playing: next });
   };
 
   const changeVolume = (next: number) => {
     setVolume(next);
     window.localStorage.setItem('gyopo-music-volume', String(next));
     frameRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [next] }), 'https://www.youtube.com');
-    window.dispatchEvent(new CustomEvent('gyopo-music-video-volume', { detail: { volume: next } }));
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing, position: 0, startedAt: Date.now(), volume: next });
   };
 
   const toggleFavorite = (item: MusicTrack) => {
