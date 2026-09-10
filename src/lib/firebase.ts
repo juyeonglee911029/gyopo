@@ -10,8 +10,9 @@ const firebaseConfig = {
 export const googleClientId =
   '376649492363-lgc1jrll9434im7ehi7o3o86ctrklr5u.apps.googleusercontent.com';
 export const MASTER_EMAIL = 'juyeonglee911029@gmail.com';
-export const MASTER_DEPOSIT_ADDRESS = 'TNg65wc1DnQdyVfUXbRj4rmtfxwdKXGKtX';
+export const MASTER_DEPOSIT_ADDRESS = 'TY6EaRPm511DzBnJEQEAetE67LXgRtzEwg';
 export const MASTER_NETWORK = 'TRX';
+export const USDT_NETWORK = 'TRC20';
 
 export type Gender = 'male' | 'female';
 export type GenderPreference = 'any' | Gender;
@@ -28,6 +29,8 @@ export type PortalUser = {
   premiumExpiresAt?: string;
   age?: number;
   country?: string;
+  walletAddress?: string;
+  walletNetwork?: string;
 };
 
 export function isMasterUser(user?: Pick<PortalUser, 'email'> | null): boolean {
@@ -1359,6 +1362,10 @@ function isCountry(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.trim() !== 'Global';
 }
 
+export function isValidTronAddress(value: string): boolean {
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value.trim());
+}
+
 function privateProfileData(user: PortalUser): Record<string, unknown> {
   return {
     name: user.name,
@@ -1371,6 +1378,8 @@ function privateProfileData(user: PortalUser): Record<string, unknown> {
     ...(user.premiumExpiresAt ? { premiumExpiresAt: user.premiumExpiresAt } : {}),
     ...(user.age ? { age: user.age } : {}),
     ...(isCountry(user.country) ? { country: user.country.trim() } : {}),
+    ...(user.walletAddress ? { walletAddress: user.walletAddress.trim() } : {}),
+    ...(user.walletNetwork ? { walletNetwork: user.walletNetwork.trim() } : {}),
     updatedAt: new Date(),
   };
 }
@@ -1501,6 +1510,8 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     premiumExpiresAt: savedProfile?.premiumExpiresAt,
     age: savedProfile?.age,
     country: savedProfile?.country,
+    walletAddress: savedProfile?.walletAddress,
+    walletNetwork: savedProfile?.walletNetwork,
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
   await upsertDocument('profiles', user.id, privateProfileData(user), result.idToken).catch(() => undefined);
