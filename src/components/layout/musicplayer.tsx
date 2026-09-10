@@ -31,7 +31,6 @@ export default function MusicPlayer() {
   const [favoriteTracks, setFavoriteTracks] = useState<MusicTrack[]>([]);
   const [favoriteLoop, setFavoriteLoop] = useState(false);
   const [favoriteMenuOpen, setFavoriteMenuOpen] = useState(false);
-  const volumeRef = useRef(70);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const searchShellRef = useRef<HTMLElement>(null);
   const pendingSyncRef = useRef<MusicSyncDetail | null>(null);
@@ -74,30 +73,6 @@ export default function MusicPlayer() {
     }
     setFavoriteLoop(window.localStorage.getItem(`gyopo-music-favorite-loop:${user?.id || 'guest'}`) === '1');
   }, [user?.id, user?.musicFavorites]);
-
-  useEffect(() => {
-    volumeRef.current = volume;
-  }, [volume]);
-
-  useEffect(() => {
-    const receiveMusicVideoVolume = (event: Event) => {
-      const nextVideoVolume = Number((event as CustomEvent<{ volume?: number }>).detail?.volume || 0);
-      const target = nextVideoVolume > 0 ? Math.max(10, 50 - Math.round(nextVideoVolume * .4)) : 50;
-      const step = () => {
-        const current = volumeRef.current;
-        if (current === target) return;
-        const next = current + Math.sign(target - current) * Math.min(4, Math.abs(target - current));
-        volumeRef.current = next;
-        setVolume(next);
-        sendPlayerCommand(frameRef.current, 'unMute');
-        sendPlayerCommand(frameRef.current, 'setVolume', [next]);
-        window.setTimeout(step, 80);
-      };
-      step();
-    };
-    window.addEventListener('gyopo-music-video-volume', receiveMusicVideoVolume);
-    return () => window.removeEventListener('gyopo-music-video-volume', receiveMusicVideoVolume);
-  }, []);
 
   useEffect(() => {
     const receiveLoop = (event: Event) => setFavoriteLoop(Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled));
@@ -174,7 +149,7 @@ export default function MusicPlayer() {
     const receiveMusicSync = (event: Event) => {
       const detail = (event as CustomEvent<MusicSyncDetail>).detail;
       if (!detail?.track?.videoId) return;
-      if (detail.player === 'radio') return;
+      if (detail.player !== 'top') return;
       if (detail.origin === originRef.current) return;
       pendingSyncRef.current = detail;
       setTrack(detail.track);
@@ -192,6 +167,17 @@ export default function MusicPlayer() {
       window.removeEventListener('gyopo-music-request-state', sendCurrentMusic);
     };
     }, [playing, track, volume]);
+
+  useEffect(() => {
+    const stopForVideo = (event: Event) => {
+      const detail = (event as CustomEvent<{ player?: string; playing?: boolean }>).detail;
+      if (detail?.player !== 'video' || !detail.playing || !playing) return;
+      setPlaying(false);
+      sendPlayerCommand(frameRef.current, 'pauseVideo');
+    };
+    window.addEventListener('gyopo-music-player', stopForVideo);
+    return () => window.removeEventListener('gyopo-music-player', stopForVideo);
+  }, [playing]);
 
   useEffect(() => {
     const resumeAudio = () => {
@@ -256,7 +242,6 @@ export default function MusicPlayer() {
   };
 
   const changeVolume = (next: number) => {
-    volumeRef.current = next;
     setVolume(next);
     window.localStorage.setItem('gyopo-music-volume', String(next));
     sendPlayerCommand(frameRef.current, 'setVolume', [next]);
