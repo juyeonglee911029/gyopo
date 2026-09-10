@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useEffectEvent, useState, type FormEvent } from 'react';
-import { createDocument, getDocument, getSessionToken, listDocuments } from '@/lib/firebase';
+import { createDocument, deleteDocument, getDocument, getSessionToken, isMasterUser, listDocuments } from '@/lib/firebase';
 import { CONTENT_SOURCES, sourceItemId } from '@/lib/contentSources';
 import { curateSourceItems, fetchSourceCategory, isGenuineJobListing, normalizeSourceText, normalizeSourceTitle } from '@/lib/sourcepreview';
 import { useGlobalStore } from '@/store/useGlobalStore';
@@ -29,27 +29,32 @@ export default function JobsPage() {
   const { user } = useGlobalStore();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isWriting, setIsWriting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [form, setForm] = useState({ title: '', company: '', location: '', country: '', salary: '', tag: '정규직' });
   const [disabledSourceIds, setDisabledSourceIds] = useState<string[]>([]);
 
   const loadJobs = async () => {
-    const settings = await getDocument<ContentSourceSettings>('adminSettings', 'contentSources').catch(() => null);
-    const disabled = settings?.disabledSourceIds || [];
-    setDisabledSourceIds(disabled);
-    const sources = CONTENT_SOURCES.filter((source) => !disabled.includes(source.id) && source.categories.includes('jobs'));
-    const [data, sourceResults] = await Promise.all([
-      listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken()).catch(() => []),
-      Promise.allSettled(sources.map(async (source) => ({ source, result: await fetchSourceCategory(source.id, 'jobs') }))),
-    ]);
-    const sourceJobs = sourceResults.flatMap((entry) => {
-      if (entry.status !== 'fulfilled' || !entry.value.result) return [];
-      const { source, result } = entry.value;
-      return result.items.map((item) => {
-        const id = sourceItemId(source.id, 'jobs', item.url);
-        return { id, title: item.title, company: item.company || source.name, location: item.location || item.country || source.region, salary: item.salary || '상세 내용 참조', tag: item.tag || '채용', country: item.country || source.region, authorId: 'source', createdAt: item.publishedAt || result.fetchedAt, body: item.body || item.description, image: item.image, images: item.images, sourceId: source.id, sourceName: source.name, sourceUrl: item.url, sourceCategory: 'jobs', sourceContentId: id };
+    try {
+      const settings = await getDocument<ContentSourceSettings>('adminSettings', 'contentSources').catch(() => null);
+      const disabled = settings?.disabledSourceIds || [];
+      setDisabledSourceIds(disabled);
+      const sources = CONTENT_SOURCES.filter((source) => !disabled.includes(source.id) && source.categories.includes('jobs'));
+      const [data, sourceResults] = await Promise.all([
+        listDocuments<Omit<Job, 'id'>>('jobs', getSessionToken()).catch(() => []),
+        Promise.allSettled(sources.map(async (source) => ({ source, result: await fetchSourceCategory(source.id, 'jobs') }))),
+      ]);
+      const sourceJobs = sourceResults.flatMap((entry) => {
+        if (entry.status !== 'fulfilled' || !entry.value.result) return [];
+        const { source, result } = entry.value;
+        return result.items.map((item) => {
+          const id = sourceItemId(source.id, 'jobs', item.url);
+          return { id, title: item.title, company: item.company || source.name, location: item.location || item.country || source.region, salary: item.salary || '상세 내용 참조', tag: item.tag || '채용', country: item.country || source.region, authorId: 'source', createdAt: item.publishedAt || result.fetchedAt, body: item.body || item.description, image: item.image, images: item.images, sourceId: source.id, sourceName: source.name, sourceUrl: item.url, sourceCategory: 'jobs', sourceContentId: id };
+        });
       });
-    });
-    setJobs(curateJobs([...data as Job[], ...sourceJobs]).filter((job) => !job.sourceId || !disabled.includes(job.sourceId)));
+      setJobs(curateJobs([...data as Job[], ...sourceJobs]).filter((job) => !job.sourceId || !disabled.includes(job.sourceId)));
+    } finally {
+      setIsLoading(false);
+    }
   };
   const loadJobsEffect = useEffectEvent(loadJobs);
 
@@ -74,6 +79,18 @@ export default function JobsPage() {
     } catch { window.alert('공고를 저장하지 못했습니다.'); }
   };
 
+  const removeJob = async (job: Job) => {
+    if (!user || job.sourceId || (user.id !== job.authorId && !isMasterUser(user)) || !window.confirm('이 구인 공고를 삭제할까요?')) return;
+    const token = getSessionToken();
+    if (!token) return;
+    try {
+      await deleteDocument('jobs', job.id, token);
+      setJobs((current) => current.filter((item) => item.id !== job.id));
+    } catch {
+      window.alert('구인 공고를 삭제하지 못했습니다.');
+    }
+  };
+
   const filteredJobs = jobs.filter((job) => !job.sourceId || !disabledSourceIds.includes(job.sourceId));
 
   return (
@@ -87,8 +104,9 @@ export default function JobsPage() {
           <button onClick={() => setIsWriting(true)} className="rounded-lg bg-blue-600 px-5 py-2.5 font-bold text-white shadow-md transition hover:bg-blue-500">구인 글쓰기</button>
         </header>
         <main className="space-y-4">
-          {filteredJobs.length === 0 && <div className="rounded-xl border border-dashed border-white/15 py-20 text-center"><span className="mb-4 block text-4xl">📭</span><p className="text-slate-500">등록된 구인/구직 공고가 없습니다.</p></div>}
-          {filteredJobs.map((job) => <Link href={job.sourceContentId ? `/content/${job.sourceContentId}?source=${encodeURIComponent(job.sourceId || '')}&category=jobs&url=${encodeURIComponent(job.sourceUrl || '')}` : `/jobs?job=${job.id}`} key={job.id} className="group block"><div className="flex items-center gap-3 border-b border-white/5 bg-white/[.045] px-3 py-3 transition-colors hover:bg-white/[.06] sm:gap-4"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-blue-400/10">{job.image ? <img src={job.image} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xl">💼</div>}</div><div className="min-w-0 flex-1"><div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold"><span className="rounded-full bg-blue-400/10 px-2 py-0.5 text-blue-100">{job.country}</span><span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-200">{job.tag}</span><span className="truncate text-slate-300">{job.company}</span>{job.sourceName && <span className="truncate text-teal-200">출처: {job.sourceName}</span>}</div><h3 className="truncate text-base font-bold text-white transition-colors group-hover:text-blue-200">{job.title}</h3><div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-300"><span>📍 {job.location}</span><span>💰 {job.salary}</span></div></div><span className="hidden shrink-0 text-xs font-black text-teal-200 sm:block">상세 보기 →</span></div></Link>)}
+           {isLoading && <div className="rounded-xl border border-dashed border-white/15 py-20 text-center"><span className="mb-4 block text-4xl">⏳</span><p className="text-slate-400">최신 구인구직 게시글을 불러오는 중입니다...</p></div>}
+           {!isLoading && filteredJobs.length === 0 && <div className="rounded-xl border border-dashed border-white/15 py-12 text-center"><p className="text-slate-500">새로운 공고가 준비되면 이곳에 표시됩니다.</p></div>}
+           {filteredJobs.map((job) => <div key={job.id} className="job-row"><Link href={job.sourceContentId ? `/content/${job.sourceContentId}?source=${encodeURIComponent(job.sourceId || '')}&category=jobs&url=${encodeURIComponent(job.sourceUrl || '')}` : `/jobs?job=${job.id}`} className="group block"><div className="flex items-center gap-3 px-3 py-3 transition-colors sm:gap-4"><div className="h-14 w-14 shrink-0 overflow-hidden bg-blue-400/10">{job.image ? <img src={job.image} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xl">💼</div>}</div><div className="min-w-0 flex-1"><div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold"><span className="bg-blue-400/10 px-2 py-0.5 text-blue-100">{job.country}</span><span className="bg-white/10 px-2 py-0.5 text-slate-200">{job.tag}</span><span className="truncate text-slate-300">{job.company}</span>{job.sourceName && <span className="truncate text-teal-200">출처: {job.sourceName}</span>}</div><h3 className="truncate text-base font-bold text-white transition-colors group-hover:text-blue-200">{job.title}</h3><div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-300"><span>📍 {job.location}</span><span>💰 {job.salary}</span></div></div><span className="hidden shrink-0 text-xs font-black text-teal-200 sm:block">상세 보기 →</span></div></Link>{user && !job.sourceId && (user.id === job.authorId || isMasterUser(user)) && <div className="job-row-actions"><button type="button" onClick={() => void removeJob(job)} className="delete-action text-xs font-black text-rose-300">삭제</button></div>}</div>)}
         </main>
       </div>
       {isWriting && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={(event) => event.target === event.currentTarget && setIsWriting(false)}><form onSubmit={handleSubmit} className="w-full max-w-lg space-y-3 rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-xl font-black text-slate-900">구인 공고 등록</h2><input required placeholder="공고 제목" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full rounded-xl border px-4 py-3" /><input required placeholder="회사명" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="w-full rounded-xl border px-4 py-3" /><input required placeholder="근무 지역" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="w-full rounded-xl border px-4 py-3" /><input required placeholder="국가 태그 (예: 독일, 미국, 브라질)" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} className="w-full rounded-xl border px-4 py-3" /><input required placeholder="급여" value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} className="w-full rounded-xl border px-4 py-3" /><select value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} className="w-full rounded-xl border px-4 py-3"><option>정규직</option><option>파트타임</option><option>계약직</option><option>재택근무</option></select><div className="flex gap-2 pt-2"><button type="button" onClick={() => setIsWriting(false)} className="flex-1 rounded-xl border py-3 font-bold">취소</button><button className="flex-1 rounded-xl bg-blue-600 py-3 font-bold text-white">등록</button></div></form></div>}
