@@ -107,7 +107,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
       if (!token) return;
       try {
         const wallet = await provisionTronWallet(user.id, token);
-        const nextUser = { ...user, walletAddress: wallet.address, walletNetwork: USDT_NETWORK, walletCreatedAt: wallet.createdAt };
+        const nextUser = { ...user, walletAddress: wallet.address, walletNetwork: USDT_NETWORK, walletStatus: wallet.status, walletCreatedAt: wallet.createdAt };
         await saveProfile(nextUser, token);
         setUser(nextUser);
         setProfileForm((current) => ({ ...current, walletAddress: wallet.address, walletNetwork: USDT_NETWORK }));
