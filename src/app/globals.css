@@ -1076,6 +1076,22 @@ html[data-theme="light"] .portal-chrome > header {
   border-radius: 0 !important;
 }
 .music-player-shell .music-player-search input::placeholder { color: transparent !important; }
+.music-player-shell .music-player-utility {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: .55rem .35rem !important;
+  font-family: var(--font-sans) !important;
+  font-size: .64rem !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  text-decoration: none !important;
+}
+.music-player-shell .music-player-utility:hover {
+  border: 0 !important;
+  background: transparent !important;
+}
 .music-search-box {
   border: 1px solid rgba(165, 243, 252, .2) !important;
   border-radius: 0 !important;
