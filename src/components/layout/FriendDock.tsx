@@ -4,6 +4,7 @@ import { type ChangeEvent, type FormEvent, type PointerEvent, useEffect, useRef,
 import { Check, FileText, MessageCircle, Paperclip, PhoneCall, Send, UserRoundCheck, Video, X } from 'lucide-react';
 import { createDocument, createFriendCallRequest, deleteExpiredChatMessages, getDocument, getFriendCallRequest, getSessionToken, listFriendConnections, listIncomingFriendCallRequests, queryDocumentsWhere, respondToFriendCallRequest, type FriendCallRequest, type PublicProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import '@/styles/call-ui.css';
 
 type FriendMember = Partial<PublicProfile> & { id: string; friendshipId: string };
 type FriendMessage = {
@@ -34,7 +35,8 @@ export default function FriendDock() {
   const [open, setOpen] = useState(false);
   const [friends, setFriends] = useState<FriendMember[]>([]);
   const [selectedId, setSelectedId] = useState('');
-  const [videoFriendId, setVideoFriendId] = useState('');
+  const [videoCall, setVideoCall] = useState<{ id: string; friendId: string } | null>(null);
+  const [videoClosing, setVideoClosing] = useState(false);
   const [messages, setMessages] = useState<FriendMessage[]>([]);
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState<FriendAttachment | null>(null);
@@ -45,6 +47,44 @@ export default function FriendDock() {
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ offsetX: number; offsetY: number; width: number; height: number } | null>(null);
+  const callFrameRef = useRef<HTMLIFrameElement>(null);
+  const callOperationRef = useRef(0);
+  const callBusyRef = useRef(false);
+  const closingRef = useRef(false);
+
+  const closeVideoCall = () => {
+    if (!videoCall || closingRef.current) return;
+    closingRef.current = true;
+    callOperationRef.current += 1;
+    callFrameRef.current?.contentWindow?.postMessage({ type: 'gyopo-call-end', callKind: 'friend', callId: videoCall.id }, window.location.origin);
+    setVideoClosing(true);
+    setOpen(false);
+  };
+
+  useEffect(() => {
+    if (!videoCall) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== callFrameRef.current?.contentWindow) return;
+      const data = event.data;
+      if (!data || data.type !== 'gyopo-call-ended' || data.callKind !== 'friend' || data.callId !== videoCall.id) return;
+      closeVideoCall();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [videoCall?.id]);
+
+  useEffect(() => {
+    if (!videoClosing) return;
+    const timer = window.setTimeout(() => {
+      setVideoCall(null);
+      setVideoClosing(false);
+      closingRef.current = false;
+      setError('');
+    }, 260);
+    return () => window.clearTimeout(timer);
+  }, [videoClosing]);
+
+  useEffect(() => () => { callOperationRef.current += 1; }, [user?.id]);
 
   useEffect(() => {
     const show = (event: Event) => {
@@ -60,7 +100,7 @@ export default function FriendDock() {
     if (!user) {
       setFriends([]);
       setSelectedId('');
-      setVideoFriendId('');
+      setVideoCall(null);
       setPendingCall(null);
       return;
     }
@@ -105,9 +145,11 @@ export default function FriendDock() {
       const request = await getFriendCallRequest(pendingCall.id, getSessionToken()).catch(() => null);
       if (!active || !request) return;
       if (request.status === 'accepted') {
+        active = false;
         setPendingCall(null);
         setSelectedId(pendingCall.friendId);
-        setVideoFriendId(pendingCall.friendId);
+        setVideoCall({ id: pendingCall.id, friendId: pendingCall.friendId });
+        setOpen(true);
         setError('통화가 수락되었습니다. 연결 중입니다.');
       } else if (request.status === 'declined' || request.status === 'expired') {
         setPendingCall(null);
@@ -253,31 +295,43 @@ export default function FriendDock() {
 
   const requestVideoCall = async (friendId: string) => {
     if (!user) return;
-    if (pendingCall) return;
-    setVideoFriendId('');
+    if (pendingCall || videoCall || callBusyRef.current) return;
+    callBusyRef.current = true;
+    const operation = ++callOperationRef.current;
     setError('친구의 통화 수락을 기다리는 중입니다. (최대 1분)');
     try {
       const requestId = await createFriendCallRequest(friendId, user, getSessionToken());
+      if (operation !== callOperationRef.current) return;
       setPendingCall({ id: requestId, friendId, expiresAt: new Date(Date.now() + 60_000).toISOString() });
       setError('통화 요청을 보냈습니다. 친구가 수락하면 바로 연결됩니다.');
     } catch (error) {
+      if (operation !== callOperationRef.current) return;
       setPendingCall(null);
       setError(error instanceof Error ? error.message : '통화 요청을 보내지 못했습니다. 다시 시도해주세요.');
+    } finally {
+      callBusyRef.current = false;
     }
   };
 
   const answerVideoCall = async (request: FriendCallRequest, status: 'accepted' | 'declined') => {
+    if (callBusyRef.current || videoCall || pendingCall) return;
+    callBusyRef.current = true;
+    const operation = ++callOperationRef.current;
     try {
       await respondToFriendCallRequest(request, status, getSessionToken());
+      if (operation !== callOperationRef.current) return;
       setIncomingCalls((rows) => rows.filter((row) => row.id !== request.id));
       if (status === 'accepted') {
         setSelectedId(request.callerId);
         setOpen(true);
-        setVideoFriendId(request.callerId);
+        setVideoCall({ id: request.id, friendId: request.callerId });
         setError('통화를 연결하는 중입니다.');
       }
     } catch {
+      if (operation !== callOperationRef.current) return;
       setError('통화 요청을 처리하지 못했습니다. 다시 시도해주세요.');
+    } finally {
+      callBusyRef.current = false;
     }
   };
 
@@ -289,13 +343,15 @@ export default function FriendDock() {
         <UserRoundCheck size={21} />
       </button>
 
-       <aside id="friend-dock" style={dockPosition ? { left: dockPosition.left, top: dockPosition.top, right: 'auto', bottom: 'auto' } : undefined} className={`fixed bottom-4 left-3 right-3 z-[70] overflow-hidden rounded-[1.5rem] border-0 bg-[#091120] text-white shadow-[0_25px_100px_rgba(0,0,0,.7)] transition ${dragging ? 'cursor-grabbing select-none transition-none' : 'cursor-default'} lg:left-[17rem] lg:right-auto lg:w-[430px] ${videoFriendId ? 'friend-dock-call-active' : ''} ${open ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-5 opacity-0'}`}>
+       <aside id="friend-dock" style={dockPosition ? { left: dockPosition.left, top: dockPosition.top, right: 'auto', bottom: 'auto' } : undefined} className={`gyopo-friend-dock fixed bottom-4 left-3 right-3 z-[70] overflow-hidden rounded-[1.5rem] border-0 bg-[#091120] text-white shadow-[0_25px_100px_rgba(0,0,0,.7)] transition ${dragging ? 'cursor-grabbing select-none transition-none' : 'cursor-default'} lg:left-[17rem] lg:right-auto lg:w-[430px] ${videoCall ? 'friend-dock-call-active' : ''} ${videoClosing ? 'friend-dock-call-closing' : ''} ${open ? 'visible translate-y-0 opacity-100' : videoClosing ? 'visible translate-y-5 opacity-0' : 'invisible translate-y-5 opacity-0'}`}>
            <header onPointerDown={startDockDrag} onPointerMove={moveDock} onPointerUp={stopDockDrag} onPointerCancel={stopDockDrag} className={`flex items-center justify-between border-0 px-4 py-3 ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}>
             <div className="flex items-center gap-2 text-sm font-black"><UserRoundCheck size={17} className="text-cyan-300" /> {isKorean ? '친구 채팅·통화' : 'Friends Chat & Call'}</div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="친구 패널 닫기" className="border-0 p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><X size={17} /></button>
+            <button type="button" onClick={() => videoCall ? closeVideoCall() : setOpen(false)} aria-label="친구 패널 닫기" className="border-0 p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"><X size={17} /></button>
          </header>
 
           {incomingCalls.length > 0 && <div className="mx-3 mt-3 border-0 bg-emerald-300/[.08] p-3"><div className="flex items-center gap-2 text-xs font-black text-emerald-100"><PhoneCall size={14} /> {isKorean ? '영상 통화 요청' : 'Incoming call'}</div>{incomingCalls.map((request) => <div key={request.id} className="mt-3 flex items-center gap-2"><img src={request.callerImage} alt="" className="h-8 w-8 rounded-lg object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-black text-white">{request.callerName}</p><p className="text-[10px] text-emerald-100/65">{isKorean ? '친구가 영상 통화를 요청했습니다.' : 'Your friend requested a video call.'}</p></div><button type="button" onClick={() => void answerVideoCall(request, 'accepted')} aria-label={isKorean ? '통화 수락' : 'Accept call'} className="border-0 bg-emerald-300 p-2 text-slate-950"><Check size={14} /></button><button type="button" onClick={() => void answerVideoCall(request, 'declined')} aria-label={isKorean ? '통화 거절' : 'Decline call'} className="border-0 bg-white/10 p-2 text-slate-300"><X size={14} /></button></div>)}</div>}
+
+         {videoCall && <div className="friend-call-video relative mx-3 mb-3 overflow-hidden rounded-xl bg-black"><iframe ref={callFrameRef} key={videoCall.id} title="친구 영상 통화" src={`/webrtc?friend=${encodeURIComponent(videoCall.friendId)}&auto=1&compact=1&callKind=friend&callId=${encodeURIComponent(videoCall.id)}`} allow="camera; microphone; autoplay; display-capture" className="h-full w-full border-0" /></div>}
 
          {friends.length === 0 ? (
            <div className="p-8 text-center"><UserRoundCheck size={28} className="mx-auto text-slate-600" /><p className="mt-3 text-sm font-bold text-slate-300">수락된 친구가 없습니다.</p><p className="mt-1 text-xs text-slate-500">유저 목록에서 친구 요청을 보내보세요.</p></div>
@@ -306,9 +362,7 @@ export default function FriendDock() {
             </div>
 
             {selected && <div className="p-3">
-               {videoFriendId === selected.id ? (
-                 <div className="friend-call-video relative mb-3 aspect-video overflow-hidden rounded-xl bg-black"><iframe title={`${selected.name || '친구'} 영상 통화`} src={`/webrtc?friend=${encodeURIComponent(selected.id)}&auto=1&compact=1&callKind=friend`} allow="camera; microphone; autoplay; display-capture" className="h-full w-full border-0" /></div>
-               ) : pendingCall?.friendId === selected.id ? (
+               {videoCall ? null : pendingCall?.friendId === selected.id ? (
                  <div className="mb-3 flex min-h-12 items-center gap-2 bg-amber-300/[.08] px-3 py-2 text-xs font-bold text-amber-100"><PhoneCall size={15} className="shrink-0" /><span>친구의 통화 수락을 기다리는 중입니다. 1분 후 자동 종료됩니다.</span></div>
                ) : (
                    <button type="button" onClick={() => void requestVideoCall(selected.id)} className="mb-3 flex w-full items-center justify-center gap-2 border-0 bg-cyan-300 py-2.5 text-xs font-black text-slate-950"><Video size={15} /> {isKorean ? `${selected.name || '친구'} 통화 요청` : `Call ${selected.name || 'friend'}`}</button>

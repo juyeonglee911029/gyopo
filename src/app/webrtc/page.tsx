@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Camera, CheckCircle2, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, Users, VideoOff } from 'lucide-react';
 import {
   deleteDocument,
-  deleteWebrtcRoomData,
   claimWebrtcMatch,
   createDocument,
   deleteExpiredChatMessages,
@@ -22,6 +21,7 @@ import {
   type TetrisQueueProfile,
 } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import '@/styles/call-ui.css';
 
 type QueueEntry = OnlineUser & {
   status?: 'waiting' | 'matched';
@@ -33,7 +33,7 @@ type CallDocument = {
   callId: string;
   callerId: string;
   calleeId: string;
-  status: 'offer' | 'answer' | 'connected' | 'ended';
+  status?: 'offer' | 'answer' | 'connected' | 'ended';
   offer?: RTCSessionDescriptionInit;
   answer?: RTCSessionDescriptionInit;
 };
@@ -65,10 +65,18 @@ const turnServers = [
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 const iceServers = [...stunServers, ...turnServers];
-const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise.race([
-  navigator.mediaDevices.getUserMedia(constraints),
-  new Promise<MediaStream>((_, reject) => window.setTimeout(() => reject(new Error('카메라와 마이크 권한 응답이 지연되고 있습니다. 브라우저 권한을 확인해주세요.')), 12000)),
-]);
+const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => new Promise<MediaStream>((resolve, reject) => {
+  let timedOut = false;
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    reject(new Error('카메라와 마이크 권한 응답이 지연되고 있습니다. 브라우저 권한을 확인해주세요.'));
+  }, 12000);
+  navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+    window.clearTimeout(timer);
+    if (timedOut) stream.getTracks().forEach((track) => track.stop());
+    else resolve(stream);
+  }, (error) => { window.clearTimeout(timer); reject(error); });
+});
 
 function formatCallDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -101,6 +109,8 @@ export default function WebRTCPage() {
   const [callKind, setCallKind] = useState<'random' | 'friend' | 'game'>('random');
   const [compactMode, setCompactMode] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [hasEnded, setHasEnded] = useState(false);
   const [callElapsed, setCallElapsed] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -129,6 +139,25 @@ export default function WebRTCPage() {
   const mixedAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const autoStartRef = useRef(false);
+  const operationRef = useRef(0);
+  const startedRef = useRef(false);
+  const startingRef = useRef(false);
+  const terminalRef = useRef(false);
+  const mountedRef = useRef(true);
+  const pollTimerRef = useRef<number | null>(null);
+  const callIdentityRef = useRef({ id: '', kind: 'random', targetUserId: '' });
+  const targetedCall = Boolean(targetUserId) || callKind !== 'random';
+  const matchGenderPreference = targetedCall ? 'any' : genderPreference;
+
+  const signalEnded = (callId?: string) => {
+    const token = getSessionToken();
+    const identity = callIdentityRef.current;
+    const terminalId = identity.id ? `webrtc-end-${identity.kind}-${identity.id}` : '';
+    // The shared admission marker also covers hangup before the queue is matched.
+    for (const id of new Set([callId, terminalId].filter((value): value is string => Boolean(value)))) {
+      if (token) void mergeDocument('webrtcCalls', id, { status: 'ended', endedAt: new Date() }, token).catch(() => undefined);
+    }
+  };
 
   const resetSignalingState = () => {
     appliedCandidates.current.clear();
@@ -146,6 +175,11 @@ export default function WebRTCPage() {
     setCallKind(params.get('gameRoom') || params.get('callKind') === 'game' ? 'game' : params.get('friend') ? 'friend' : 'random');
     setCompactMode(params.get('compact') === '1');
     setAutoStart(params.get('auto') === '1');
+    callIdentityRef.current = {
+      id: params.get('gameRoom') || params.get('callId') || '',
+      kind: params.get('gameRoom') || params.get('callKind') === 'game' ? 'game' : params.get('friend') ? 'friend' : 'random',
+      targetUserId: params.get('friend') || '',
+    };
   }, []);
 
   useEffect(() => {
@@ -175,24 +209,31 @@ export default function WebRTCPage() {
     }
   }, [user, active]);
 
-  const requestMedia = async () => {
+  const requestMedia = async (operation: number) => {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라와 마이크를 지원하지 않습니다.');
     if (!streamRef.current) {
+      let stream: MediaStream;
       try {
-          streamRef.current = await requestMediaWithTimeout({ video: { facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        stream = await requestMediaWithTimeout({ video: { facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (error) {
+        if (operation !== operationRef.current || !mountedRef.current) return;
         if (error instanceof DOMException && error.name === 'NotFoundError') {
-          streamRef.current = await requestMediaWithTimeout({ video: true, audio: false });
+          stream = await requestMediaWithTimeout({ video: true, audio: false });
         } else {
           throw error;
         }
       }
+      if (operation !== operationRef.current || !mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = stream;
     }
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
       await videoRef.current.play().catch(() => undefined);
     }
-    setAudioEnabled(streamRef.current.getAudioTracks().some((track) => track.enabled));
+    if (operation === operationRef.current && streamRef.current) setAudioEnabled(streamRef.current.getAudioTracks().some((track) => track.enabled));
   };
 
   const toggleMicrophone = () => {
@@ -210,27 +251,37 @@ export default function WebRTCPage() {
   };
 
   const restoreCameraTrack = async () => {
+    const operation = operationRef.current;
+    if (terminalRef.current) return;
     const screenTrack = screenTrackRef.current;
     screenTrackRef.current = null;
+    if (screenTrack) screenTrack.onended = null;
     screenTrack?.stop();
     const cameraTrack = outgoingVideoTrackRef.current || streamRef.current?.getVideoTracks()[0] || null;
     const microphoneTrack = streamRef.current?.getAudioTracks()[0] || null;
     if (videoSenderRef.current && cameraTrack) await videoSenderRef.current.replaceTrack(cameraTrack).catch(() => undefined);
+    if (terminalRef.current || operation !== operationRef.current) return;
     if (audioSenderRef.current && microphoneTrack) await audioSenderRef.current.replaceTrack(microphoneTrack).catch(() => undefined);
+    if (terminalRef.current || operation !== operationRef.current) return;
     screenAudioTrackRef.current?.stop();
     screenAudioTrackRef.current = null;
     mixedAudioTrackRef.current?.stop();
     mixedAudioTrackRef.current = null;
     await audioContextRef.current?.close().catch(() => undefined);
+    if (terminalRef.current || operation !== operationRef.current) return;
     audioContextRef.current = null;
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
       await videoRef.current.play().catch(() => undefined);
     }
+    if (terminalRef.current || operation !== operationRef.current) return;
     setIsSharingScreen(false);
   };
 
   const toggleScreenShare = async () => {
+    const operation = operationRef.current;
+    const cancelled = () => terminalRef.current || operation !== operationRef.current || !mountedRef.current;
+    if (cancelled()) return;
     if (isSharingScreen) {
       await restoreCameraTrack();
       return;
@@ -241,11 +292,17 @@ export default function WebRTCPage() {
     }
     try {
       const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+      if (cancelled()) {
+        display.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const screenTrack = display.getVideoTracks()[0];
-      if (!screenTrack) return;
-      await videoSenderRef.current.replaceTrack(screenTrack);
+      if (!screenTrack) { display.getTracks().forEach((track) => track.stop()); return; }
       screenTrackRef.current = screenTrack;
       const systemAudioTrack = display.getAudioTracks()[0] || null;
+      screenAudioTrackRef.current = systemAudioTrack;
+      await videoSenderRef.current!.replaceTrack(screenTrack);
+      if (cancelled()) return;
       if (systemAudioTrack && audioSenderRef.current) {
         const context = new AudioContext();
         const destination = context.createMediaStreamDestination();
@@ -253,18 +310,22 @@ export default function WebRTCPage() {
         const microphoneTrack = streamRef.current?.getAudioTracks()[0];
         if (microphoneTrack) context.createMediaStreamSource(new MediaStream([microphoneTrack])).connect(destination);
         const mixedTrack = destination.stream.getAudioTracks()[0] || systemAudioTrack;
-        await audioSenderRef.current.replaceTrack(mixedTrack);
         audioContextRef.current = context;
-        screenAudioTrackRef.current = systemAudioTrack;
         mixedAudioTrackRef.current = mixedTrack;
+        await audioSenderRef.current.replaceTrack(mixedTrack);
+        if (cancelled()) return;
       }
       screenTrack.onended = () => { void restoreCameraTrack(); };
       if (videoRef.current) {
         videoRef.current.srcObject = new MediaStream([screenTrack, ...(streamRef.current?.getAudioTracks() || []), ...(systemAudioTrack ? [systemAudioTrack] : [])]);
         await videoRef.current.play().catch(() => undefined);
       }
+      if (cancelled()) return;
       setIsSharingScreen(true);
     } catch (error) {
+      if (cancelled()) return;
+      await restoreCameraTrack();
+      if (cancelled()) return;
       if (error instanceof DOMException && error.name === 'NotAllowedError') return;
       setPermissionError('화면 공유를 시작하지 못했습니다. 브라우저 권한을 확인해주세요.');
     }
@@ -311,7 +372,17 @@ export default function WebRTCPage() {
   const createOutgoingStream = () => getOutgoingStream() || streamRef.current;
 
   const closeCallForRematch = (message: string) => {
+    if (targetedCall) {
+      endMatch('통화가 종료되었습니다. 새 통화 요청으로 다시 연결해주세요.');
+      return;
+    }
+    if (terminalRef.current) return;
+    operationRef.current += 1;
     const callId = callRef.current?.callId;
+    if (connectionRef.current) {
+      connectionRef.current.onconnectionstatechange = null;
+      connectionRef.current.oniceconnectionstatechange = null;
+    }
     connectionRef.current?.close();
     connectionRef.current = null;
     screenTrackRef.current?.stop();
@@ -330,15 +401,12 @@ export default function WebRTCPage() {
     const token = getSessionToken();
     if (token && userRef.current) {
       void deleteDocument('webrtcQueue', userRef.current.id, token).catch(() => undefined);
-      if (callId) {
-        void mergeDocument('webrtcCalls', callId, { status: 'ended' }, token)
-          .then(() => deleteWebrtcRoomData(callId, token))
-          .catch(() => undefined);
-      }
+      if (callId) signalEnded(callId);
     }
   };
 
   const startMatch = async () => {
+    if (startingRef.current || active || (terminalRef.current && targetedCall)) return;
     if (!user) {
       window.alert('로그인이 필요합니다.');
       return;
@@ -348,24 +416,38 @@ export default function WebRTCPage() {
       window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
       return;
     }
-    if (ageMin > ageMax) {
+    if (!targetedCall && ageMin > ageMax) {
       setPermissionError('최소 나이는 최대 나이보다 작거나 같아야 합니다.');
       return;
     }
+    const operation = ++operationRef.current;
+    const cancelled = () => operation !== operationRef.current || !mountedRef.current;
+    terminalRef.current = false;
+    startedRef.current = true;
+    startingRef.current = true;
+    setHasEnded(false);
+    setIsStarting(true);
+    setStatus('카메라와 마이크 권한을 확인하는 중');
     setPermissionError('');
-    const profile = { ...user, genderPreference };
+    const profile = targetedCall ? user : { ...user, genderPreference };
     const profileChanged = profile.genderPreference !== user.genderPreference;
     if (profileChanged) {
       try {
         await saveProfile(profile, token);
       } catch {
+        if (cancelled()) return;
         setPermissionError('프로필 저장은 지연되고 있지만 현재 설정으로 연결을 계속합니다.');
       }
     }
-    setUser(profile);
+    if (cancelled()) return;
+    if (!targetedCall) setUser(profile);
     try {
-      await requestMedia();
+      await requestMedia(operation);
     } catch (error) {
+      if (cancelled()) return;
+      startingRef.current = false;
+      setIsStarting(false);
+      setStatus('카메라 권한 확인 필요');
       const name = error instanceof DOMException ? error.name : error instanceof Error ? error.message : '알 수 없는 오류';
       if (name === 'NotFoundError') {
         setPermissionError('이 기기에서 카메라 또는 마이크를 찾을 수 없습니다. 장치 연결 상태를 확인해주세요.');
@@ -376,15 +458,15 @@ export default function WebRTCPage() {
       }
       return;
     }
+    if (cancelled()) return;
     getOutgoingStream();
     resetSignalingState();
     callRef.current = null;
     setPeer(null);
     setIsConnected(false);
     setHasRemoteVideo(false);
-    setStatus('다른 인증 회원을 찾는 중');
+    setStatus(targetedCall ? '수락한 상대에게 연결하는 중' : '다른 인증 회원을 찾는 중');
     setIsMatching(true);
-    setActive(true);
     const queued = await mergeDocument('webrtcQueue', user.id, {
       userId: user.id,
       name: user.name,
@@ -393,7 +475,7 @@ export default function WebRTCPage() {
        age: user.age || 0,
       country: user.country || 'Global',
        gender: user.gender || '',
-        genderPreference,
+         genderPreference: matchGenderPreference,
         ageMin,
         ageMax,
         targetUserId: targetUserId || undefined,
@@ -402,26 +484,46 @@ export default function WebRTCPage() {
       status: 'waiting',
       lastSeenAt: new Date(),
     }, token).then(() => true).catch((error) => {
+      if (cancelled()) return false;
       const detail = error instanceof Error ? error.message.slice(0, 180) : '알 수 없는 오류';
       setPermissionError(`매칭 서버 오류: ${detail}`);
       return false;
     });
-    if (!queued) {
-      setIsMatching(false);
-      setActive(false);
+    if (cancelled()) {
+      await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
       return;
     }
+    startingRef.current = false;
+    setIsStarting(false);
+    if (!queued) {
+      endMatch('매칭 서버에 연결하지 못했습니다.');
+      return;
+    }
+    setActive(true);
   };
 
   useEffect(() => {
-    if (!autoStart || !targetUserId || !user || active || autoStartRef.current) return;
-    autoStartRef.current = true;
-    void startMatch();
+    if (!autoStart || !targetUserId || !user || active || autoStartRef.current || terminalRef.current) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || terminalRef.current) return;
+      autoStartRef.current = true;
+      void startMatch();
+    });
+    return () => { cancelled = true; };
   }, [autoStart, callKind, targetUserId, user?.id, active]);
 
-  const endMatch = async () => {
+  function endMatch(message = '통화가 종료되었습니다.', notifyParent = true) {
+    if (terminalRef.current) return;
+    terminalRef.current = true;
+    operationRef.current += 1;
+    startingRef.current = false;
+    if (pollTimerRef.current !== null) window.clearInterval(pollTimerRef.current);
+    pollTimerRef.current = null;
     const token = getSessionToken();
     const currentCall = callRef.current;
+    setIsStarting(false);
+    setHasEnded(true);
     setActive(false);
     setIsMatching(false);
     setIsConnected(false);
@@ -429,17 +531,24 @@ export default function WebRTCPage() {
     setPeer(null);
     setActiveCallId(null);
     setChatMessages([]);
-    setStatus('대기 중');
+    setStatus(message);
+    if (connectionRef.current) {
+      connectionRef.current.onconnectionstatechange = null;
+      connectionRef.current.oniceconnectionstatechange = null;
+      connectionRef.current.onicecandidate = null;
+      connectionRef.current.ontrack = null;
+    }
     connectionRef.current?.close();
     connectionRef.current = null;
     stopOutgoingVideo();
+    if (screenTrackRef.current) screenTrackRef.current.onended = null;
     screenTrackRef.current?.stop();
     screenTrackRef.current = null;
     screenAudioTrackRef.current?.stop();
     screenAudioTrackRef.current = null;
     mixedAudioTrackRef.current?.stop();
     mixedAudioTrackRef.current = null;
-    await audioContextRef.current?.close().catch(() => undefined);
+    void audioContextRef.current?.close().catch(() => undefined);
     audioContextRef.current = null;
     videoSenderRef.current = null;
     audioSenderRef.current = null;
@@ -449,48 +558,65 @@ export default function WebRTCPage() {
     if (videoRef.current) videoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     if (sidebarVideoRef.current) sidebarVideoRef.current.srcObject = null;
+    remoteStreamRef.current?.getTracks().forEach((track) => track.stop());
     remoteStreamRef.current = null;
     callRef.current = null;
     resetSignalingState();
     connectionStartedAt.current = null;
     connectedRef.current = false;
-    if (token && user) {
-      await deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
-      if (currentCall) {
-        await mergeDocument('webrtcCalls', currentCall.callId, { status: 'ended' }, token).catch(() => undefined);
-        await deleteWebrtcRoomData(currentCall.callId, token).catch(() => undefined);
-      }
+    signalEnded(currentCall?.callId);
+    if (token && userRef.current && startedRef.current) {
+      void deleteDocument('webrtcQueue', userRef.current.id, token).catch(() => undefined);
     }
-  };
+    const identity = callIdentityRef.current;
+    if (notifyParent && identity.id && window.parent !== window) {
+      window.parent.postMessage({ type: 'gyopo-call-ended', callKind: identity.kind, callId: identity.id }, window.location.origin);
+    }
+  }
 
-  useEffect(() => () => {
-    connectionRef.current?.close();
-    stopOutgoingVideo();
-    screenTrackRef.current?.stop();
-    screenAudioTrackRef.current?.stop();
-    mixedAudioTrackRef.current?.stop();
-    void audioContextRef.current?.close();
-    videoSenderRef.current = null;
-    audioSenderRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    const token = getSessionToken();
-    if (token && userRef.current) {
-      void deleteDocument('webrtcQueue', userRef.current.id, token);
-      const callId = callRef.current?.callId;
-      if (callId) {
-        void mergeDocument('webrtcCalls', callId, { status: 'ended' }, token)
-          .then(() => deleteWebrtcRoomData(callId, token))
-          .catch(() => undefined);
-      }
-    }
+  useEffect(() => {
+    mountedRef.current = true;
+    const onMessage = (event: MessageEvent) => {
+      const identity = callIdentityRef.current;
+      if (window.parent === window || event.origin !== window.location.origin || event.source !== window.parent) return;
+      if (!identity.id || event.data?.type !== 'gyopo-call-end' || event.data.callId !== identity.id || event.data.callKind !== identity.kind) return;
+      endMatch();
+    };
+    const onPageHide = () => { if (startedRef.current) endMatch(); };
+    window.addEventListener('message', onMessage);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('pagehide', onPageHide);
+      if (startedRef.current) endMatch('통화가 종료되었습니다.', false);
+    };
   }, []);
 
   useEffect(() => {
-    if (!active || !user) return;
+    const identity = callIdentityRef.current;
+    if (!targetedCall || !identity.id || !user || hasEnded) return;
+    let cancelled = false;
+    let polling = false;
+    const checkEnd = async () => {
+      if (cancelled || polling || terminalRef.current) return;
+      polling = true;
+      try {
+        const marker = await getDocument<CallDocument>('webrtcCalls', `webrtc-end-${identity.kind}-${identity.id}`, getSessionToken()).catch(() => null);
+        if (!cancelled && marker?.status === 'ended') endMatch('상대가 통화를 종료했습니다.');
+      } finally { polling = false; }
+    };
+    void checkEnd();
+    const timer = window.setInterval(() => void checkEnd(), 700);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [targetedCall, callKind, targetUserId, user?.id, hasEnded]);
+
+  useEffect(() => {
+    if (!active || !user || terminalRef.current) return;
     let cancelled = false;
     const token = getSessionToken();
     if (!token) {
-      setStatus('로그인 세션이 만료되었습니다');
+      endMatch('로그인 세션이 만료되었습니다');
       return;
     }
 
@@ -505,14 +631,15 @@ export default function WebRTCPage() {
         if (track.kind === 'audio') audioSenderRef.current = sender;
       });
       connection.onicecandidate = ({ candidate }) => {
-        if (!candidate) return;
+        if (!candidate || terminalRef.current || connectionRef.current !== connection) return;
         void upsertDocument('webrtcCandidates', `${call.callId}-${user.id}-${crypto.randomUUID()}`, {
           callId: call.callId,
           fromUserId: user.id,
           candidate: candidate.toJSON(),
-        }, token);
+        }, token).catch(() => undefined);
       };
       connection.ontrack = (event) => {
+        if (terminalRef.current || connectionRef.current !== connection) return;
         const remoteStream = event.streams[0] || remoteStreamRef.current || new MediaStream();
         if (!event.streams[0]) remoteStream.addTrack(event.track);
         remoteStreamRef.current = remoteStream;
@@ -528,6 +655,7 @@ export default function WebRTCPage() {
         setStatus('상대 영상 수신 중');
       };
       connection.onconnectionstatechange = () => {
+        if (terminalRef.current || connectionRef.current !== connection) return;
         if (connection.connectionState === 'connecting') setStatus('보안 연결을 설정하는 중');
         if (connection.connectionState === 'connected') {
           setIsConnected(true);
@@ -537,10 +665,10 @@ export default function WebRTCPage() {
           connectedAtRef.current = Date.now();
           setCallElapsed(0);
           setStatus('연결 성공');
-          void mergeDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
         }
         if (connection.connectionState === 'disconnected') {
           connectedRef.current = false;
+          connectionStartedAt.current ||= Date.now();
           setStatus('연결이 불안정합니다');
         }
         if (connection.connectionState === 'failed') {
@@ -550,6 +678,7 @@ export default function WebRTCPage() {
         if (connection.connectionState === 'closed') setStatus('연결 종료');
       };
       connection.oniceconnectionstatechange = () => {
+        if (terminalRef.current || connectionRef.current !== connection) return;
         if (connection.iceConnectionState === 'checking') setStatus('네트워크 경로를 확인하는 중');
         if (connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed') {
           setStatus('상대 영상 연결 중');
@@ -560,12 +689,15 @@ export default function WebRTCPage() {
     };
 
     const poll = async () => {
-      if (cancelled || pollingRef.current) return;
+      if (cancelled || terminalRef.current || pollingRef.current) return;
+      const operation = operationRef.current;
+      const stale = () => cancelled || terminalRef.current || !mountedRef.current || operation !== operationRef.current;
       pollingRef.current = true;
       try {
         const current = callRef.current;
         if (!current) {
           const ownQueue = await getDocument<QueueEntry>('webrtcQueue', user.id, token).catch(() => null);
+          if (stale()) return;
            const makePeer = (profile: TetrisQueueProfile): QueueEntry => ({
             id: profile.id,
             userId: profile.id,
@@ -582,26 +714,48 @@ export default function WebRTCPage() {
             nextCall = { callId: ownQueue.callId, peer: matchedPeer, initiator: user.id < matchedPeer.userId };
           } else {
             await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
-             const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined, queueKind: callKind }, token).catch(() => null);
-           if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
+            if (stale()) {
+              if (terminalRef.current) void deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+              return;
+            }
+             const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference: matchGenderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined, queueKind: callKind }, token).catch(() => null);
+            if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
+          }
+          if (stale()) {
+            if (terminalRef.current) {
+              signalEnded(nextCall?.callId);
+              void deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+            }
+            return;
           }
           if (!nextCall) {
-            setStatus('다른 인증 회원을 찾는 중');
+            setStatus(targetedCall ? '수락한 상대의 카메라를 기다리는 중' : '다른 인증 회원을 찾는 중');
+            return;
+          }
+          const existingCall = await getDocument<CallDocument>('webrtcCalls', nextCall.callId, token).catch(() => null);
+          if (stale()) return;
+          if (existingCall?.status === 'ended') {
+            closeCallForRematch('상대가 연결을 종료했습니다. 다른 상대를 자동으로 찾는 중');
             return;
           }
            const currentUser = userRef.current;
-            if (currentUser && (currentUser.genderPreference || 'any') !== 'any' && !chargedMatchIds.current.has(nextCall.callId)) {
+             if (!targetedCall && currentUser && (currentUser.genderPreference || 'any') !== 'any' && !chargedMatchIds.current.has(nextCall.callId)) {
              try {
-               await reserveGenderMatchStake(currentUser.id, nextCall.callId, 0.25, token);
+                await reserveGenderMatchStake(currentUser.id, nextCall.callId, 0.25, token);
+                if (stale()) return;
                chargedMatchIds.current.add(nextCall.callId);
-               const refreshed = await refreshStoredUser().catch(() => null);
+                const refreshed = await refreshStoredUser().catch(() => null);
+                if (stale()) return;
                if (refreshed) setUser(refreshed);
-             } catch (error) {
+              } catch (error) {
+                 if (stale()) return;
                 setPermissionError(error instanceof Error ? error.message : 'LIVE CHAT 필터 이용료를 예약하지 못했습니다.');
-                await deleteDocument('webrtcQueue', currentUser.id, token).catch(() => undefined);
-                await deleteDocument('webrtcQueue', nextCall.peer.userId, token).catch(() => undefined);
-                await mergeDocument('webrtcCalls', nextCall.callId, { status: 'ended' }, token).catch(() => undefined);
-                await deleteWebrtcRoomData(nextCall.callId, token).catch(() => undefined);
+                 await deleteDocument('webrtcQueue', currentUser.id, token).catch(() => undefined);
+                 if (stale()) return;
+                 await deleteDocument('webrtcQueue', nextCall.peer.userId, token).catch(() => undefined);
+                 if (stale()) return;
+                 await mergeDocument('webrtcCalls', nextCall.callId, { status: 'ended' }, token).catch(() => undefined);
+                 if (stale()) return;
                 setIsMatching(false);
                 setActive(false);
                 setStatus('결제 후 성별 매칭을 시작할 수 있습니다');
@@ -609,6 +763,7 @@ export default function WebRTCPage() {
                 return;
              }
            }
+           if (stale()) return;
              callRef.current = nextCall;
            resetSignalingState();
            connectionStartedAt.current = Date.now();
@@ -619,27 +774,38 @@ export default function WebRTCPage() {
           setStatus('상대에게 연결을 요청하는 중');
           const connection = ensureConnection(nextCall);
           if (nextCall.initiator) {
-            const offer = await connection.createOffer();
-            await connection.setLocalDescription(offer);
-            await mergeDocument('webrtcCalls', nextCall.callId, { callId: nextCall.callId, callerId: user.id, calleeId: nextCall.peer.userId, status: 'offer', offer }, token);
+             const offer = await connection.createOffer();
+             if (stale()) return;
+             await connection.setLocalDescription(offer);
+             if (stale()) return;
+             // Only termination writes status, so late SDP writes cannot erase an ended marker.
+             await mergeDocument('webrtcCalls', nextCall.callId, { callId: nextCall.callId, callerId: user.id, calleeId: nextCall.peer.userId, offer }, token);
+             if (stale()) return;
             setStatus('상대 응답을 기다리는 중');
           }
           return;
         }
 
         await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
+        if (stale()) {
+          if (terminalRef.current) void deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
+          return;
+        }
         const connection = ensureConnection(current);
         if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 20_000) {
-           await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
-           closeCallForRematch('연결 시간이 초과되어 다른 상대를 자동으로 찾는 중');
+            closeCallForRematch('연결 시간이 초과되어 다른 상대를 자동으로 찾는 중');
            return;
         }
         const call = await getDocument<CallDocument>('webrtcCalls', current.callId, token).catch(() => null);
+        if (stale()) return;
         if (!call) {
           if (current.initiator) {
-            const offer = await connection.createOffer();
-            await connection.setLocalDescription(offer);
-            await mergeDocument('webrtcCalls', current.callId, { callId: current.callId, callerId: user.id, calleeId: current.peer.userId, status: 'offer', offer }, token);
+             const offer = await connection.createOffer();
+             if (stale()) return;
+             await connection.setLocalDescription(offer);
+             if (stale()) return;
+             await mergeDocument('webrtcCalls', current.callId, { callId: current.callId, callerId: user.id, calleeId: current.peer.userId, offer }, token);
+             if (stale()) return;
           }
           setStatus(current.initiator ? '상대 응답을 기다리는 중' : '연결 정보를 기다리는 중');
           return;
@@ -650,22 +816,31 @@ export default function WebRTCPage() {
         }
         if (!current.initiator && call.offer && !offerApplied.current) {
           await connection.setRemoteDescription(call.offer);
+          if (stale()) return;
           offerApplied.current = true;
           const answer = await connection.createAnswer();
+          if (stale()) return;
           await connection.setLocalDescription(answer);
-          await mergeDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
+          if (stale()) return;
+          await mergeDocument('webrtcCalls', current.callId, { answer }, token);
+          if (stale()) return;
         }
         if (current.initiator && call.answer && !answerApplied.current) {
           await connection.setRemoteDescription(call.answer);
+          if (stale()) return;
           answerApplied.current = true;
         }
         const candidates = await queryDocumentsWhere<CandidateDocument>('webrtcCandidates', [{ field: 'callId', op: 'EQUAL', value: current.callId }], token).catch(() => []);
+        if (stale()) return;
         if (!connection.remoteDescription) return;
         for (const item of candidates.filter((candidate) => candidate.callId === current.callId && candidate.fromUserId !== user.id)) {
           if (appliedCandidates.current.has(item.id)) continue;
           const added = await connection.addIceCandidate(item.candidate).then(() => true).catch(() => false);
+          if (stale()) return;
           if (added) appliedCandidates.current.add(item.id);
         }
+      } catch {
+        if (!stale()) closeCallForRematch('연결 오류, 다른 상대를 자동으로 찾는 중');
       } finally {
         pollingRef.current = false;
       }
@@ -673,9 +848,11 @@ export default function WebRTCPage() {
 
     void poll();
     const timer = window.setInterval(() => void poll(), 700);
+    pollTimerRef.current = timer;
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      if (pollTimerRef.current === timer) pollTimerRef.current = null;
     };
   }, [active, ageMax, ageMin, callKind, genderPreference, targetUserId, user]);
 
@@ -683,13 +860,15 @@ export default function WebRTCPage() {
     if (!activeCallId || !user) return;
     let live = true;
     const loadChat = async () => {
+      if (!live || terminalRef.current) return;
       const token = getSessionToken();
       if (!token) return;
       await deleteExpiredChatMessages(token, 'webrtcChatMessages').catch(() => undefined);
+      if (!live || terminalRef.current) return;
       const rows = await queryDocumentsWhere<Omit<VideoChatMessage, 'id'>>('webrtcChatMessages', [
         { field: 'callId', op: 'EQUAL', value: activeCallId },
       ], token, 60).catch(() => []);
-      if (live) setChatMessages(rows.filter((row) => new Date(row.expiresAt).getTime() > Date.now()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+      if (live && !terminalRef.current) setChatMessages(rows.filter((row) => new Date(row.expiresAt).getTime() > Date.now()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
     };
     void loadChat();
     const timer = window.setInterval(() => void loadChat(), 1500);
@@ -705,6 +884,7 @@ export default function WebRTCPage() {
     const message = { callId: activeCallId, authorId: user.id, user: user.name, text: chatInput.trim(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000) };
     try {
       await createDocument('webrtcChatMessages', crypto.randomUUID(), message, token);
+      if (terminalRef.current || callRef.current?.callId !== activeCallId) return;
       setChatInput('');
     } catch {
       setChatError('화상 채팅을 보내지 못했습니다.');
@@ -730,8 +910,10 @@ export default function WebRTCPage() {
         }),
       });
       const result = await response.json() as { answer?: string; error?: string };
+      if (terminalRef.current || callRef.current?.callId !== activeCallId) return;
       if (!response.ok || !result.answer) throw new Error(result.error || 'AI 답변을 가져오지 못했습니다.');
       await createDocument('webrtcChatMessages', crypto.randomUUID(), { callId: activeCallId, authorId: user.id, user: 'GYOPO AI', text: result.answer, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000) }, token);
+      if (terminalRef.current || callRef.current?.callId !== activeCallId) return;
       setChatInput('');
       setChatError('');
     } catch (error) {
@@ -741,31 +923,31 @@ export default function WebRTCPage() {
 
   if (compactMode) {
     return (
-      <div className="h-full min-h-0 w-full overflow-hidden bg-[#050914] text-white">
+      <div className="gyopo-compact-call h-full min-h-0 w-full overflow-hidden bg-[#050914] text-white">
         <div className="relative flex h-full min-h-0 flex-col">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-transparent px-3 py-2">
             <div className="min-w-0">
-              <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">GAME VOICE + VIDEO</div>
+              <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">{callKind === 'friend' ? 'FRIEND' : 'GAME'} VOICE + VIDEO</div>
               <div className="truncate text-xs font-bold text-slate-300">{peer?.name || '상대방 연결 대기'}</div>
             </div>
-             <span className="flex shrink-0 items-center gap-1.5"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${isConnected ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>{isConnected ? 'CONNECTED' : active ? 'CONNECTING' : 'READY'}</span>{isConnected && <span className="font-mono text-[11px] font-black text-cyan-100">{formatCallDuration(callElapsed)}</span>}</span>
+             <span className="flex shrink-0 items-center gap-1.5"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${isConnected ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>{hasEnded ? 'ENDED' : permissionError ? 'CHECK CAMERA' : isConnected ? 'CONNECTED' : active || isStarting ? 'CONNECTING' : 'READY'}</span>{isConnected && <span className="font-mono text-[11px] font-black text-cyan-100">{formatCallDuration(callElapsed)}</span>}</span>
           </div>
 
            <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
              <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-contain bg-[#030611] ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`} />
              <span className="absolute left-2 top-2 rounded-md bg-black/65 px-1.5 py-1 text-[9px] font-black text-slate-200">상대 화면</span>
-             {!hasRemoteVideo && <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,#172b50,#050914_72%)] p-4 text-center"><div><Camera size={26} className="mx-auto mb-2 text-cyan-200" /><p className="text-xs font-black">{active ? status : '카메라·마이크 준비 중'}</p><p className="mt-1 text-[10px] text-slate-500">게임방 영상 연결</p></div></div>}
-             <div className="absolute bottom-2 right-2 w-[42%] max-w-[220px] min-w-[96px] overflow-hidden rounded-xl border border-white/80 bg-black shadow-xl">
+             {!hasRemoteVideo && <div className="call-connecting-overlay absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_center,#172b50,#050914_72%)] p-3 text-center" role="status"><div>{!hasEnded && !permissionError ? <div className="call-connecting-logo" aria-label="GYOPO 연결 중">{'GYOPO'.split('').map((letter, index) => <span key={index} style={{ animationDelay: `${index * 100}ms` }} aria-hidden="true">{letter}</span>)}</div> : <VideoOff size={24} className="mx-auto mb-2 text-slate-400" />}<p className="mt-2 text-xs font-black">{status}</p></div></div>}
+             <div className={`call-local-preview absolute bottom-2 right-2 w-[30%] max-w-[160px] overflow-hidden rounded-xl border border-white/80 bg-black shadow-xl ${!active || permissionError ? 'hidden' : ''}`}>
                <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-black/65 px-1.5 py-1 text-[8px] font-black text-white">내 화면</span>
                <video ref={videoRef} muted autoPlay playsInline className={`aspect-video h-full w-full object-contain bg-[#030611] ${flip ? 'scale-x-[-1]' : ''}`} />
              </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-white/10 bg-[#10182b] p-2">
+          {permissionError && !hasEnded && <div className="call-permission-error" role="alert"><span>{permissionError}</span>{!active && <button type="button" onClick={() => void startMatch()} disabled={isStarting}>권한 확인 후 다시 시도</button>}</div>}
+          <div className="call-compact-controls grid shrink-0 grid-cols-3 gap-1.5 border-t border-white/10 bg-[#10182b] p-2">
              <button type="button" onClick={toggleMicrophone} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 text-[10px] font-black disabled:opacity-40">{audioEnabled ? <Mic size={13} /> : <MicOff size={13} />}{audioEnabled ? '마이크' : '음소거'}</button>
-              <button type="button" onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={13} />{isSharingScreen ? '공유 중지' : '화면·오디오 공유'}</button>
-             <span className="flex min-h-9 items-center justify-center rounded-lg border border-white/10 px-1 text-[10px] font-bold text-slate-400">{status}</span>
-            <button type="button" onClick={() => void endMatch()} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg bg-rose-500/90 px-1 text-[10px] font-black text-white disabled:opacity-40"><VideoOff size={13} />종료</button>
+              <button type="button" onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={13} />{isSharingScreen ? '공유 중지' : '화면 공유'}</button>
+            <button type="button" onClick={() => endMatch()} disabled={hasEnded} className="flex min-h-9 items-center justify-center gap-1 rounded-lg bg-rose-500/90 px-1 text-[10px] font-black text-white disabled:opacity-40"><VideoOff size={13} />종료</button>
           </div>
         </div>
       </div>

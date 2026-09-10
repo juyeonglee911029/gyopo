@@ -7,6 +7,8 @@ import { useEffect, useReducer, useRef, useState, type FormEvent, type TouchEven
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUp, Camera, Gamepad2, MessageCircle, Pause, Play, RotateCw, Send, Shield, Sparkles, Swords, Timer, Users, X, Zap } from 'lucide-react';
 import { claimTetrisLobbyRoom, claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, heartbeatTetrisLobbyRoom, joinTetrisLobbyRoom, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, releaseTetrisLobbyRoom, reserveGameStake, reserveTetrisLobbyRoom, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisLobbyRoom, type TetrisQueueProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import '@/styles/call-ui.css';
+import '@/styles/call-ui.css';
 
 function formatUsdt(value: number | string) {
   return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1529,7 +1531,8 @@ export default function GamesPage() {
 
   const visual = buildVisual(game);
   const opponentVisual = opponentState ? buildVisual(opponentState) : emptyBoard();
-  const videoRoomActive = Boolean(matchId && opponent && ['countdown', 'playing'].includes(matchPhase));
+  // An invitation already has both IDs; only admitted room phases may request media.
+  const videoRoomActive = Boolean(matchId && opponent && ['betting', 'holding', 'countdown', 'playing'].includes(matchPhase));
   const videoRoomUrl = videoRoomActive && matchId && opponent
      ? `/webrtc?friend=${encodeURIComponent(opponent.id)}&auto=1&compact=1&callKind=game&gameRoom=${encodeURIComponent(matchId)}`
     : '';
@@ -1546,13 +1549,13 @@ export default function GamesPage() {
             <div className="flex shrink-0 items-center gap-1.5 text-right text-[9px] sm:gap-2 sm:text-[10px]"><span className="hidden text-slate-400 sm:inline">{matchStatus}</span><span className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-1.5 py-1 font-black text-emerald-200">{matchPhase.toUpperCase()}</span></div>
           </header>
 
-           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1.5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] lg:gap-2">
-            <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#0d1526] p-1.5 shadow-2xl sm:rounded-[1.5rem] sm:p-2">
+           <div className="tetris-call-workspace grid min-h-0 flex-1 gap-1.5 lg:gap-2">
+             <section className="tetris-local-panel min-h-0 min-w-0 overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#0d1526] p-1.5 shadow-2xl sm:rounded-[1.5rem] sm:p-2">
               <div className="grid min-h-0 h-full grid-rows-[minmax(0,1fr)_auto] gap-1.5">
-                <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(52px,82px)] gap-1.5">
+                <div className="tetris-local-boards grid min-h-0 gap-1.5">
                   <div className="tetris-board-stage flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-transparent bg-transparent p-1 sm:p-1.5">
-                    <div className="tetris-board-shell mx-auto h-full max-h-full max-w-[20rem] aspect-[.49/1]">
-                      <div className="relative h-full w-full">
+                    <div className="tetris-board-shell">
+                      <div className="relative h-full w-full" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
                         <BoardGrid cells={visual} />
                          {battleFx && <div key={battleFx.id} className={`battle-fx ${battleFx.kind === 'incoming' ? 'battle-fx-incoming' : battleFx.kind === 'attack' ? 'battle-fx-attack' : 'battle-fx-clear'}`}><span className="battle-fx-stars">✦ ✦ ✦</span>{battleFx.kind === 'incoming' ? <Zap size={18} /> : <Sparkles size={18} />}<b>{battleFx.title}</b><span>{battleFx.subtitle}</span></div>}
                          {countdown && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-black/45"><span key={String(countdown)} className="tetris-countdown-number text-3xl font-black tracking-widest text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.8)] sm:text-5xl">{countdown}</span></div>}
@@ -1561,13 +1564,13 @@ export default function GamesPage() {
                     </div>
                   </div>
 
-                  <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5">
+                  <div className="tetris-adjacent-boards grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5">
                     <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5 text-center"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><div className="mx-auto w-fit"><NextBlock piece={game.nextPiece} compact /></div></div>
                      <div className="rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div><BattleMetrics state={opponentState} elapsed={elapsedLabel} /></div>
                   </div>
                 </div>
 
-                 <div className="grid shrink-0 grid-cols-6 gap-1.5 sm:gap-2">
+                 <div className="tetris-local-controls grid shrink-0 grid-cols-6 gap-1.5 sm:gap-2">
                   <button type="button" onClick={practiceStart} disabled={matchPhase === 'countdown' || matchPhase === 'playing'} className="flex min-h-9 items-center justify-center gap-1 rounded-xl bg-cyan-400 px-1 text-[10px] font-black text-slate-950 disabled:opacity-40 sm:text-xs"><Play size={13} />연습</button>
                   <button type="button" onClick={matchPhase === 'waiting' ? () => void cancelMatch() : () => void findMatch()} disabled={['betting', 'countdown', 'playing'].includes(matchPhase)} className="min-h-9 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40 sm:text-xs">{matchPhase === 'waiting' ? '취소' : '매칭'}</button>
                    <button type="button" onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="flex min-h-9 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-1 text-[10px] font-bold disabled:opacity-30 sm:text-xs">{game.paused ? <Play size={13} /> : <Pause size={13} />}{game.paused ? '계속' : '일시정지'}</button>
@@ -1579,9 +1582,9 @@ export default function GamesPage() {
             </section>
 
              <section className="tetris-video-pane flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-emerald-300/15 bg-[#0d1526] shadow-2xl sm:rounded-[1.5rem]">
-              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2 sm:px-3"><div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200"><MessageCircle size={13} /> Voice + Video</div><span className="text-[9px] font-bold text-slate-500">게임 시작 시 자동 연결</span></div>
+              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2 sm:px-3"><div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200"><MessageCircle size={13} /> Voice + Video</div><span className="text-[9px] font-bold text-slate-500">입장 수락 시 자동 연결</span></div>
                <div className="h-[40%] min-h-[180px] shrink-0 overflow-hidden p-1 sm:min-h-[220px] sm:p-1.5 lg:min-h-[250px]">
-                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-transparent" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-transparent p-4 text-center"><div><Camera size={22} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
+                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-transparent" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-transparent p-4 text-center"><div><Camera size={22} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchPhase === 'finished' ? '게임방 영상 연결 종료' : matchId && opponent ? '상대의 입장 수락을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
               </div>
               <div className="shrink-0 space-y-1 border-t border-white/10 p-1 text-[9px] sm:p-1.5 sm:text-[10px]">
                 {inviteStatus && <p className="rounded-lg bg-cyan-300/[0.07] px-2 py-1.5 leading-4 text-cyan-100">{inviteStatus}</p>}

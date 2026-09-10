@@ -34,26 +34,25 @@ service cloud.firestore {
         && (!hasValidGender(resource.data) || request.resource.data.gender == resource.data.gender)
         && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age);
     }
-    function isSafePublicProfile(data) {
-      return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'walletAddress', 'walletNetwork', 'updatedAt'])
+     function isSafePublicProfile(data) {
+       return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'updatedAt', 'walletAddress', 'walletNetwork', 'walletPublic'])
         && data.keys().hasAll(['name', 'image', 'gender', 'country', 'isSubscribed', 'isPublic', 'updatedAt'])
         && data.name is string
         && data.name.size() > 0
         && data.image is string
         && hasCompletedOnboarding(data)
-        && data.isPublic == true
-        && data.isSubscribed is bool
-        && (!data.keys().hasAny(['walletAddress']) || (data.walletAddress is string && data.walletAddress.matches('^T[1-9A-HJ-NP-Za-km-z]{33}$')))
-        && (!data.keys().hasAny(['walletNetwork']) || data.walletNetwork == 'TRC20')
-        && data.updatedAt is timestamp
-        && (!data.keys().hasAny(['age']) || (data.age is int && data.age > 0 && data.age <= 130));
+         && data.isPublic == true
+         && data.isSubscribed is bool
+         && data.updatedAt is timestamp
+         && (!data.keys().hasAny(['walletPublic']) || data.walletPublic == true)
+         && (!data.keys().hasAny(['walletAddress']) || (data.walletAddress is string && data.walletAddress.size() == 34))
+         && (!data.keys().hasAny(['walletNetwork']) || data.walletNetwork == 'TRC20')
+         && (!data.keys().hasAny(['age']) || (data.age is int && data.age > 0 && data.age <= 130));
     }
     function publicProfileMatchesPrivate(userId) {
       return request.resource.data.gender == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.gender
         && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country
-        && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age
-        && (!request.resource.data.keys().hasAny(['walletAddress']) || request.resource.data.walletAddress == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.walletAddress)
-        && (!request.resource.data.keys().hasAny(['walletNetwork']) || request.resource.data.walletNetwork == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.walletNetwork);
+        && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age;
     }
     function isSafePresence(data) {
       return data.keys().hasOnly(['userId', 'name', 'image', 'gender', 'country', 'age', 'lastSeenAt', 'updatedAt'])
@@ -113,9 +112,48 @@ service cloud.firestore {
       allow delete: if request.auth != null && (resource.data.authorId == request.auth.uid || isMaster());
     }
     match /comments/{commentId} {
+      function isIsoDate(value) {
+        return value is string
+          && value.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9][.][0-9]{3}Z$');
+      }
+      function hasCommentSchema(data) {
+        return data.keys().hasAll(['targetKey', 'parentId', 'authorId', 'authorName', 'body', 'createdAt', 'deleted'])
+          && data.keys().hasOnly(['targetKey', 'parentId', 'authorId', 'authorName', 'body', 'createdAt', 'deleted', 'deletedAt'])
+          && data.targetKey is string && data.targetKey.size() <= 512
+          && data.targetKey.matches('^(posts|jobs|directories|marketItems|source):[^/\\s:]+$')
+          && (data.parentId == null || (data.parentId is string && data.parentId.size() <= 512 && data.parentId.matches('^[^/\\s]+$')))
+          && data.authorId is string && data.authorId.size() > 0 && data.authorId.size() <= 128
+          && data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 100
+          && data.body is string && data.body.size() <= 2000
+          && isIsoDate(data.createdAt) && data.deleted is bool
+          && ((!data.deleted && data.body.size() > 0 && data.body.matches('[\\s\\S]*\\S[\\s\\S]*') && !data.keys().hasAny(['deletedAt']))
+            || (data.deleted && data.body == '' && data.keys().hasAll(['deletedAt']) && isIsoDate(data.deletedAt)));
+      }
+      function hasExistingTarget(data) {
+        let target = data.targetKey.split(':');
+        // Live sources have no native document; their stable source ID is the discussion identity.
+        return target[0] == 'source'
+          || exists(/databases/$(database)/documents/$(target[0])/$(target[1]));
+      }
+      function hasSameThreadParent(data) {
+        return data.parentId == null || (data.parentId != commentId
+          && exists(/databases/$(database)/documents/comments/$(data.parentId))
+          && get(/databases/$(database)/documents/comments/$(data.parentId)).data.targetKey == data.targetKey);
+      }
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if request.auth != null && (resource.data.authorId == request.auth.uid || isMaster());
+      allow create: if request.auth != null
+        && hasCommentSchema(request.resource.data)
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.deleted == false
+        && hasExistingTarget(request.resource.data)
+        && hasSameThreadParent(request.resource.data);
+      allow update: if request.auth != null
+        && (resource.data.authorId == request.auth.uid || isMaster())
+        && hasCommentSchema(request.resource.data)
+        && resource.data.deleted == false && request.resource.data.deleted == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body', 'deleted', 'deletedAt']);
+      // Keep descendants, including replies written by other authors.
+      allow delete: if false;
     }
     match /jobs/{jobId} {
       allow read: if true;
@@ -192,54 +230,23 @@ service cloud.firestore {
       allow update: if isMaster();
        allow delete: if false;
      }
-    match /transferRequests/{requestId} {
+     match /transferRequests/{requestId} {
       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid
-        && request.resource.data.pinHash is string
-        && request.resource.data.pinHash.size() == 64;
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
       allow update: if isMaster();
       allow delete: if false;
     }
-    match /walletVault/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['userId', 'address', 'network', 'encryptedPrivateKey', 'iv', 'immutable', 'createdAt'])
-        && request.resource.data.keys().hasAll(['userId', 'address', 'network', 'encryptedPrivateKey', 'iv', 'immutable', 'createdAt'])
-        && request.resource.data.userId == userId
-        && request.resource.data.address is string
-        && request.resource.data.address.matches('^T[1-9A-HJ-NP-Za-km-z]{33}$')
-        && request.resource.data.network == 'TRC20'
-        && request.resource.data.encryptedPrivateKey is string
-        && request.resource.data.iv is string
-        && request.resource.data.immutable == true
-        && request.resource.data.createdAt is timestamp;
-      allow update, delete: if false;
-    }
     match /walletLedger/{entryId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && (
-        isMaster()
-        || (request.resource.data.userId == request.auth.uid
-          && request.resource.data.keys().hasAll(['userId', 'type', 'amount', 'status', 'direction', 'network', 'immutable'])
-          && request.resource.data.immutable == true
-          && request.resource.data.type is string
-          && request.resource.data.amount is number
-          && request.resource.data.amount > 0
-          && request.resource.data.status in ['PENDING', 'SUBMITTED']
-          && request.resource.data.direction in ['CREDIT', 'DEBIT']
-          && request.resource.data.network == 'TRC20')
-      );
-      allow update, delete: if false;
-    }
-    match /ledgerTransactions/{transactionId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && (
-        isMaster()
-        || (request.resource.data.userId == request.auth.uid
-          && request.resource.data.immutable == true
-          && request.resource.data.status == 'PENDING')
-      );
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.type is string
+        && request.resource.data.direction is string
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 0
+        && request.resource.data.status is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly(['userId', 'type', 'direction', 'amount', 'fee', 'status', 'network', 'symbol', 'txHash', 'fromAddress', 'toAddress', 'counterpartyId', 'requestId', 'memo', 'createdAt']);
       allow update, delete: if false;
     }
     match /escrowOrders/{orderId} {

@@ -11,8 +11,8 @@ import PortalTextRail from '@/components/layout/portaltextrail';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
 import PageTransition from '@/components/layout/PageTransition';
-import AssistantDock from '@/components/layout/assistantdock';
-import NavigationFX from '@/components/layout/navigationfx';
+import AssistantDock from '@/components/layout/AssistantDock';
+import NavigationFX from '@/components/layout/NavigationFX';
 import { AdSenseScript } from '@/components/ads/AdSense';
 
 const notoSansKr = Noto_Sans_KR({

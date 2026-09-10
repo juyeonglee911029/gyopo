@@ -1,0 +1,129 @@
+.tetris-call-workspace {
+  grid-template-columns: minmax(0, 1.18fr) minmax(19rem, .82fr);
+}
+
+.tetris-local-boards {
+  grid-template-columns: minmax(19rem, 26rem) minmax(0, 1fr);
+  align-items: start;
+  justify-content: start;
+}
+
+.tetris-board-stage {
+  width: min(100%, 26rem);
+  aspect-ratio: 1 / 2;
+  justify-content: stretch;
+  padding: 0 !important;
+}
+
+.tetris-board-shell {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 2;
+}
+
+.tetris-board-shell > div,
+.tetris-board-shell .grid-cols-10 {
+  height: 100%;
+}
+
+.tetris-board-shell .grid-cols-10 {
+  grid-template-rows: repeat(20, minmax(0, 1fr));
+}
+
+.tetris-board-shell .grid-cols-10 > div {
+  min-height: 0;
+  aspect-ratio: auto !important;
+}
+
+.call-connecting-logo {
+  display: inline-flex;
+  gap: .08em;
+  color: #a5f3fc;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-shadow: 0 0 24px rgba(103, 232, 249, .72);
+}
+
+.call-connecting-logo span {
+  animation: call-logo-pulse 1.1s ease-in-out infinite;
+}
+
+.call-permission-error {
+  display: grid;
+  gap: .55rem;
+  padding: .65rem .75rem;
+  background: rgba(245, 158, 11, .1);
+  color: #fef3c7;
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.call-permission-error button {
+  width: fit-content;
+  border: 0;
+  background: #67e8f9;
+  padding: .4rem .6rem;
+  color: #04202a;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+#friend-dock.friend-dock-call-active {
+  width: min(50vw, 600px) !important;
+  max-height: calc(100dvh - 2rem);
+}
+
+#friend-dock.friend-dock-call-active .friend-call-video {
+  height: min(35dvh, 340px);
+  aspect-ratio: auto !important;
+}
+
+#friend-dock.friend-dock-call-closing {
+  pointer-events: none;
+  animation: friend-call-slide-out .28s ease-in both;
+}
+
+@keyframes call-logo-pulse {
+  0%, 100% { opacity: .28; transform: translateY(.12rem) scale(.92); }
+  50% { opacity: 1; transform: translateY(-.12rem) scale(1.08); }
+}
+
+@keyframes friend-call-slide-out {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 0; transform: translateX(2rem) scale(.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-connecting-logo span,
+  #friend-dock.friend-dock-call-closing { animation: none; }
+}
+
+@media (max-width: 639px) {
+  .tetris-call-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .tetris-local-boards {
+    grid-template-columns: minmax(0, 1fr) 5.75rem;
+  }
+
+  .tetris-board-stage,
+  .tetris-board-shell {
+    width: min(100%, 20rem);
+  }
+
+  #friend-dock.friend-dock-call-active {
+    right: .25rem !important;
+    bottom: .25rem !important;
+    left: auto !important;
+    width: min(50vw, 600px) !important;
+    max-width: calc(100vw - .5rem);
+  }
+
+  #friend-dock.friend-dock-call-active .friend-call-video {
+    height: min(35dvh, 260px);
+  }
+}
