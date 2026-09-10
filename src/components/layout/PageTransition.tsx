@@ -4,6 +4,6 @@ import { usePathname } from 'next/navigation';
 
 export default function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  return <div key={pathname} className="page-transition">{children}</div>;
+  const focusedRoute = pathname === '/games' || pathname === '/webrtc';
+  return <div key={pathname} className={`page-transition ${focusedRoute ? 'page-transition-focused' : ''}`}>{children}</div>;
 }
-
