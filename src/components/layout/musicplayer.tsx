@@ -297,8 +297,8 @@ export default function MusicPlayer() {
                {!favoriteIds.includes(track.id) && <button type="button" onClick={() => toggleFavorite(track)} className="mt-1 w-full bg-white/[.08] px-2 py-2 text-left text-xs text-teal-100 hover:bg-white/[.14]">현재 곡 저장</button>}
              </div>}
            </div>
-          <button type="button" onClick={toggleFavoriteLoop} className={`hidden border px-3 py-2 text-sm font-bold sm:block ${favoriteLoop ? 'border-rose-300/50 text-rose-200' : 'border-white/10 text-slate-300'}`}>♥ 반복</button>
-            <Link href="/music" className="hidden border border-white/10 px-3 py-2 text-sm font-bold text-slate-300 hover:border-teal-300/40 hover:text-teal-200 sm:block">MUSIC VIDEO</Link>
+           <button type="button" onClick={toggleFavoriteLoop} className={`music-player-utility hidden sm:block ${favoriteLoop ? 'text-rose-200' : 'text-slate-300'}`}>Repeat</button>
+             <Link href="/music" className="music-player-utility hidden sm:block text-slate-300 hover:text-teal-200">MUSIC VIDEO</Link>
            <iframe ref={frameRef} onLoad={() => { subscribeToPlayerState(frameRef.current); syncFrame(); }} title="GYOPO music player" src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&cc_load_policy=0&iv_load_policy=3&playsinline=1`} className="pointer-events-none absolute h-px w-px opacity-0" allow="autoplay; encrypted-media" />
       </div>
 
