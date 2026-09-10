@@ -79,6 +79,7 @@ export default function MusicPage() {
   const saveFavorites = (next: MusicTrack[]) => {
     setFavoriteTracks(next);
     window.localStorage.setItem(favoriteStorageKey, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent('gyopo-music-favorites', { detail: { tracks: next } }));
   };
 
   const toggleFavorite = (item: MusicTrack) => {
@@ -107,6 +108,13 @@ export default function MusicPage() {
     emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing, position: 0, startedAt: Date.now(), volume: next });
   };
 
+  const toggleFavoritesLoop = () => {
+    const next = !favoritesLoop;
+    setFavoritesLoop(next);
+    window.localStorage.setItem(`gyopo-music-favorite-loop:${user?.id || 'guest'}`, next ? '1' : '0');
+    window.dispatchEvent(new CustomEvent('gyopo-music-favorite-loop', { detail: { enabled: next } }));
+  };
+
   const playlist = favoritesLoop && favoriteTracks.length ? `&loop=1&playlist=${favoriteTracks.map((item) => item.videoId).join(',')}` : '&loop=0';
 
   return (
@@ -125,7 +133,7 @@ export default function MusicPage() {
 
           <aside className="music-search-aside p-5">
             <div className="music-search-field flex items-center gap-2 px-3 py-2.5"><Search size={16} className="text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="YouTube 곡·가수 검색" className="music-search-input w-full text-sm outline-none placeholder:text-slate-500" /></div>
-            <div className="mt-5 flex items-center justify-between gap-2"><h3 className="music-section-heading text-xs uppercase tracking-[0.2em] text-slate-300">즐겨찾기 플레이리스트</h3><button type="button" disabled={!favoriteTracks.length} onClick={() => setFavoritesLoop((value) => !value)} className="music-toggle-button px-2.5 py-1 text-[10px] disabled:opacity-40">{favoritesLoop ? '즐겨찾기 반복 중' : '즐겨찾기만 반복'}</button></div>
+            <div className="mt-5 flex items-center justify-between gap-2"><h3 className="music-section-heading text-xs uppercase tracking-[0.2em] text-slate-300">즐겨찾기 플레이리스트</h3><button type="button" disabled={!favoriteTracks.length} onClick={toggleFavoritesLoop} className="music-toggle-button px-2.5 py-1 text-[10px] disabled:opacity-40">{favoritesLoop ? '즐겨찾기 반복 중' : '즐겨찾기만 반복'}</button></div>
             <div className="mt-2 space-y-2">{favoriteTracks.length ? favoriteTracks.map((item) => <div key={`favorite-${item.id}`} className="music-favorite-row flex items-center gap-2 p-2"><button type="button" onClick={() => void selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-2 text-left">{item.thumbnail && <img src={item.thumbnail} alt="" className="h-9 w-14 shrink-0 object-cover" />}<span className="min-w-0"><b className="block truncate text-xs">{item.title}</b><span className="block truncate text-[10px] text-slate-400">{item.artist}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label="즐겨찾기 해제" className="music-heart-button inline-flex items-center justify-center p-1 text-rose-300"><Heart size={14} fill="currentColor" /></button></div>) : <p className="music-empty-state p-2 text-[11px] text-slate-500">하트 버튼으로 좋아하는 뮤직비디오를 담아보세요.</p>}</div>
             <div className="mt-6 flex items-center justify-between gap-2"><h3 className="music-section-heading text-xs uppercase tracking-[0.2em] text-slate-300">YouTube 검색 결과</h3><button type="button" onClick={() => setFavoritesOnly((value) => !value)} className="music-toggle-button px-2.5 py-1 text-[10px]">{favoritesOnly ? '전체 보기' : '즐겨찾기만 보기'}</button></div>
             <div className="mt-3 space-y-2">{results.map((item) => <div key={item.id} className={`music-result-row flex items-center gap-2 p-2 ${track.id === item.id ? 'is-active' : ''}`}><button type="button" onClick={() => void selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-3 text-left">{item.thumbnail ? <img src={item.thumbnail} alt="" className="h-12 w-20 shrink-0 object-cover" /> : <span className="music-result-placeholder flex h-9 w-9 shrink-0 items-center justify-center text-teal-300"><Play size={14} fill="currentColor" /></span>}<span className="min-w-0"><span className="block truncate text-sm font-normal">{item.title}</span><span className="block truncate text-xs text-slate-400">{item.artist}</span><span className="block truncate text-[10px] text-slate-500">{item.views || '등록곡'}{item.published ? ` · ${item.published}` : ''}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label={favoriteTracks.some((favorite) => favorite.id === item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'} className={`music-heart-button inline-flex items-center justify-center p-1 ${favoriteTracks.some((favorite) => favorite.id === item.id) ? 'text-rose-300' : 'text-slate-500'}`}><Heart size={15} fill={favoriteTracks.some((favorite) => favorite.id === item.id) ? 'currentColor' : 'none'} /></button></div>)}{!results.length && <p className="music-empty-state p-3 text-sm text-slate-500">즐겨찾기 목록이 비어 있습니다.</p>}</div>
