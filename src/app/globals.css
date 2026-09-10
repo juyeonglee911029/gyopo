@@ -1143,6 +1143,85 @@ html[data-theme="light"] .portal-chrome > header {
 #friend-dock textarea { border: 0 !important; border-radius: 0 !important; }
 .tetris-video-pane { min-width: 0 !important; }
 
+/* Auth and first-visit motion stay quiet, centered, and non-blocking once the app is ready. */
+dialog.session-loading-dialog {
+  width: 100vw !important;
+  max-width: none !important;
+  min-height: 100vh !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+dialog.session-loading-dialog::backdrop { background: #02040b; }
+.app-session-loading { display: grid; min-height: 100vh; place-items: center; align-content: center; gap: .45rem; color: #f8fafc; text-align: center; }
+.app-session-loading-mark, .startup-experience-mark, .navigation-experience-mark { display: grid; place-items: center; color: #06111d; background: linear-gradient(145deg, #2dd4bf, #38bdf8); box-shadow: 0 0 42px rgba(45, 212, 191, .34); }
+.app-session-loading-mark { height: 4.5rem; width: 4.5rem; animation: gyopo-logo-pulse 1.8s ease-in-out infinite; }
+.app-session-loading strong { margin-top: .8rem; font-family: var(--font-display); font-size: 1.15rem; letter-spacing: .28em; }
+.app-session-loading > span { color: rgba(165, 243, 252, .62); font-size: .5rem; font-weight: 800; letter-spacing: .28em; }
+.app-session-loading > i { display: block; width: 5rem; height: 1px; margin-top: .8rem; background: linear-gradient(90deg, transparent, #67e8f9, transparent); animation: gyopo-loader-line 1.5s ease-in-out infinite; }
+.startup-experience { position: fixed; inset: 0; z-index: 175; display: grid; place-items: center; overflow: hidden; background: #02040b; color: #f8fafc; pointer-events: none; }
+.startup-experience-logo { display: grid; place-items: center; gap: .45rem; animation: gyopo-startup-logo 2.8s ease-in-out infinite; }
+.startup-experience-mark { height: 4.2rem; width: 4.2rem; }
+.startup-experience-logo b { font-family: var(--font-display); font-size: 1.1rem; letter-spacing: .3em; }
+.startup-experience-logo small { color: rgba(165, 243, 252, .64); font-size: .48rem; font-weight: 800; letter-spacing: .3em; }
+.startup-experience-reveal { animation: startup-experience-reveal 2.2s cubic-bezier(.76, 0, .24, 1) both; }
+.startup-experience-reveal::after { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .95), rgba(103, 232, 249, .25) 13%, transparent 48%); content: ''; opacity: 0; animation: startup-experience-flash 2.2s ease-out both; }
+.startup-experience-reveal .startup-experience-logo { animation: startup-logo-exit 1.4s ease-out both; }
+.navigation-experience { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(2, 4, 11, .98); pointer-events: none; animation: navigation-experience-in .76s cubic-bezier(.76, 0, .24, 1) both; }
+.navigation-experience-mark { height: 3.2rem; width: 3.2rem; animation: gyopo-logo-pulse .76s ease-out both; }
+@keyframes gyopo-logo-pulse { 0%, 100% { transform: scale(.94); box-shadow: 0 0 24px rgba(45, 212, 191, .22); } 50% { transform: scale(1.05); box-shadow: 0 0 54px rgba(56, 189, 248, .54); } }
+@keyframes gyopo-loader-line { 0%, 100% { transform: scaleX(.2); opacity: .25; } 50% { transform: scaleX(1); opacity: 1; } }
+@keyframes gyopo-startup-logo { 0%, 100% { opacity: .68; transform: scale(.96); filter: blur(.2px); } 50% { opacity: 1; transform: scale(1.04); filter: blur(0); } }
+@keyframes startup-experience-reveal { 0% { opacity: 1; filter: brightness(1); } 46% { opacity: 1; filter: brightness(.42); } 67% { opacity: 1; filter: brightness(2.8); } 100% { opacity: 0; filter: brightness(1); } }
+@keyframes startup-experience-flash { 0%, 54% { opacity: 0; transform: scale(.7); } 68% { opacity: 1; transform: scale(1.15); } 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes startup-logo-exit { 0% { opacity: 1; transform: scale(1); } 60% { opacity: .1; transform: scale(1.14); } 100% { opacity: 0; transform: scale(1.22); } }
+@keyframes navigation-experience-in { 0% { opacity: 0; } 16% { opacity: 1; } 72% { opacity: 1; } 100% { opacity: 0; } }
+
+/* GYOPO AI is a draggable, borderless utility window like the friend dock. */
+.assistant-dock, .assistant-dock-tab { position: fixed; z-index: 275; }
+.assistant-dock { top: 7rem; right: 1rem; display: flex; width: min(380px, calc(100vw - 2rem)); height: min(560px, calc(100vh - 8rem)); flex-direction: column; overflow: hidden; border: 0; border-radius: 0; background: rgba(8, 16, 31, .38); box-shadow: 0 25px 100px rgba(0, 0, 0, .42); backdrop-filter: blur(24px); animation: assistant-dock-in .28s ease-out both; }
+.assistant-dock-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: grab; padding: .8rem 1rem; user-select: none; }
+.assistant-dock-header:active { cursor: grabbing; }
+.assistant-dock-title, .assistant-dock-actions { display: flex; align-items: center; gap: .55rem; }
+.assistant-dock-title { color: #e6fffb; font-size: .72rem; font-weight: 800; letter-spacing: .1em; }
+.assistant-dock-mark { display: grid; height: 1.65rem; width: 1.65rem; place-items: center; color: #07131e; background: linear-gradient(145deg, #2dd4bf, #38bdf8); }
+.assistant-dock-grip { color: rgba(255, 255, 255, .3); }
+.assistant-dock-actions button, .assistant-dock-tab { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: rgba(255, 255, 255, .6); }
+.assistant-dock-actions button { padding: .3rem; }
+.assistant-dock-actions button:hover, .assistant-dock-tab:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.assistant-dock-messages { min-height: 0; flex: 1; overflow-y: auto; padding: .75rem 1rem; }
+.assistant-dock-message { width: fit-content; max-width: 88%; margin-bottom: .55rem; padding: .65rem .75rem; background: rgba(255, 255, 255, .065); color: #e2e8f0; font-size: .75rem; line-height: 1.55; white-space: pre-wrap; }
+.assistant-dock-message-user { margin-left: auto; background: rgba(45, 212, 191, .82); color: #06111d; font-weight: 700; }
+.assistant-dock-loading { display: flex; gap: .25rem; padding: .75rem; }
+.assistant-dock-loading span { height: .28rem; width: .28rem; background: #67e8f9; animation: assistant-dot 1s ease-in-out infinite; }
+.assistant-dock-loading span:nth-child(2) { animation-delay: .12s; }
+.assistant-dock-loading span:nth-child(3) { animation-delay: .24s; }
+.assistant-dock-form { display: flex; gap: .5rem; padding: .75rem 1rem 1rem; }
+.assistant-dock-form input { min-width: 0; flex: 1; border: 0 !important; border-radius: 0 !important; background: var(--glass-white) !important; padding: .65rem .75rem; color: #fff; font-size: .74rem; outline: none; }
+.assistant-dock-form input:focus { box-shadow: 0 0 0 2px rgba(255, 255, 255, .12) !important; }
+.assistant-dock-form button { display: grid; height: 2.2rem; width: 2.2rem; flex: 0 0 auto; place-items: center; border: 0; border-radius: 0; background: #67e8f9; color: #06111d; }
+.assistant-dock-form button:disabled { opacity: .35; }
+.assistant-dock-tab { top: 7rem; right: 1rem; gap: .35rem; padding: .65rem .75rem; background: rgba(8, 16, 31, .72); color: #67e8f9; font-size: .65rem; font-weight: 900; box-shadow: 0 16px 45px rgba(0, 0, 0, .28); animation: assistant-dock-in .2s ease-out both; }
+@keyframes assistant-dock-in { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes assistant-dot { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+/* Keep page headings and the active game canvas free of accidental glass cards. */
+.jobs-page > div > header, .users-page > .mx-auto > header, .users-page > .mx-auto > header > div:last-child { border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.music-player-shell .music-player-search { border: 0 !important; }
+.portal-frame > main > .games-page { width: 100% !important; margin: 0 !important; }
+.tetris-modern-frame { max-width: none !important; }
+.tetris-board-stage, .tetris-board-shell { background: transparent !important; }
+.tetris-board-stage { border-color: transparent !important; }
+.tetris-board-shell { width: auto; }
+.tetris-modern-shell .tetris-video-pane, .tetris-modern-shell .tetris-video-pane > div:nth-child(2) { background: transparent !important; }
+
+@media (max-width: 639px) {
+  .assistant-dock { top: 5.5rem; right: .5rem; left: .5rem; width: auto; height: min(510px, calc(100vh - 6rem)); }
+  .assistant-dock-tab { top: 5.5rem; right: .5rem; }
+  .startup-experience-logo b { font-size: .95rem; }
+}
+
 @media (min-width: 1024px) {
   .webrtc-grid { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr) !important; }
   .webrtc-grid > section { min-width: 0 !important; }
