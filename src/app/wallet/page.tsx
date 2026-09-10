@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, isMasterUser, MASTER_DEPOSIT_ADDRESS, queryDocuments, USDT_NETWORK } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, hashTransferPin, isMasterUser, isValidTronAddress, listLedgerTransactions, MASTER_DEPOSIT_ADDRESS, queryDocuments, recordLedgerTransaction, USDT_NETWORK, type LedgerTransaction } from '@/lib/firebase';
 import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
 
 const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || MASTER_DEPOSIT_ADDRESS;
@@ -16,7 +16,7 @@ export default function WalletPage() {
   const [targetId, setTargetId] = useState('');
   const [depositAddress, setDepositAddress] = useState(configuredDepositAddress);
   const [userSearch, setUserSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; image?: string; country?: string }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; image?: string; country?: string; walletAddress?: string; walletNetwork?: string }>>([]);
   const [selectedRecipient, setSelectedRecipient] = useState<{ id: string; name: string; image?: string; country?: string } | null>(null);
   const [searchMessage, setSearchMessage] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -25,6 +25,8 @@ export default function WalletPage() {
   const [chainSyncedAt, setChainSyncedAt] = useState<string>('');
   const [chainError, setChainError] = useState('');
   const [chainLoading, setChainLoading] = useState(false);
+  const [ledgerHistory, setLedgerHistory] = useState<LedgerTransaction[]>([]);
+  const [transferPin, setTransferPin] = useState('');
 
   useEffect(() => {
     const token = getSessionToken();
@@ -35,12 +37,13 @@ export default function WalletPage() {
   }, []);
 
   useEffect(() => {
-    if (!user || !isMasterUser(user)) return;
+    const address = user?.walletAddress || (user && isMasterUser(user) ? MASTER_DEPOSIT_ADDRESS : '');
+    if (!user || !isValidTronAddress(address)) { setChainBalance(null); setChainSyncedAt(''); setChainError(''); return; }
     let active = true;
     const loadChainBalance = async () => {
       setChainLoading(true);
       try {
-        const response = await fetch(`/api/tron/balance?address=${encodeURIComponent(MASTER_DEPOSIT_ADDRESS)}`, { cache: 'no-store' });
+        const response = await fetch('/api/tron/balance?address=' + encodeURIComponent(address), { cache: 'no-store' });
         const result = await response.json() as { balance?: number; syncedAt?: string; error?: string };
         if (!response.ok) throw new Error(result.error || 'TRON 잔고를 읽지 못했습니다.');
         if (active) {
@@ -60,6 +63,13 @@ export default function WalletPage() {
       active = false;
       window.clearInterval(timer);
     };
+  }, [user?.id, user?.walletAddress]);
+
+  useEffect(() => {
+    if (!user) { setLedgerHistory([]); return; }
+    let active = true;
+    void listLedgerTransactions(user.id, getSessionToken()).then((rows) => { if (active) setLedgerHistory(rows); });
+    return () => { active = false; };
   }, [user?.id]);
 
   if (!user) {
@@ -78,14 +88,9 @@ export default function WalletPage() {
     const token = getSessionToken();
     if (!token) return alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
     try {
-      await createDocument('depositRequests', crypto.randomUUID(), {
-        userId: user.id,
-        amount: val,
-         network: USDT_NETWORK,
-        depositAddress: depositAddress.trim(),
-        status: 'PENDING',
-        createdAt: new Date(),
-      }, token);
+      const requestId = crypto.randomUUID();
+      await createDocument('depositRequests', requestId, { userId: user.id, amount: val, network: USDT_NETWORK, depositAddress: depositAddress.trim(), status: 'PENDING', createdAt: new Date() }, token);
+      await recordLedgerTransaction({ id: 'request-deposit-' + requestId, userId: user.id, type: 'DEPOSIT', amount: val, status: 'PENDING', direction: 'CREDIT', details: 'USDT 입금 확인 대기', requestId, network: USDT_NETWORK, walletAddress: user.walletAddress || '' }, token);
       addTransaction({ type: 'DEPOSIT', amount: val, status: 'PENDING', details: 'USDT 입금 확인 대기' });
       alert(`[시스템] ${val} USDT 입금 신청이 접수되었습니다. 실제 입금 확인 후 잔고에 반영됩니다.`);
     } catch {
@@ -101,8 +106,10 @@ export default function WalletPage() {
     if (user.usdtBalance < val + 9) return alert(`잔고가 부족합니다. (수수료 9 USDT 포함 ${val + 9} USDT 필요)`);
     const token = getSessionToken();
     if (!token || !targetId.trim()) return alert('출금 주소를 입력하세요.');
-     await createDocument('withdrawalRequests', crypto.randomUUID(), { userId: user.id, amount: val, fee: 9, targetAddress: targetId.trim(), network: USDT_NETWORK, status: 'PENDING', createdAt: new Date() }, token);
-    addTransaction({ type: 'WITHDRAWAL', amount: val, status: 'PENDING', details: `승인 대기 · ${targetId.trim()}` });
+     const requestId = crypto.randomUUID();
+     await createDocument('withdrawalRequests', requestId, { userId: user.id, amount: val, fee: 9, targetAddress: targetId.trim(), network: USDT_NETWORK, status: 'PENDING', createdAt: new Date() }, token);
+     await recordLedgerTransaction({ id: 'request-withdrawal-' + requestId, userId: user.id, type: 'WITHDRAWAL', amount: val, fee: 9, status: 'PENDING', direction: 'DEBIT', details: 'USDT 출금 승인 대기', requestId, network: USDT_NETWORK, walletAddress: targetId.trim() }, token);
+    addTransaction({ type: 'WITHDRAWAL', amount: val, status: 'PENDING', details: '승인 대기 · ' + targetId.trim() });
     alert(`[시스템] ${val} USDT 출금 신청이 접수되었습니다. 운영자 승인 후 처리됩니다.`);
     setAmount('');
     setTargetId('');
@@ -120,7 +127,7 @@ export default function WalletPage() {
     setIsSearching(true);
     setSearchMessage('회원 명단을 검색하는 중...');
     try {
-      const rows = await queryDocuments<{ name: string; image?: string; country?: string }>('publicProfiles', 'isPublic', true, token);
+      const rows = await queryDocuments<{ name: string; image?: string; country?: string; walletAddress?: string; walletNetwork?: string }>('publicProfiles', 'isPublic', true, token);
       const results = rows
         .filter((row) => row.id !== user.id)
         .filter((row) => (row.name || '').toLocaleLowerCase('ko-KR').includes(value))
@@ -142,15 +149,21 @@ export default function WalletPage() {
     if (!targetId) return alert("받는 사람을 선택하세요.");
     if (user.usdtBalance < val + 9) return alert(`잔고가 부족합니다. (수수료 9 USDT 포함 ${val + 9} USDT 필요)`);
 
+    if (!user.transferPinHash || !user.transferPinSalt) return alert('프로필에서 먼저 4자리 송금 PIN을 설정해주세요.');
+    if (!/^\d{4}$/.test(transferPin)) return alert('송금 PIN 4자리를 입력해주세요.');
+    const pinHash = await hashTransferPin(transferPin, user.transferPinSalt);
     const token = getSessionToken();
     if (!token) return alert('로그인 세션이 만료되었습니다.');
     setIsSending(true);
     try {
-      await createDocument('transferRequests', crypto.randomUUID(), { senderId: user.id, recipientId: targetId, amount: val, fee: 9, status: 'PENDING', createdAt: new Date() }, token);
-      addTransaction({ type: 'P2P_SEND', amount: val, status: 'PENDING', details: `송금 승인 대기 · ${selectedRecipient?.name || targetId}` });
+      const requestId = crypto.randomUUID();
+      await createDocument('transferRequests', requestId, { senderId: user.id, recipientId: targetId, amount: val, fee: 9, pinHash, senderWalletAddress: user.walletAddress || '', recipientWalletAddress: selectedRecipient?.walletAddress || '', network: USDT_NETWORK, status: 'PENDING', createdAt: new Date() }, token);
+      await recordLedgerTransaction({ id: 'request-transfer-' + requestId, userId: user.id, type: 'P2P_SEND', amount: val, fee: 9, status: 'PENDING', direction: 'DEBIT', details: '회원 지갑 송금 승인 대기 · ' + (selectedRecipient?.name || targetId), requestId, network: USDT_NETWORK, walletAddress: user.walletAddress || '', counterpartyWalletAddress: selectedRecipient?.walletAddress || '' }, token);
+      addTransaction({ type: 'P2P_SEND', amount: val, status: 'PENDING', details: '송금 승인 대기 · ' + (selectedRecipient?.name || targetId) });
       alert(`[시스템] ${selectedRecipient?.name || '회원'}에게 ${val} USDT 송금 신청이 접수되었습니다. 운영자 승인 후 잔고에 반영됩니다.`);
       setAmount('');
       setTargetId('');
+      setTransferPin('');
       setUserSearch('');
       setSelectedRecipient(null);
       setSearchResults([]);
@@ -160,6 +173,18 @@ export default function WalletPage() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const historyRows = ledgerHistory.length ? ledgerHistory.map((row) => ({ ...row, date: row.createdAt })) : transactions;
+  const exportHistory = () => {
+    const escape = (value: unknown) => '"' + String(value ?? '').replaceAll('"', '""') + '"';
+    const rows = [
+      ['일시', '유형', '금액', '수수료', '상태', '설명', '지갑 주소', '상대 지갑', '네트워크', '요청 ID'],
+      ...historyRows.map((row) => [row.date, row.type, row.amount, 'fee' in row ? row.fee || 0 : 0, row.status, row.details, 'walletAddress' in row ? row.walletAddress || '' : '', 'counterpartyWalletAddress' in row ? row.counterpartyWalletAddress || '' : '', 'network' in row ? row.network || '' : '', 'requestId' in row ? row.requestId || '' : row.id]),
+    ];
+    const csv = '\ufeff' + rows.map((row) => row.map(escape).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'gyopo-wallet-history-' + new Date().toISOString().slice(0, 10) + '.csv'; link.click(); URL.revokeObjectURL(url);
   };
 
   return (
@@ -174,7 +199,7 @@ export default function WalletPage() {
          <div className="text-right">
             <div className="text-sm text-gray-400 font-bold mb-1">사용 가능 잔액</div>
             <div className="text-5xl font-black text-green-400">{user.usdtBalance.toFixed(2)}</div>
-            {isMasterUser(user) && <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-left"><div className="text-[10px] font-black uppercase tracking-wider text-emerald-200">실제 TRON 체인 잔고 · USDT TRC20</div><div className="mt-1 text-2xl font-black text-emerald-300">{chainLoading && chainBalance === null ? '조회 중...' : `${(chainBalance ?? 0).toFixed(6)} USDT`}</div><div className="mt-1 text-[10px] text-emerald-100/60">{chainError || (chainSyncedAt ? `15초 주기 동기화 · ${new Date(chainSyncedAt).toLocaleTimeString()}` : '동기화 대기')}</div></div>}
+            {(user.walletAddress || isMasterUser(user)) && <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-left"><div className="text-[10px] font-black uppercase tracking-wider text-emerald-200">자동 chain 조회 · 실제 USDT TRC20 잔고</div><div className="mt-1 text-2xl font-black text-emerald-300">{chainLoading && chainBalance === null ? '조회 중...' : `${(chainBalance ?? 0).toFixed(6)} USDT`}</div><div className="mt-1 text-[10px] text-emerald-100/60">{chainError || (chainSyncedAt ? `15초 주기 동기화 · ${new Date(chainSyncedAt).toLocaleTimeString()}` : '동기화 대기')}</div></div>}
           </div>
       </div>
 
@@ -240,6 +265,8 @@ export default function WalletPage() {
                       {searchResults.length > 0 && <div className="space-y-1 rounded-xl border border-gray-200 bg-gray-50 p-2">{searchResults.map((result) => <button type="button" key={result.id} onClick={() => { setTargetId(result.id); setSelectedRecipient(result); setUserSearch(result.name); setSearchResults([]); setSearchMessage(''); }} className="flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-white"><img src={result.image} alt="" className="h-7 w-7 rounded-full" /><span className="text-sm font-bold">{result.name}</span><span className="ml-auto text-[10px] text-gray-500">{result.country || 'Global'}</span></button>)}</div>}
                       {selectedRecipient && <div className="rounded-xl bg-green-50 p-2 text-xs font-bold text-green-700">선택된 수신자: {selectedRecipient.name}</div>}
 
+                    <label className="block text-sm font-bold text-gray-700 mt-4">송금 PIN 4자리</label>
+                    <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={transferPin} onChange={e => setTransferPin(e.target.value.replace(/\D/g, '').slice(0, 4))} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-mono tracking-[.5em] focus:ring-2 focus:ring-orange-500 outline-none" placeholder="••••" />
                     <label className="block text-sm font-bold text-gray-700 mt-4">보낼 금액 (USDT)</label>
                     <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="50" />
                     
@@ -257,33 +284,32 @@ export default function WalletPage() {
         <div className="md:col-span-7">
            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col">
              <div className="p-6 border-b border-gray-100">
-               <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
-                 <History size={20} className="text-blue-600"/> 거래 내역 (History)
-               </h2>
+               <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-black text-gray-800 flex items-center gap-2"><History size={20} className="text-blue-600"/> 거래 내역 (History)</h2><button type="button" onClick={exportHistory} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">엑셀 다운로드</button></div>
              </div>
              
              <div className="flex-1 overflow-y-auto p-2">
-               {transactions.length === 0 ? (
+               {historyRows.length === 0 ? (
                  <div className="h-full flex flex-col items-center justify-center text-gray-400 p-10">
                     <History size={48} className="mb-4 opacity-50"/>
                     <p>거래 내역이 없습니다.</p>
                  </div>
                ) : (
                  <ul className="divide-y divide-gray-100">
-                   {transactions.map((tx) => (
+                   {historyRows.map((tx) => (
                      <li key={tx.id} className="p-4 hover:bg-gray-50 transition-colors">
                        <div className="flex justify-between items-start mb-1">
                          <div className="flex items-center gap-2">
                             {tx.type === 'DEPOSIT' && <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded">입금</span>}
                             {tx.type === 'WITHDRAWAL' && <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded">출금</span>}
                             {tx.type === 'P2P_SEND' && <span className="text-xs font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded">송금(발신)</span>}
+                            {tx.type === 'P2P_RECEIVE' && <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded">송금(수신)</span>}
                             {tx.type === 'FEE' && <span className="text-xs font-bold bg-gray-200 text-gray-700 px-2 py-0.5 rounded">수수료</span>}
                             {tx.type === 'GAME' && <span className="text-xs font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded">게임</span>}
                             
                             <span className="text-sm font-medium text-gray-800">{tx.details}</span>
                          </div>
-                         <div className={`font-black ${tx.type === 'DEPOSIT' || tx.type === 'GAME' && tx.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            {tx.type === 'DEPOSIT' || (tx.type === 'GAME' && tx.amount > 0) ? '+' : '-'}{tx.amount} USDT
+                         <div className={`font-black ${tx.type === 'DEPOSIT' || tx.type === 'P2P_RECEIVE' || tx.type === 'GAME' && tx.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {tx.type === 'DEPOSIT' || tx.type === 'P2P_RECEIVE' || (tx.type === 'GAME' && tx.amount > 0) ? '+' : '-'}{tx.amount} USDT
                          </div>
                        </div>
                        <div className="flex justify-between items-center text-xs text-gray-500">
