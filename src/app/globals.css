@@ -822,3 +822,10 @@ html[data-theme="light"] .portal-chrome > header {
   box-shadow: none !important;
   backdrop-filter: none !important;
 }
+
+
+/* Crisp angular controls */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea, select { border-radius: 0 !important; }
+button[aria-label*="삭제"], button[title*="삭제"], [data-delete="true"] { border-radius: 0 !important; }
+.music-player-search, .music-player-search input, .music-page .music-search-field, .music-page .music-video-card, .music-page .music-search-aside { border-radius: 0 !important; }
+#friend-dock, #friend-dock header, #friend-dock input, #friend-dock textarea { border-radius: 0 !important; }
