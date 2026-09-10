@@ -200,6 +200,22 @@ service cloud.firestore {
       allow update: if isMaster();
       allow delete: if false;
     }
+    match /walletLedger/{entryId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && (
+        isMaster()
+        || (request.resource.data.userId == request.auth.uid
+          && request.resource.data.keys().hasAll(['userId', 'type', 'amount', 'status', 'direction', 'network', 'immutable'])
+          && request.resource.data.immutable == true
+          && request.resource.data.type is string
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.status in ['PENDING', 'SUBMITTED']
+          && request.resource.data.direction in ['CREDIT', 'DEBIT']
+          && request.resource.data.network == 'TRC20')
+      );
+      allow update, delete: if false;
+    }
     match /ledgerTransactions/{transactionId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
       allow create: if request.auth != null && (
