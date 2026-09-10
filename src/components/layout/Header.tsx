@@ -5,6 +5,7 @@ import { useGlobalStore } from '@/store/useGlobalStore';
 import { useEffect, useState } from 'react';
 import { Gamepad2, Languages, LogIn, LogOut, Video } from 'lucide-react';
 import { isMasterUser, MASTER_DEPOSIT_ADDRESS, signOut } from '@/lib/firebase';
+import { handleNavigationClick } from '@/lib/navigation';
 
 function formatUsdt(value: number) {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -81,11 +82,11 @@ export default function Header() {
          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
             <time className="local-clock hidden whitespace-nowrap text-[14px] font-normal text-white/75 sm:block">{localTime || '--:-- --'}</time>
             <TranslateMenu />
-            <Link href="/games" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'))} aria-label="테트리스" className="header-action header-action-secondary">
+             <Link href="/games" onClick={(event) => handleNavigationClick(event, '/games', window.location.pathname)} aria-label="테트리스" className="header-action header-action-secondary">
               <Gamepad2 size={16} />
               <span>{language === 'ko' ? '테트리스' : 'Tetris'}</span>
             </Link>
-            <Link href="/webrtc" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'))} aria-label="화상채팅" className="header-action header-action-primary">
+             <Link href="/webrtc" onClick={(event) => handleNavigationClick(event, '/webrtc', window.location.pathname)} aria-label="화상채팅" className="header-action header-action-primary">
               <Video size={17} />
               <span>{language === 'ko' ? '화상채팅' : 'Video'}</span>
             </Link>
