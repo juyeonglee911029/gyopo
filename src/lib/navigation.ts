@@ -1,5 +1,5 @@
-export function handleNavigationClick(event: React.MouseEvent<HTMLAnchorElement>, href: string, pathname: string) {
-  if (typeof window === 'undefined') return;
+export function handleNavigationClick(event: React.MouseEvent<HTMLElement>, href: string, pathname: string): 'navigate' | 'blank' | 'restore' {
+  if (typeof window === 'undefined') return 'navigate';
   const current = href === '/' ? pathname === '/' : pathname.startsWith(href);
   const key = `gyopo-navigation-cycle:${href}`;
   const stage = Number(window.sessionStorage.getItem(key) || '0');
@@ -8,7 +8,7 @@ export function handleNavigationClick(event: React.MouseEvent<HTMLAnchorElement>
     window.sessionStorage.setItem(key, '1');
     window.dispatchEvent(new CustomEvent('gyopo-navigation-blank', { detail: { visible: false } }));
     window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'));
-    return;
+    return 'navigate';
   }
 
   if (stage === 1) {
@@ -16,11 +16,12 @@ export function handleNavigationClick(event: React.MouseEvent<HTMLAnchorElement>
     window.sessionStorage.setItem(key, '2');
     window.dispatchEvent(new CustomEvent('gyopo-navigation-blank', { detail: { visible: true } }));
     window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'));
-    return;
+    return 'blank';
   }
 
   event.preventDefault();
   window.sessionStorage.setItem(key, '1');
   window.dispatchEvent(new CustomEvent('gyopo-navigation-blank', { detail: { visible: false } }));
   window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'));
+  return 'restore';
 }
