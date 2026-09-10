@@ -1210,7 +1210,7 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
 .jobs-page > div > header, .users-page > .mx-auto > header, .users-page > .mx-auto > header > div:last-child { border: 0 !important; background: transparent !important; box-shadow: none !important; }
 .music-player-shell .music-player-search { border: 0 !important; }
 .portal-frame > main > .games-page { width: 100% !important; margin: 0 !important; }
-.tetris-modern-frame { max-width: none !important; }
+.tetris-modern-frame, .tetris-modern-shell { max-width: none !important; background: transparent !important; }
 .tetris-board-stage, .tetris-board-shell { background: transparent !important; }
 .tetris-board-stage { border-color: transparent !important; }
 .tetris-board-shell { width: auto; }
