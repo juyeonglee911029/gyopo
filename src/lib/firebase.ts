@@ -579,6 +579,7 @@ export type TetrisQueueProfile = {
   ageMax?: number;
   isSubscribed?: boolean;
   targetUserId?: string;
+  queueKind?: 'random' | 'friend' | 'game';
 };
 export type TetrisMatchClaim = { matchId: string; role: 'A' | 'B'; opponent: TetrisQueueProfile };
 export type TetrisLobbyRoom = {
@@ -891,6 +892,8 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
   const candidateRow = waiting.find((row) => {
     const candidate = decodeDocument<TetrisQueueProfile & { userId?: string }>(row);
     const candidateId = candidate.userId || candidate.id;
+    const requesterKind = profile.queueKind || (profile.targetUserId ? 'friend' : 'random');
+    const candidateKind = candidate.queueKind || (candidate.targetUserId ? 'friend' : 'random');
     const requesterPreference = profile.genderPreference || 'any';
     const candidatePreference = candidate.genderPreference || 'any';
     const requesterMatches = requesterPreference === 'any' || candidate.gender === requesterPreference;
@@ -903,7 +906,7 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
       || (candidateAge >= (profile.ageMin || 18) && candidateAge <= (profile.ageMax || 60)));
     const candidateAgeMatches = directCall || ((!candidate.ageMin && !candidate.ageMax)
       || (Number(profile.age || 0) >= (candidate.ageMin || 18) && Number(profile.age || 0) <= (candidate.ageMax || 60)));
-    return candidateId !== profile.id && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && requesterAgeMatches && candidateAgeMatches && targetMatches;
+    return candidateId !== profile.id && candidateKind === requesterKind && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && requesterAgeMatches && candidateAgeMatches && targetMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
@@ -1324,7 +1327,7 @@ export async function createFriendCallRequest(calleeId: string, caller: Pick<Por
     calleeId,
     status: 'pending',
     createdAt,
-    expiresAt: new Date(createdAt.getTime() + 90_000),
+    expiresAt: new Date(createdAt.getTime() + 60_000),
   };
   try {
     await createDocument(friendCallRequestCollection, id, request, token);
@@ -1333,6 +1336,16 @@ export async function createFriendCallRequest(calleeId: string, caller: Pick<Por
     await createDocument(legacyFriendConnectionCollection, id, { ...request, kind: 'friendCallRequest' }, token).catch(() => { throw error; });
   }
   return id;
+}
+
+export async function getFriendCallRequest(requestId: string, token = getSessionToken()): Promise<FriendCallRequest | null> {
+  if (!token || !requestId) return null;
+  const [dedicated, legacy] = await Promise.all([
+    getDocument<Omit<FriendCallRequest, 'id'>>('friendCallRequests', requestId, token).catch(() => null),
+    getDocument<Omit<FriendCallRequest, 'id'> & { kind?: string }>(legacyFriendConnectionCollection, requestId, token).catch(() => null),
+  ]);
+  const request = dedicated || (legacy?.kind === 'friendCallRequest' ? legacy : null);
+  return request ? { id: requestId, ...request, sourceCollection: dedicated ? friendCallRequestCollection : legacyFriendConnectionCollection } : null;
 }
 
 export async function listIncomingFriendCallRequests(userId: string, token = getSessionToken()): Promise<FriendCallRequest[]> {
