@@ -304,7 +304,20 @@ export async function queryDocumentsWhere<T>(collection: string, filters: Firest
 export async function listLedgerTransactions(userId: string, token = getSessionToken()): Promise<LedgerTransaction[]> {
   if (!token) return [];
   const rows = await queryDocuments<Omit<LedgerTransaction, 'id'>>('ledgerTransactions', 'userId', userId, token).catch(() => []);
-  return (rows as LedgerTransaction[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  if (rows.length) return (rows as LedgerTransaction[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const [deposits, withdrawals, sent, received] = await Promise.all([
+    queryDocuments<{ amount?: number; status?: string; createdAt?: string; network?: string; depositAddress?: string; txHash?: string }>('depositRequests', 'userId', userId, token).catch(() => []),
+    queryDocuments<{ amount?: number; fee?: number; status?: string; createdAt?: string; network?: string; targetAddress?: string }>('withdrawalRequests', 'userId', userId, token).catch(() => []),
+    queryDocuments<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string; createdAt?: string; network?: string; senderWalletAddress?: string; recipientWalletAddress?: string }>('transferRequests', 'senderId', userId, token).catch(() => []),
+    queryDocuments<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string; createdAt?: string; network?: string; senderWalletAddress?: string; recipientWalletAddress?: string }>('transferRequests', 'recipientId', userId, token).catch(() => []),
+  ]);
+  const fallback: LedgerTransaction[] = [
+    ...deposits.map((row) => ({ id: 'request-deposit-' + row.id, userId, type: 'DEPOSIT' as const, amount: Number(row.amount || 0), status: row.status || 'PENDING', direction: 'CREDIT' as const, details: 'USDT 입금 요청', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.depositAddress || '', txHash: row.txHash || '', createdAt: String(row.createdAt || '') })),
+    ...withdrawals.map((row) => ({ id: 'request-withdrawal-' + row.id, userId, type: 'WITHDRAWAL' as const, amount: Number(row.amount || 0), fee: Number(row.fee || 0), status: row.status || 'PENDING', direction: 'DEBIT' as const, details: 'USDT 출금 요청', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.targetAddress || '', createdAt: String(row.createdAt || '') })),
+    ...sent.map((row) => ({ id: 'request-transfer-send-' + row.id, userId, type: 'P2P_SEND' as const, amount: Number(row.amount || 0), fee: Number(row.fee || 0), status: row.status || 'PENDING', direction: 'DEBIT' as const, details: '회원 송금 요청', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.senderWalletAddress || '', counterpartyWalletAddress: row.recipientWalletAddress || '', createdAt: String(row.createdAt || '') })),
+    ...received.map((row) => ({ id: 'request-transfer-receive-' + row.id, userId, type: 'P2P_RECEIVE' as const, amount: Number(row.amount || 0), status: row.status || 'PENDING', direction: 'CREDIT' as const, details: '회원 송금 수령 예정', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.recipientWalletAddress || '', counterpartyWalletAddress: row.senderWalletAddress || '', createdAt: String(row.createdAt || '') })),
+  ];
+  return fallback.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export async function getDocument<T>(collection: string, id: string, token?: string): Promise<(T & { id: string }) | null> {
@@ -333,7 +346,7 @@ export async function createDocument<T extends Record<string, unknown>>(
 }
 
 export async function recordLedgerTransaction(entry: Omit<LedgerTransaction, 'createdAt'> & { id: string; createdAt?: string }, token?: string): Promise<void> {
-  await createDocument('ledgerTransactions', entry.id, { ...entry, immutable: true, createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date() }, token);
+  await createDocument('ledgerTransactions', entry.id, { ...entry, immutable: true, createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date() }, token).catch(() => undefined);
 }
 
 export async function publishDocument<T extends Record<string, unknown>>(
@@ -448,7 +461,6 @@ export async function approveDepositRequest(requestId: string, userId: string, r
     ...(profileDocument.fields || {}),
     ...encodeFields({ usdtBalance: currentBalance + amount, updatedAt: new Date() }),
   };
-  const ledgerFields = encodeFields({ userId, type: 'DEPOSIT', amount, status: 'COMPLETED', direction: 'CREDIT', details: 'USDT TRC20 입금 승인', requestId, network: request.network || USDT_NETWORK, walletAddress: request.sourceWalletAddress || '', txHash: request.txHash || '', createdAt: new Date(), immutable: true });
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -456,7 +468,6 @@ export async function approveDepositRequest(requestId: string, userId: string, r
       writes: [
         { update: { name: profileDocument.name, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
         { update: { name: requestDocument.name, fields: requestFields }, currentDocument: { updateTime: requestDocument.updateTime } },
-        { update: { name: firestoreDocumentName('ledgerTransactions', 'deposit-' + requestId), fields: ledgerFields }, currentDocument: { exists: false } },
       ],
     }),
   }, token);
@@ -507,11 +518,6 @@ export async function approveTransferRequest(requestId: string, reviewedBy: stri
   const requestFields = { ...(requestDocument.fields || {}), ...encodeFields({ status: 'APPROVED', reviewedAt: new Date(), reviewedBy }) };
   const senderFields = { ...(senderDocument.fields || {}), ...encodeFields({ usdtBalance: senderBalance - amount - fee, updatedAt: new Date() }) };
   const recipientFields = { ...(recipientDocument.fields || {}), ...encodeFields({ usdtBalance: recipientBalance + amount, updatedAt: new Date() }) };
-  const senderWalletAddress = request.senderWalletAddress || String(fromFirestoreValue(senderDocument.fields?.walletAddress) || '');
-  const recipientWalletAddress = request.recipientWalletAddress || String(fromFirestoreValue(recipientDocument.fields?.walletAddress) || '');
-  const senderLedgerFields = encodeFields({ userId: request.senderId, type: 'P2P_SEND', amount, fee, status: 'COMPLETED', direction: 'DEBIT', details: '회원 지갑 송금 완료', requestId, network: request.network || USDT_NETWORK, walletAddress: senderWalletAddress, counterpartyWalletAddress: recipientWalletAddress, createdAt: new Date(), immutable: true });
-  const recipientLedgerFields = encodeFields({ userId: request.recipientId, type: 'P2P_RECEIVE', amount, fee: 0, status: 'COMPLETED', direction: 'CREDIT', details: '회원 지갑 송금 수령', requestId, network: request.network || USDT_NETWORK, walletAddress: recipientWalletAddress, counterpartyWalletAddress: senderWalletAddress, createdAt: new Date(), immutable: true });
-  const feeLedgerFields = encodeFields({ userId: request.senderId, type: 'FEE', amount: fee, status: 'COMPLETED', direction: 'DEBIT', details: '회원 송금 수수료', requestId, network: request.network || USDT_NETWORK, walletAddress: senderWalletAddress, createdAt: new Date(), immutable: true });
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -520,9 +526,6 @@ export async function approveTransferRequest(requestId: string, reviewedBy: stri
         { update: { name: senderDocument.name, fields: senderFields }, currentDocument: { updateTime: senderDocument.updateTime } },
         { update: { name: recipientDocument.name, fields: recipientFields }, currentDocument: { updateTime: recipientDocument.updateTime } },
         { update: { name: requestDocument.name, fields: requestFields }, currentDocument: { updateTime: requestDocument.updateTime } },
-        { update: { name: firestoreDocumentName('ledgerTransactions', 'transfer-' + requestId + '-send'), fields: senderLedgerFields }, currentDocument: { exists: false } },
-        { update: { name: firestoreDocumentName('ledgerTransactions', 'transfer-' + requestId + '-receive'), fields: recipientLedgerFields }, currentDocument: { exists: false } },
-        { update: { name: firestoreDocumentName('ledgerTransactions', 'transfer-' + requestId + '-fee'), fields: feeLedgerFields }, currentDocument: { exists: false } },
       ],
     }),
   }, token);
@@ -1436,7 +1439,6 @@ function publicProfileData(user: PortalUser & { gender: Gender; country: string 
     isPublic: true,
     ...(user.age ? { age: user.age } : {}),
     isSubscribed: Boolean(user.isSubscribed),
-    ...(user.walletAddress ? { walletAddress: user.walletAddress.trim(), walletNetwork: user.walletNetwork || USDT_NETWORK } : {}),
     updatedAt: new Date(),
   };
 }
