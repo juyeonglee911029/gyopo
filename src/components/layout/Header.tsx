@@ -30,6 +30,15 @@ export default function Header() {
   const { user, setUser } = useGlobalStore();
   const language = useGlobalStore((state) => state.language);
   const [masterChainBalance, setMasterChainBalance] = useState<number | null>(null);
+  const [localTime, setLocalTime] = useState('');
+
+  useEffect(() => {
+    const formatter = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const update = () => setLocalTime(formatter.format(new Date()));
+    update();
+    const timer = window.setInterval(update, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!user || !isMasterUser(user)) {
@@ -57,11 +66,11 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-cyan-300/10 bg-[#050914]/72 shadow-[0_18px_60px_rgba(0,0,0,.28)] backdrop-blur-xl">
+    <header className="fixed left-0 right-0 top-0 z-50 border-0 bg-transparent shadow-none backdrop-blur-none">
       <div className="flex h-16 items-center justify-between gap-3 px-3 sm:px-4">
         <div className="flex items-center gap-6">
             <Link href="/" className="group flex flex-shrink-0 items-center gap-2">
-            <span className="brand-mark flex h-8 w-8 items-center justify-center rounded-[10px] text-slate-950 transition-transform group-hover:rotate-6 sm:h-9 sm:w-9">
+            <span className="brand-mark flex h-8 w-8 items-center justify-center rounded-none text-slate-950 transition-transform group-hover:rotate-6 sm:h-9 sm:w-9">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true"><path d="M5 5.5h14M5 12h14M5 18.5h14M5 5.5v13M19 5.5v13" /></svg>
             </span>
             <span className="hidden leading-none sm:block"><span className="font-display block text-[15px] font-extrabold tracking-[.18em] text-white">GYOPO</span><span className="mt-1 block text-[8px] font-bold tracking-[.22em] text-cyan-300/60">GLOBAL NETWORK</span></span>
@@ -69,16 +78,17 @@ export default function Header() {
           
         </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-           <TranslateMenu />
+         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            <time className="local-clock hidden whitespace-nowrap text-[14px] font-normal text-white/75 sm:block">{localTime || '--:-- --'}</time>
+            <TranslateMenu />
             <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
               <Gamepad2 size={16} />
-              <span>{language === 'ko' ? '테트리스' : 'Tetris'} <em>/ {language === 'ko' ? 'Tetris' : '테트리스'}</em></span>
+              <span>{language === 'ko' ? '테트리스' : 'Tetris'}</span>
             </Link>
             <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
               <Video size={17} />
-              <span>{language === 'ko' ? '화상채팅' : 'Video'} <em>/ {language === 'ko' ? 'Video' : '화상채팅'}</em></span>
-           </Link>
+              <span>{language === 'ko' ? '화상채팅' : 'Video'}</span>
+            </Link>
 
            {user ? (
              <div className="flex items-center gap-2 sm:gap-4">
