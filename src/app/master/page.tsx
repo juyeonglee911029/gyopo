@@ -2,20 +2,21 @@
 
 import { useEffect, useEffectEvent, useState } from 'react';
 import { CheckCircle2, LockKeyhole, RefreshCcw, Save, ShieldAlert, WalletCards } from 'lucide-react';
-import { approveDepositRequest, approveTransferRequest, getDocument, getOnlineCount, getSessionToken, getSiteStats, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, MASTER_NETWORK, mergeDocument, reviewDepositRequest, reviewTransferRequest, type PortalUser, type SiteStats } from '@/lib/firebase';
+import { approveDepositRequest, approveTransferRequest, createDocument, getDocument, getOnlineCount, getSessionToken, getSiteStats, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, mergeDocument, reviewDepositRequest, reviewTransferRequest, USDT_NETWORK, type PortalUser, type SiteStats } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { CONTENT_SOURCES, REVIEW_REGIONS, sourceItemId, type ContentCategory, type ContentSource } from '@/lib/contentSources';
 import { curateSourceItems } from '@/lib/sourcepreview';
 import { regionLabel } from '@/lib/regions';
 
-type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number };
+type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number; source?: string; sourceWalletAddress?: string; txHash?: string };
+type OnchainDeposit = { txHash: string; from: string; to: string; amount: number; blockTimestamp: number; network: string; symbol: string };
 type WalletSettings = { depositAddress?: string; network?: string; updatedAt?: string };
 type ContentSourceSettings = { disabledSourceIds?: string[]; updatedAt?: string };
 type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category?: string; company?: string; location?: string; country?: string; salary?: string; tag?: string; author?: string };
 type SourceSection = { category: ContentCategory; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
 
-const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', events: '행사', community: '커뮤니티' };
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
 
 async function retryPublish(action: () => Promise<void>) {
   let lastError: unknown;
@@ -37,7 +38,7 @@ export default function MasterPage() {
   const [deposits, setDeposits] = useState<RequestRow[]>([]);
   const [withdrawals, setWithdrawals] = useState<RequestRow[]>([]);
   const [transfers, setTransfers] = useState<RequestRow[]>([]);
-  const [settings, setSettings] = useState<WalletSettings>({ depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK });
+  const [settings, setSettings] = useState<WalletSettings>({ depositAddress: MASTER_DEPOSIT_ADDRESS, network: USDT_NETWORK });
   const [disabledSourceIds, setDisabledSourceIds] = useState<string[]>([]);
   const [contentSettingsLoaded, setContentSettingsLoaded] = useState(false);
   const [address, setAddress] = useState(MASTER_DEPOSIT_ADDRESS);
@@ -47,6 +48,8 @@ export default function MasterPage() {
   const [sourceStatus, setSourceStatus] = useState<Record<string, string>>({});
   const [siteStats, setSiteStats] = useState<SiteStats>({ today: 0, month: 0, total: 0 });
   const [onlineCount, setOnlineCount] = useState(0);
+  const [syncingDeposits, setSyncingDeposits] = useState(false);
+  const [unmatchedDeposits, setUnmatchedDeposits] = useState<OnchainDeposit[]>([]);
   const masterUserId = user?.id && isMasterUser(user) ? user.id : undefined;
 
   const load = async () => {
@@ -62,12 +65,12 @@ export default function MasterPage() {
       getSiteStats().catch(() => ({ today: 0, month: 0, total: 0 })),
       getOnlineCount().catch(() => 0),
     ]);
-    const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { depositAddress: MASTER_DEPOSIT_ADDRESS, network: MASTER_NETWORK };
+    const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { depositAddress: MASTER_DEPOSIT_ADDRESS, network: USDT_NETWORK };
     setProfiles(nextProfiles);
     setDeposits(nextDeposits.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setWithdrawals(nextWithdrawals.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
     setTransfers(nextTransfers.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
-    setSettings({ ...wallet, network: MASTER_NETWORK });
+    setSettings({ ...wallet, network: USDT_NETWORK });
     setSiteStats(nextSiteStats);
     setOnlineCount(nextOnlineCount);
     setAddress(wallet.depositAddress || MASTER_DEPOSIT_ADDRESS);
@@ -92,8 +95,8 @@ export default function MasterPage() {
     if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(nextAddress)) return setMessage('올바른 TRX 지갑 주소를 입력해주세요.');
     setSavingAction('settings');
     try {
-      await mergeDocument('adminSettings', 'wallet', { depositAddress: nextAddress, network: MASTER_NETWORK, updatedAt: new Date() }, token);
-      setSettings({ depositAddress: nextAddress, network: MASTER_NETWORK });
+      await mergeDocument('adminSettings', 'wallet', { depositAddress: nextAddress, network: USDT_NETWORK, updatedAt: new Date() }, token);
+      setSettings({ depositAddress: nextAddress, network: USDT_NETWORK });
       setMessage('TRX 입금 주소가 서버에 저장되었습니다.');
     } catch (error) {
       setMessage(error instanceof Error ? `설정 저장 실패: ${error.message.slice(0, 120)}` : '설정 저장에 실패했습니다.');
@@ -101,6 +104,59 @@ export default function MasterPage() {
       setSavingAction(null);
     }
   };
+  const syncIncomingDeposits = async () => {
+    if (!token || !isMasterUser(user) || syncingDeposits) return;
+    setSyncingDeposits(true);
+    try {
+      const response = await fetch(`/api/tron/deposits?address=${encodeURIComponent(MASTER_DEPOSIT_ADDRESS)}&limit=200`, { cache: 'no-store' });
+      const payload = await response.json() as { deposits?: OnchainDeposit[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'TRON 입금 내역을 가져오지 못했습니다.');
+      const unmatched: OnchainDeposit[] = [];
+      let credited = 0;
+      for (const deposit of payload.deposits || []) {
+        const profile = profiles.find((item) => item.walletAddress?.trim().toLowerCase() === deposit.from.toLowerCase());
+        if (!profile) {
+          unmatched.push(deposit);
+          continue;
+        }
+        const requestId = `tron-${deposit.txHash}`;
+        const existing = await getDocument<RequestRow>('depositRequests', requestId, token).catch(() => null);
+        if (existing?.status === 'APPROVED' || existing?.status === 'REJECTED') continue;
+        if (!existing) {
+          await createDocument('depositRequests', requestId, {
+            userId: profile.id,
+            amount: deposit.amount,
+            network: USDT_NETWORK,
+            depositAddress: MASTER_DEPOSIT_ADDRESS,
+            source: 'TRONCHAIN',
+            sourceWalletAddress: deposit.from,
+            txHash: deposit.txHash,
+            status: 'PENDING',
+            createdAt: new Date(deposit.blockTimestamp || Date.now()),
+          }, token);
+        }
+        await approveDepositRequest(requestId, profile.id, user?.email || MASTER_EMAIL, token);
+        credited += 1;
+      }
+      setUnmatchedDeposits(unmatched);
+      setMessage(credited ? `${credited}건의 TRON 입금을 회원 잔고에 자동 반영했습니다.` : '새로 반영할 TRON 입금이 없습니다.');
+      if (credited) await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? `자동 입금 확인 실패: ${error.message.slice(0, 140)}` : '자동 입금 확인에 실패했습니다.');
+    } finally {
+      setSyncingDeposits(false);
+    }
+  };
+  const syncIncomingDepositsEffect = useEffectEvent(syncIncomingDeposits);
+  useEffect(() => {
+    if (!masterUserId || !profiles.length) return;
+    const initial = window.setTimeout(() => void syncIncomingDepositsEffect(), 2_000);
+    const interval = window.setInterval(() => void syncIncomingDepositsEffect(), 30_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [masterUserId, profiles.length]);
   const syncSource = async (source: ContentSource, requestedCategory?: ContentCategory) => {
     if (!token) return setMessage('로그인 세션이 없습니다. 다시 로그인해주세요.');
     const authorId = user?.id;
@@ -161,6 +217,8 @@ export default function MasterPage() {
               await retryPublish(() => mergeDocument('jobs', id, { title: item.title, company: item.company || source.name, location: item.location || item.country || source.region, salary: item.salary || '원문 확인', tag: item.tag || '채용', country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'jobs', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'directory') {
               await retryPublish(() => mergeDocument('directories', id, { name: item.title, category: item.tag || source.name, desc: item.description || '공식 출처에서 확인된 정보입니다.', tel: '원문 확인', address: item.location || source.region, rating: 0, reviews: 0, country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'directory', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
+            } else if (section.category === 'market') {
+              await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: item.location || source.region, country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'market', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'community' || section.category === 'news' || section.category === 'events') {
               await retryPublish(() => mergeDocument('posts', id, { type: section.category === 'community' ? 'general' : 'news', title: item.title, body: item.body || item.description || '상세 본문이 제공되지 않은 출처 콘텐츠입니다.', authorId, author: item.author || source.name, country: item.country || source.region, createdAt, sourceId: source.id, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
             }
@@ -282,8 +340,8 @@ export default function MasterPage() {
   if (!isMasterUser(user)) return <div className="mx-auto max-w-xl px-4 py-24 text-center"><ShieldAlert className="mx-auto mb-4 text-rose-400" size={42} /><h1 className="text-2xl font-black">마스터 전용 페이지</h1><p className="mt-3 text-sm text-slate-500">관리자 계정으로 로그인해야 접근할 수 있습니다.</p></div>;
 
   return (
-     <div className="master-page mx-auto max-w-7xl px-4 py-8 text-slate-100">
-       <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">Master Operations</p><h1 className="mt-2 text-4xl font-black">운영자 센터</h1><p className="mt-2 text-sm text-slate-500">회원 잔고·입출금 신청·입금 지갑 설정을 서버 기준으로 관리합니다.</p></div><button onClick={() => void load()} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCcw size={16} /> 새로고침</button></header>
+       <div className="master-page mx-auto max-w-7xl px-4 py-8 text-slate-100">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.28em] text-amber-500">Master Operations</p><h1 className="mt-2 text-4xl font-black">운영자 센터</h1><p className="mt-2 text-sm text-slate-500">회원 잔고·입출금 신청·입금 지갑 설정을 서버 기준으로 관리합니다.</p></div><button onClick={() => void Promise.all([load(), syncIncomingDeposits()])} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCcw size={16} /> 새로고침</button></header>
        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100"><strong>게시 기준:</strong> 뉴스는 뉴스로, 커뮤니티는 커뮤니티로만 게시됩니다. 아래 출처의 지원 카테고리를 확인한 뒤 전체 확인 또는 원하는 카테고리만 확인하세요.</div>
        <section className="mb-6 rounded-3xl border border-cyan-200 bg-white p-5 shadow-sm dark:border-cyan-300/20 dark:bg-[#10182b]"><div className="mb-3"><h2 className="font-black">카테고리별 빠른 게시</h2><p className="mt-1 text-xs text-slate-500">버튼에 표시된 분류만 가져와 해당 메뉴에 게시합니다.</p></div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{CONTENT_SOURCES.filter((source) => !disabledSourceIds.includes(source.id)).map((source) => <div key={source.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5"><div className="truncate text-xs font-black">{source.name}</div><div className="mt-2 flex flex-wrap gap-1.5">{source.categories.map((category) => <button key={category} onClick={() => void syncSource(source, category)} disabled={sourceStatus[`${source.id}:${category}`] === '확인 중...'} className="rounded-lg border border-cyan-200 px-2 py-1 text-[10px] font-black text-cyan-700 disabled:opacity-50 dark:border-cyan-300/20 dark:text-cyan-200">{sourceStatus[`${source.id}:${category}`] || `${categoryLabels[category]}만 게시`}</button>)}</div></div>)}</div></section>
        <div className="mb-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-7"><div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-300/20 dark:bg-emerald-300/10"><p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">전체 회원</p><p className="mt-2 text-3xl font-black">{profiles.length}</p></div><div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 dark:border-cyan-300/20 dark:bg-cyan-300/10"><p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">회원 잔고 합계</p><p className="mt-2 text-3xl font-black">{totalBalance.toFixed(2)} USDT</p></div><div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-300/20 dark:bg-amber-300/10"><p className="text-xs font-bold text-amber-700 dark:text-amber-300">승인 입금 합계</p><p className="mt-2 text-3xl font-black">{totalDeposits.toFixed(2)} USDT</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5"><p className="text-xs font-bold text-slate-500">오늘 방문</p><p className="mt-2 text-3xl font-black">{siteStats.today.toLocaleString()}</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5"><p className="text-xs font-bold text-slate-500">이번 달</p><p className="mt-2 text-3xl font-black">{siteStats.month.toLocaleString()}</p></div><div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5"><p className="text-xs font-bold text-slate-500">누적 방문</p><p className="mt-2 text-3xl font-black">{siteStats.total.toLocaleString()}</p></div><div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-300/20 dark:bg-emerald-300/10"><p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">현재 접속</p><p className="mt-2 text-3xl font-black">{onlineCount.toLocaleString()}</p></div></div>
