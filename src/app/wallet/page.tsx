@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, hashTransferPin, isMasterUser, isValidTronAddress, listLedgerTransactions, MASTER_DEPOSIT_ADDRESS, queryDocuments, recordLedgerTransaction, USDT_NETWORK, type LedgerTransaction } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, hashTransferPin, isMasterUser, isValidTronAddress, listLedgerTransactions, MASTER_DEPOSIT_ADDRESS, queryDocuments, recordLedgerTransaction, saveProfile, USDT_NETWORK, type LedgerTransaction } from '@/lib/firebase';
 import { Wallet, Copy, History, Send, AlertCircle } from 'lucide-react';
+import { connectTronWallet, getUsdtBalance, isTronLinkAvailable, sendUsdt } from '@/lib/tron';
 
 const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || MASTER_DEPOSIT_ADDRESS;
 
 export default function WalletPage() {
-  const { user, addTransaction, transactions } = useGlobalStore();
-  const [activeTab, setActiveTab] = useState<'DEPOSIT' | 'WITHDRAWAL' | 'P2P'>('DEPOSIT');
+  const { user, setUser, addTransaction, transactions } = useGlobalStore();
+  const [activeTab, setActiveTab] = useState<'DEPOSIT' | 'WITHDRAWAL' | 'P2P' | 'TRON'>('DEPOSIT');
   
   // Forms state
   const [amount, setAmount] = useState('');
@@ -27,6 +28,12 @@ export default function WalletPage() {
   const [chainLoading, setChainLoading] = useState(false);
   const [ledgerHistory, setLedgerHistory] = useState<LedgerTransaction[]>([]);
   const [transferPin, setTransferPin] = useState('');
+  const [chainWalletAddress, setChainWalletAddress] = useState(user?.walletAddress || '');
+  const [chainSendAddress, setChainSendAddress] = useState('');
+  const [chainSendAmount, setChainSendAmount] = useState('');
+  const [chainSendError, setChainSendError] = useState('');
+  const [chainTxHash, setChainTxHash] = useState('');
+  const [isChainSending, setIsChainSending] = useState(false);
 
   useEffect(() => {
     const token = getSessionToken();
@@ -71,6 +78,47 @@ export default function WalletPage() {
     void listLedgerTransactions(user.id, getSessionToken()).then((rows) => { if (active) setLedgerHistory(rows); });
     return () => { active = false; };
   }, [user?.id]);
+
+  const connectWallet = async () => {
+    try {
+      const address = await connectTronWallet();
+      const balance = await getUsdtBalance(address);
+      setChainWalletAddress(address);
+      setChainBalance(balance);
+      setChainSyncedAt(new Date().toISOString());
+      setChainError('');
+      const nextUser = { ...user, walletAddress: address, walletNetwork: USDT_NETWORK };
+      setUser(nextUser);
+      await saveProfile(nextUser, getSessionToken());
+    } catch (error) {
+      setChainError(error instanceof Error ? error.message : 'TronLink 지갑 연결에 실패했습니다.');
+    }
+  };
+
+  const handleChainSend = async () => {
+    const value = Number(chainSendAmount);
+    if (!chainWalletAddress) return setChainSendError('먼저 TronLink 지갑을 연결해주세요.');
+    if (!isValidTronAddress(chainSendAddress.trim())) return setChainSendError('받는 사람의 TRON 주소가 올바르지 않습니다.');
+    if (!Number.isFinite(value) || value <= 0) return setChainSendError('올바른 USDT 금액을 입력해주세요.');
+    setIsChainSending(true);
+    setChainSendError('');
+    setChainTxHash('');
+    try {
+      const fromAddress = await connectTronWallet();
+      const txHash = await sendUsdt(chainSendAddress.trim(), value);
+      await recordLedgerTransaction({ id: 'tron-transfer-' + txHash, userId: user.id, type: 'WITHDRAWAL', amount: value, status: 'SUBMITTED', direction: 'DEBIT', details: 'TRON USDT 직접 송금', network: USDT_NETWORK, walletAddress: fromAddress, counterpartyWalletAddress: chainSendAddress.trim(), txHash }, getSessionToken());
+      addTransaction({ type: 'WITHDRAWAL', amount: value, status: 'PENDING', details: 'TRON USDT 송금 · ' + txHash.slice(0, 12) });
+      setChainTxHash(txHash);
+      setChainSendAmount('');
+      setChainSendAddress('');
+      const balance = await getUsdtBalance(fromAddress).catch(() => null);
+      if (typeof balance === 'number') setChainBalance(balance);
+    } catch (error) {
+      setChainSendError(error instanceof Error ? error.message : 'TRON 송금에 실패했습니다.');
+    } finally {
+      setIsChainSending(false);
+    }
+  };
 
   if (!user) {
     return (
@@ -200,6 +248,7 @@ export default function WalletPage() {
             <div className="text-sm text-gray-400 font-bold mb-1">사용 가능 잔액</div>
             <div className="text-5xl font-black text-green-400">{user.usdtBalance.toFixed(2)}</div>
             {(user.walletAddress || isMasterUser(user)) && <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-left"><div className="text-[10px] font-black uppercase tracking-wider text-emerald-200">자동 chain 조회 · 실제 USDT TRC20 잔고</div><div className="mt-1 text-2xl font-black text-emerald-300">{chainLoading && chainBalance === null ? '조회 중...' : `${(chainBalance ?? 0).toFixed(6)} USDT`}</div><div className="mt-1 text-[10px] text-emerald-100/60">{chainError || (chainSyncedAt ? `15초 주기 동기화 · ${new Date(chainSyncedAt).toLocaleTimeString()}` : '동기화 대기')}</div></div>}
+            <div className="mt-3 rounded-xl border border-cyan-200/20 bg-cyan-300/10 px-3 py-3 text-left"><div className="flex items-center justify-between gap-2"><div><div className="text-[10px] font-black uppercase tracking-wider text-cyan-100">TRON 지갑 · 실제 송금/입금</div><div className="mt-1 break-all text-xs text-cyan-50">{chainWalletAddress || 'TronLink 지갑을 연결하면 개인 지갑 주소가 표시됩니다.'}</div></div><button type="button" onClick={() => void connectWallet()} className="shrink-0 rounded-lg bg-cyan-300 px-3 py-2 text-[10px] font-black text-slate-950">{chainWalletAddress ? '새로고침' : 'TronLink 연결'}</button></div>{chainWalletAddress && <button type="button" onClick={() => void navigator.clipboard?.writeText(chainWalletAddress)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-cyan-100"><Copy size={12} /> 주소 복사</button>}{!isTronLinkAvailable() && <div className="mt-2 text-[10px] text-amber-200">브라우저에 TronLink 확장 프로그램이 필요합니다.</div>}</div>
           </div>
       </div>
 
@@ -211,6 +260,7 @@ export default function WalletPage() {
                <button onClick={() => setActiveTab('DEPOSIT')} className={`flex-1 py-4 font-bold text-sm ${activeTab === 'DEPOSIT' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>입금</button>
                <button onClick={() => setActiveTab('WITHDRAWAL')} className={`flex-1 py-4 font-bold text-sm ${activeTab === 'WITHDRAWAL' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>출금</button>
                <button onClick={() => setActiveTab('P2P')} className={`flex-1 py-4 font-bold text-sm ${activeTab === 'P2P' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>송금</button>
+               <button onClick={() => setActiveTab('TRON')} className={`flex-1 py-4 font-bold text-sm ${activeTab === 'TRON' ? 'bg-cyan-50 text-cyan-600 border-b-2 border-cyan-600' : 'text-gray-500 hover:bg-gray-50'}`}>TRON 송금</button>
              </div>
 
              <div className="p-6">
@@ -225,9 +275,23 @@ export default function WalletPage() {
                        <button type="button" onClick={() => void navigator.clipboard?.writeText(depositAddress)} className="rounded-xl bg-gray-200 px-3 text-gray-700 hover:bg-gray-300" aria-label="지갑 주소 복사"><Copy size={17} /></button>
                      </div>
                       {depositAddress ? <div className="flex flex-col items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`tron:${depositAddress}`)}`} alt="USDT TRC20 입금 지갑 QR 코드" className="h-44 w-44 rounded-lg" /><p className="break-all text-center text-[11px] text-gray-500">{depositAddress}</p><p className="text-[10px] font-bold text-emerald-700">USDT · TRC20 (TRON)</p></div> : <div className="rounded-2xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">지갑 주소를 입력하면 QR 코드가 표시됩니다.</div>}
+                     {chainWalletAddress && <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4"><div className="text-sm font-black text-cyan-800">내 지갑으로 직접 받기</div><p className="mt-1 text-xs text-cyan-700">외부 지갑에서 아래 주소로 USDT TRC20을 보내면 TronLink 지갑에서 바로 확인됩니다.</p><div className="mt-3 flex gap-2"><input type="text" value={chainWalletAddress} readOnly className="min-w-0 flex-1 border border-cyan-200 bg-white px-3 py-2 text-xs outline-none" /><button type="button" onClick={() => void navigator.clipboard?.writeText(chainWalletAddress)} className="bg-cyan-200 px-3 text-cyan-900" aria-label="지갑 주소 복사"><Copy size={15} /></button></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`tron:${chainWalletAddress}`)}`} alt="TRON 지갑 QR 코드" className="mx-auto mt-3 h-36 w-36" /></div>}
                      <label className="block text-sm font-bold text-gray-700">충전할 금액 (USDT)</label>
                     <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="100" />
                     <button onClick={handleDeposit} className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition">입금 신청하기</button>
+                  </div>
+                )}
+
+                {activeTab === 'TRON' && (
+                  <div className="space-y-4">
+                    <div className="border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">TronLink에서 직접 서명하는 실제 USDT TRC20 송금입니다. 사이트 잔액과 별도로 블록체인에서 처리됩니다.</div>
+                    <label className="block text-sm font-bold text-gray-700">받는 사람의 TRON 주소</label>
+                    <input type="text" value={chainSendAddress} onChange={e => setChainSendAddress(e.target.value)} className="w-full border border-gray-300 bg-gray-50 px-4 py-3 text-sm outline-none" placeholder="T..." />
+                    <label className="block text-sm font-bold text-gray-700">송금할 금액 (USDT)</label>
+                    <input type="number" min="0" step="0.000001" value={chainSendAmount} onChange={e => setChainSendAmount(e.target.value)} className="w-full border border-gray-300 bg-gray-50 px-4 py-3 font-bold outline-none" placeholder="10" />
+                    {chainSendError && <p className="text-xs font-bold text-red-600">{chainSendError}</p>}
+                    {chainTxHash && <a href={`https://tronscan.org/#/transaction/${chainTxHash}`} target="_blank" rel="noreferrer" className="block break-all border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">송금 완료 · Tronscan에서 확인하기<br />{chainTxHash}</a>}
+                    <button type="button" onClick={() => void handleChainSend()} disabled={isChainSending} className="w-full bg-cyan-600 py-3 font-bold text-white hover:bg-cyan-700 disabled:opacity-50">{isChainSending ? 'TronLink 서명 대기 중...' : 'TRON으로 실제 송금'}</button>
                   </div>
                 )}
 
