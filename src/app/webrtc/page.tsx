@@ -60,18 +60,21 @@ const stunServers = [
   { urls: 'stun:stun4.l.google.com:19302' },
 ];
 const turnServers = [
-  { urls: 'turn:openrelay.metered.ca:3478?transport=udp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:3478?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 const iceServers = [...stunServers, ...turnServers];
 const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => Promise.race([
   navigator.mediaDevices.getUserMedia(constraints),
   new Promise<MediaStream>((_, reject) => window.setTimeout(() => reject(new Error('카메라와 마이크 권한 응답이 지연되고 있습니다. 브라우저 권한을 확인해주세요.')), 12000)),
 ]);
+
+function formatCallDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const remainder = (seconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${remainder}`;
+}
 
 export default function WebRTCPage() {
   const router = useRouter();
@@ -95,8 +98,10 @@ export default function WebRTCPage() {
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(60);
   const [targetUserId, setTargetUserId] = useState('');
+  const [callKind, setCallKind] = useState<'random' | 'friend' | 'game'>('random');
   const [compactMode, setCompactMode] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
+  const [callElapsed, setCallElapsed] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const sidebarVideoRef = useRef<HTMLVideoElement>(null);
@@ -106,15 +111,12 @@ export default function WebRTCPage() {
   const callRef = useRef<ActiveCall | null>(null);
   const pollingRef = useRef(false);
   const connectionStartedAt = useRef<number | null>(null);
+  const connectedAtRef = useRef<number | null>(null);
   const connectedRef = useRef(false);
   const userRef = useRef(user);
   const appliedCandidates = useRef(new Set<string>());
   const offerApplied = useRef(false);
   const answerApplied = useRef(false);
-  const appliedOfferFingerprint = useRef('');
-  const appliedAnswerFingerprint = useRef('');
-  const iceRestartAttempts = useRef(0);
-  const iceRestartInFlight = useRef(false);
   const chargedMatchIds = useRef(new Set<string>());
   const flipRef = useRef(flip);
   const outgoingVideoTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -132,10 +134,6 @@ export default function WebRTCPage() {
     appliedCandidates.current.clear();
     offerApplied.current = false;
     answerApplied.current = false;
-    appliedOfferFingerprint.current = '';
-    appliedAnswerFingerprint.current = '';
-    iceRestartAttempts.current = 0;
-    iceRestartInFlight.current = false;
   };
 
   useEffect(() => {
@@ -145,6 +143,7 @@ export default function WebRTCPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setTargetUserId(params.get('friend') || '');
+    setCallKind(params.get('gameRoom') || params.get('callKind') === 'game' ? 'game' : params.get('friend') ? 'friend' : 'random');
     setCompactMode(params.get('compact') === '1');
     setAutoStart(params.get('auto') === '1');
   }, []);
@@ -154,6 +153,19 @@ export default function WebRTCPage() {
     document.body.classList.add('webrtc-compact-shell');
     return () => document.body.classList.remove('webrtc-compact-shell');
   }, [compactMode]);
+
+  useEffect(() => {
+    if (!isConnected) {
+      connectedAtRef.current = null;
+      setCallElapsed(0);
+      return;
+    }
+    connectedAtRef.current ||= Date.now();
+    const timer = window.setInterval(() => {
+      if (connectedAtRef.current) setCallElapsed(Math.floor((Date.now() - connectedAtRef.current) / 1_000));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [isConnected]);
 
   useEffect(() => {
     userRef.current = user;
@@ -295,8 +307,8 @@ export default function WebRTCPage() {
     return new MediaStream(tracks);
   };
 
-  /* Send the real camera track so mobile browsers do not drop canvas capture frames. */
-  const createOutgoingStream = () => streamRef.current;
+  /* The caller's camera is mirrored in the outgoing canvas, so the peer sees the same orientation. */
+  const createOutgoingStream = () => getOutgoingStream() || streamRef.current;
 
   const closeCallForRematch = (message: string) => {
     const callId = callRef.current?.callId;
@@ -364,6 +376,7 @@ export default function WebRTCPage() {
       }
       return;
     }
+    getOutgoingStream();
     resetSignalingState();
     callRef.current = null;
     setPeer(null);
@@ -380,11 +393,12 @@ export default function WebRTCPage() {
        age: user.age || 0,
       country: user.country || 'Global',
        gender: user.gender || '',
-       genderPreference,
-       ageMin,
-       ageMax,
-       targetUserId: targetUserId || undefined,
-      isSubscribed: Boolean(user.isSubscribed),
+        genderPreference,
+        ageMin,
+        ageMax,
+        targetUserId: targetUserId || undefined,
+       queueKind: callKind,
+       isSubscribed: Boolean(user.isSubscribed),
       status: 'waiting',
       lastSeenAt: new Date(),
     }, token).then(() => true).catch((error) => {
@@ -403,7 +417,7 @@ export default function WebRTCPage() {
     if (!autoStart || !targetUserId || !user || active || autoStartRef.current) return;
     autoStartRef.current = true;
     void startMatch();
-  }, [autoStart, targetUserId, user?.id, active]);
+  }, [autoStart, callKind, targetUserId, user?.id, active]);
 
   const endMatch = async () => {
     const token = getSessionToken();
@@ -482,9 +496,9 @@ export default function WebRTCPage() {
 
     const ensureConnection = (call: ActiveCall) => {
       if (connectionRef.current) return connectionRef.current;
-       const connection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle' });
-       connectionRef.current = connection;
-       const outgoing = createOutgoingStream();
+       const connection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
+      connectionRef.current = connection;
+      const outgoing = createOutgoingStream();
       outgoing?.getTracks().forEach((track) => {
         const sender = connection.addTrack(track, outgoing);
         if (track.kind === 'video') videoSenderRef.current = sender;
@@ -498,7 +512,7 @@ export default function WebRTCPage() {
           candidate: candidate.toJSON(),
         }, token);
       };
-       connection.ontrack = (event) => {
+      connection.ontrack = (event) => {
         const remoteStream = event.streams[0] || remoteStreamRef.current || new MediaStream();
         if (!event.streams[0]) remoteStream.addTrack(event.track);
         remoteStreamRef.current = remoteStream;
@@ -511,55 +525,28 @@ export default function WebRTCPage() {
           void sidebarVideoRef.current.play().catch(() => undefined);
         }
         setHasRemoteVideo(true);
-         setStatus('상대 영상 수신 중');
-       };
-       const restartIce = async () => {
-         if (!call.initiator || iceRestartInFlight.current || iceRestartAttempts.current >= 2) return false;
-         iceRestartInFlight.current = true;
-         iceRestartAttempts.current += 1;
-         connectionStartedAt.current = Date.now();
-         setStatus('네트워크 경로를 다시 연결하는 중');
-         try {
-           const offer = await connection.createOffer({ iceRestart: true });
-           await connection.setLocalDescription(offer);
-           appliedAnswerFingerprint.current = '';
-           await mergeDocument('webrtcCalls', call.callId, { status: 'offer', offer, answer: null }, token);
-           return true;
-         } catch {
-           return false;
-         } finally {
-           iceRestartInFlight.current = false;
-         }
-       };
-       const handleIceFailure = () => {
-         if (!call.initiator) {
-           setStatus('상대방의 네트워크 재연결을 기다리는 중');
-           return;
-         }
-         if (iceRestartInFlight.current) return;
-         void restartIce().then((restarted) => {
-           if (!restarted) closeCallForRematch('네트워크 연결 실패, 다른 상대를 자동으로 찾는 중');
-         });
-       };
-       connection.onconnectionstatechange = () => {
+        setStatus('상대 영상 수신 중');
+      };
+      connection.onconnectionstatechange = () => {
         if (connection.connectionState === 'connecting') setStatus('보안 연결을 설정하는 중');
         if (connection.connectionState === 'connected') {
           setIsConnected(true);
-           connectedRef.current = true;
-           setIsMatching(false);
-           connectionStartedAt.current = null;
-           iceRestartAttempts.current = 0;
-           setStatus('연결 성공');
-           void mergeDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
+          connectedRef.current = true;
+          setIsMatching(false);
+          connectionStartedAt.current = null;
+          connectedAtRef.current = Date.now();
+          setCallElapsed(0);
+          setStatus('연결 성공');
+          void mergeDocument('webrtcCalls', call.callId, { status: 'connected' }, token);
         }
         if (connection.connectionState === 'disconnected') {
           connectedRef.current = false;
           setStatus('연결이 불안정합니다');
-         }
-         if (connection.connectionState === 'failed') {
-           connectedRef.current = false;
-           handleIceFailure();
-         }
+        }
+        if (connection.connectionState === 'failed') {
+          connectedRef.current = false;
+          closeCallForRematch('연결 실패, 다른 상대를 자동으로 찾는 중');
+        }
         if (connection.connectionState === 'closed') setStatus('연결 종료');
       };
       connection.oniceconnectionstatechange = () => {
@@ -567,7 +554,7 @@ export default function WebRTCPage() {
         if (connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed') {
           setStatus('상대 영상 연결 중');
         }
-         if (connection.iceConnectionState === 'failed') handleIceFailure();
+        if (connection.iceConnectionState === 'failed') closeCallForRematch('네트워크 연결 실패, 다른 상대를 자동으로 찾는 중');
       };
       return connection;
     };
@@ -595,7 +582,7 @@ export default function WebRTCPage() {
             nextCall = { callId: ownQueue.callId, peer: matchedPeer, initiator: user.id < matchedPeer.userId };
           } else {
             await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'waiting' }, token);
-             const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined }, token).catch(() => null);
+             const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined, queueKind: callKind }, token).catch(() => null);
            if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
           if (!nextCall) {
@@ -642,7 +629,7 @@ export default function WebRTCPage() {
 
         await mergeDocument('webrtcQueue', user.id, { lastSeenAt: new Date(), status: 'matched', callId: current.callId }, token);
         const connection = ensureConnection(current);
-         if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 45_000) {
+        if (!connectedRef.current && connectionStartedAt.current && Date.now() - connectionStartedAt.current > 20_000) {
            await mergeDocument('webrtcCalls', current.callId, { status: 'ended' }, token).catch(() => undefined);
            closeCallForRematch('연결 시간이 초과되어 다른 상대를 자동으로 찾는 중');
            return;
@@ -661,22 +648,17 @@ export default function WebRTCPage() {
           closeCallForRematch('상대가 연결을 종료했습니다. 다른 상대를 자동으로 찾는 중');
           return;
         }
-         const offerFingerprint = call.offer ? JSON.stringify(call.offer) : '';
-         if (!current.initiator && call.offer && offerFingerprint !== appliedOfferFingerprint.current) {
-           await connection.setRemoteDescription(call.offer);
-           offerApplied.current = true;
-           appliedOfferFingerprint.current = offerFingerprint;
-           appliedAnswerFingerprint.current = '';
-           const answer = await connection.createAnswer();
-           await connection.setLocalDescription(answer);
-           await mergeDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
-         }
-         const answerFingerprint = call.answer ? JSON.stringify(call.answer) : '';
-         if (current.initiator && call.answer && answerFingerprint !== appliedAnswerFingerprint.current) {
-           await connection.setRemoteDescription(call.answer);
-           answerApplied.current = true;
-           appliedAnswerFingerprint.current = answerFingerprint;
-         }
+        if (!current.initiator && call.offer && !offerApplied.current) {
+          await connection.setRemoteDescription(call.offer);
+          offerApplied.current = true;
+          const answer = await connection.createAnswer();
+          await connection.setLocalDescription(answer);
+          await mergeDocument('webrtcCalls', current.callId, { answer, status: 'answer' }, token);
+        }
+        if (current.initiator && call.answer && !answerApplied.current) {
+          await connection.setRemoteDescription(call.answer);
+          answerApplied.current = true;
+        }
         const candidates = await queryDocumentsWhere<CandidateDocument>('webrtcCandidates', [{ field: 'callId', op: 'EQUAL', value: current.callId }], token).catch(() => []);
         if (!connection.remoteDescription) return;
         for (const item of candidates.filter((candidate) => candidate.callId === current.callId && candidate.fromUserId !== user.id)) {
@@ -695,7 +677,7 @@ export default function WebRTCPage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [active, ageMax, ageMin, genderPreference, targetUserId, user]);
+  }, [active, ageMax, ageMin, callKind, genderPreference, targetUserId, user]);
 
   useEffect(() => {
     if (!activeCallId || !user) return;
@@ -766,7 +748,7 @@ export default function WebRTCPage() {
               <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">GAME VOICE + VIDEO</div>
               <div className="truncate text-xs font-bold text-slate-300">{peer?.name || '상대방 연결 대기'}</div>
             </div>
-            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${isConnected ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>{isConnected ? 'CONNECTED' : active ? 'CONNECTING' : 'READY'}</span>
+             <span className="flex shrink-0 items-center gap-1.5"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${isConnected ? 'bg-emerald-300/15 text-emerald-200' : 'bg-amber-300/15 text-amber-200'}`}>{isConnected ? 'CONNECTED' : active ? 'CONNECTING' : 'READY'}</span>{isConnected && <span className="font-mono text-[11px] font-black text-cyan-100">{formatCallDuration(callElapsed)}</span>}</span>
           </div>
 
            <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
