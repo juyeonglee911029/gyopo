@@ -16,7 +16,7 @@ type SourceItem = { title: string; url: string; description?: string; body?: str
 type SourceSection = { category: ContentCategory; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
 
-const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', events: '행사', community: '커뮤니티' };
 
 async function retryPublish(action: () => Promise<void>) {
   let lastError: unknown;
@@ -217,9 +217,7 @@ export default function MasterPage() {
               await retryPublish(() => mergeDocument('jobs', id, { title: item.title, company: item.company || source.name, location: item.location || item.country || source.region, salary: item.salary || '원문 확인', tag: item.tag || '채용', country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'jobs', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
             } else if (section.category === 'directory') {
               await retryPublish(() => mergeDocument('directories', id, { name: item.title, category: item.tag || source.name, desc: item.description || '공식 출처에서 확인된 정보입니다.', tel: '원문 확인', address: item.location || source.region, rating: 0, reviews: 0, country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'directory', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
-            } else if (section.category === 'market') {
-              await retryPublish(() => mergeDocument('marketItems', id, { title: item.title, price: '원문 확인', location: item.location || source.region, country: item.country || source.region, authorId, createdAt, sourceId: source.id, sourceCategory: 'market', sourceUrl: item.url, sourceName: source.name, sourceContentId: id, body: item.body || item.description || '', image: item.image || '', images: item.images || [] }, token));
-            } else if (section.category === 'community' || section.category === 'news' || section.category === 'events') {
+             } else if (section.category === 'community' || section.category === 'news' || section.category === 'events') {
               await retryPublish(() => mergeDocument('posts', id, { type: section.category === 'community' ? 'general' : 'news', title: item.title, body: item.body || item.description || '상세 본문이 제공되지 않은 출처 콘텐츠입니다.', authorId, author: item.author || source.name, country: item.country || source.region, createdAt, sourceId: source.id, sourceUrl: item.url, sourceName: source.name, sourceContentId: id, image: item.image || '', images: item.images || [], sourceCategory: section.category }, token));
             }
           } catch {
