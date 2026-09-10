@@ -30,8 +30,9 @@ function getTronWeb(): TronWebLike {
 function toAtomicUnits(amount: number | string): string {
   const value = String(amount).trim();
   if (!/^\d+(\.\d{1,6})?$/.test(value) || Number(value) <= 0) throw new Error('올바른 USDT 금액을 입력해주세요.');
-  const [whole, fraction = ''] = value.split('.');
-  return (BigInt(whole) * 1_000_000n + BigInt((fraction + '000000').slice(0, 6))).toString();
+  const atomic = Math.round(Number(value) * 1_000_000);
+  if (!Number.isSafeInteger(atomic)) throw new Error('송금 금액이 너무 큽니다.');
+  return String(atomic);
 }
 
 export function isTronLinkAvailable(): boolean {
