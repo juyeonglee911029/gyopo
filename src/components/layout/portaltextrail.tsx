@@ -32,6 +32,7 @@ export default function PortalTextRail() {
         <nav className="portal-text-rail-nav">
           {links.map(([href, label, english]) => {
             const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+            if (href === '/assistant') return <button key={href} type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-assistant-open'))} className="portal-text-link portal-text-link-button">{language === 'ko' ? label : english}</button>;
             return <Link key={href} href={href} className={active ? 'portal-text-link portal-text-link-active' : 'portal-text-link'}>{language === 'ko' ? label : english}</Link>;
           })}
           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button portal-friends-link" style={{ fontSize: '.58rem', fontWeight: 400 }}><span>{language === 'ko' ? '친구 채팅·통화' : 'Friends Chat / Call'}</span></button>
