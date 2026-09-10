@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Gamepad2, Languages, LogIn, LogOut, Video } from 'lucide-react';
-import { isMasterUser, signOut } from '@/lib/firebase';
+import { isMasterUser, MASTER_DEPOSIT_ADDRESS, signOut } from '@/lib/firebase';
 
 function formatUsdt(value: number) {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -29,6 +29,27 @@ function TranslateMenu() {
 export default function Header() {
   const { user, setUser } = useGlobalStore();
   const language = useGlobalStore((state) => state.language);
+  const [masterChainBalance, setMasterChainBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user || !isMasterUser(user)) {
+      setMasterChainBalance(null);
+      return;
+    }
+    let active = true;
+    const loadBalance = async () => {
+      const response = await fetch(`/api/tron/balance?address=${encodeURIComponent(MASTER_DEPOSIT_ADDRESS)}`, { cache: 'no-store' }).catch(() => null);
+      if (!response?.ok) return;
+      const result = await response.json() as { balance?: number };
+      if (active && typeof result.balance === 'number') setMasterChainBalance(result.balance);
+    };
+    void loadBalance();
+    const timer = window.setInterval(() => void loadBalance(), 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [user?.id]);
 
   const handleLogout = () => {
     signOut();
@@ -61,10 +82,10 @@ export default function Header() {
 
            {user ? (
              <div className="flex items-center gap-2 sm:gap-4">
-               <Link href="/wallet" aria-label={`${formatUsdt(user.usdtBalance)} USDT`} className="usdt-balance">
-                  <span className="usdt-mark" aria-hidden="true">₮</span>
-                 <span>{formatUsdt(user.usdtBalance)} <small>USDT</small></span>
-               </Link>
+                <Link href="/wallet" aria-label={`${formatUsdt(isMasterUser(user) && masterChainBalance !== null ? masterChainBalance : user.usdtBalance)} USDT`} className="usdt-balance">
+                   <span className="usdt-mark" aria-hidden="true">₮</span>
+                  <span>{formatUsdt(isMasterUser(user) && masterChainBalance !== null ? masterChainBalance : user.usdtBalance)} <small>{isMasterUser(user) && masterChainBalance !== null ? 'CHAIN USDT' : 'USDT'}</small></span>
+                </Link>
                {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
                <div className="flex items-center gap-2">
                  <button type="button" onClick={() => window.dispatchEvent(new Event('gyopo-profile-edit'))} aria-label="프로필 편집 / Edit profile" className="header-profile-button"><img src={user.image} alt="Profile" className="h-8 w-8 rounded-full border border-white/15 object-cover" /></button>
@@ -87,4 +108,3 @@ export default function Header() {
     </header>
   );
 }
-
