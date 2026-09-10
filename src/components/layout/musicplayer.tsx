@@ -19,15 +19,15 @@ function subscribeToPlayerState(frame: HTMLIFrameElement | null) {
 
 export default function MusicPlayer() {
   const user = useGlobalStore((state) => state.user);
-  const [track, setTrack] = useState<MusicTrack>(MUSIC_TRACKS[0]);
+  const favoriteStorageKey = musicFavoritesKey(user?.id);
+  const [track, setTrack = useState<MusicTrack>(MUSIC_TRACKS[0]);
   const [playing, setPlaying] = useState(true);
   const [volume, setVolume] = useState(70);
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<MusicTrack[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [favoriteTracks, setFavoriteTracks] = useState<MusicTrack[]>([]);
-  const [favoritesLoop, setFavoritesLoop] = useState(false);
+  const favoriteIds = favoriteTracks.map((item) => item.id);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const searchShellRef = useRef<HTMLElement>(null);
   const pendingSyncRef = useRef<MusicSyncDetail | null>(null);
@@ -59,17 +59,24 @@ export default function MusicPlayer() {
   useEffect(() => {
     const savedVolume = Number(window.localStorage.getItem('gyopo-music-volume'));
     if (Number.isFinite(savedVolume)) setVolume(Math.min(100, Math.max(0, savedVolume)));
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(musicFavoritesKey(user?.id)) || '[]') as unknown;
-      const tracks = Array.isArray(saved) && saved.every((item) => typeof item === 'object' && item !== null) ? saved as MusicTrack[] : MUSIC_TRACKS.filter((item) => Array.isArray(saved) && saved.includes(item.id));
-      setFavoriteTracks(tracks);
-      setFavoriteIds(tracks.map((item) => item.id));
-    } catch {
-      setFavoriteIds([]);
-      setFavoriteTracks([]);
-    }
-    setFavoritesLoop(window.localStorage.getItem('gyopo-music-favorite-loop:' + (user?.id || 'guest')) === '1');
-  }, [user?.id]);
+    const loadFavorites = () => {
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(favoriteStorageKey) || '[]') as unknown;
+        setFavoriteTracks(Array.isArray(saved) && saved.every((item) => typeof item === 'object' && item !== null)
+          ? saved as MusicTrack[]
+          : MUSIC_TRACKS.filter((item) => Array.isArray(saved) && saved.includes(item.id)));
+      } catch {
+        setFavoriteTracks([]);
+      }
+    };
+    const syncFavorites = (event: Event) => {
+      const tracks = (event as CustomEvent<{ tracks?: MusicTrack[] }>).detail?.tracks;
+      if (Array.isArray(tracks)) setFavoriteTracks(tracks);
+    };
+    loadFavorites();
+    window.addEventListener('gyopo-music-favorites', syncFavorites);
+    return () => window.removeEventListener('gyopo-music-favorites', syncFavorites);
+  }, [favoriteStorageKey]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -161,9 +168,8 @@ export default function MusicPlayer() {
   };
 
   const selectRelativeTrack = (direction: -1 | 1) => {
-    const pool = favoritesLoop && favoriteTracks.length ? favoriteTracks : MUSIC_TRACKS;
-    const index = pool.findIndex((item) => item.id === track.id);
-    selectTrack(pool[(index + direction + pool.length) % pool.length]);
+    const index = MUSIC_TRACKS.findIndex((item) => item.id === track.id);
+    selectTrack(MUSIC_TRACKS[(index + direction + MUSIC_TRACKS.length) % MUSIC_TRACKS.length]);
   };
 
   useEffect(() => {
@@ -206,25 +212,11 @@ export default function MusicPlayer() {
   };
 
   const toggleFavorite = (item: MusicTrack) => {
-    const nextTracks = favoriteIds.includes(item.id) ? favoriteTracks.filter((favorite) => favorite.id !== item.id) : [...favoriteTracks, item];
-    setFavoriteTracks(nextTracks);
-    setFavoriteIds(nextTracks.map((favorite) => favorite.id));
-    window.localStorage.setItem(musicFavoritesKey(user?.id), JSON.stringify(nextTracks));
-    window.dispatchEvent(new CustomEvent('gyopo-music-favorites', { detail: { tracks: nextTracks } }));
+    const next = favoriteIds.includes(item.id) ? favoriteTracks.filter((favorite) => favorite.id !== item.id) : [...favoriteTracks, item];
+    setFavoriteTracks(next);
+    window.localStorage.setItem(favoriteStorageKey, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent('gyopo-music-favorites', { detail: { tracks: next } }));
   };
-
-  const toggleFavoritesLoop = () => {
-    const next = !favoritesLoop;
-    setFavoritesLoop(next);
-    window.localStorage.setItem('gyopo-music-favorite-loop:' + (user?.id || 'guest'), next ? '1' : '0');
-    window.dispatchEvent(new CustomEvent('gyopo-music-favorite-loop', { detail: { enabled: next } }));
-  };
-
-  useEffect(() => {
-    const onLoop = (event: Event) => setFavoritesLoop(Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled));
-    window.addEventListener('gyopo-music-favorite-loop', onLoop);
-    return () => window.removeEventListener('gyopo-music-favorite-loop', onLoop);
-  }, []);
 
   useEffect(() => {
     sendPlayerCommand(frameRef.current, 'setVolume', [volume]);
@@ -233,7 +225,7 @@ export default function MusicPlayer() {
   return (
     <section ref={searchShellRef} className="music-player-shell border-b border-white/10 bg-[#0b1222] px-3 py-2 text-white shadow-[0_8px_30px_rgba(0,0,0,.18)] sm:px-5">
       <div className="mx-auto flex max-w-[1440px] items-center gap-3">
-        <Music2 size={17} className="shrink-0 text-teal-300" />
+        <div className="flex shrink-0 items-center gap-2"><Music2 size={17} className="text-teal-300" /><span className="hidden text-[10px] font-black tracking-[0.18em] text-teal-200 md:inline">MUSIC VIDEO</span></div>
          <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <b className="truncate text-sm">{track.title}</b>
@@ -247,13 +239,13 @@ export default function MusicPlayer() {
            </button>
            <button type="button" onClick={() => selectRelativeTrack(1)} aria-label="다음 곡" className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"><SkipForward size={15} /></button>
          </div>
-         <div className="music-player-search relative flex min-w-[110px] max-w-[360px] flex-1 items-center gap-2 border border-white/10 bg-white/[.07] px-2 py-2 sm:min-w-[180px] sm:px-3">
+         <div className="music-player-search relative flex min-w-[110px] max-w-[360px] flex-1 items-center gap-2 rounded-xl bg-white/[.07] px-2 py-2 sm:min-w-[180px] sm:px-3">
            <Search size={15} className="shrink-0 text-slate-400" />
            <input value={query} onFocus={() => setSearchFocused(true)} onBlur={() => window.setTimeout(() => setSearchFocused(false), 160)} onChange={(event) => setQuery(event.target.value)} placeholder="음악 검색 · 핫키워드" className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500" />
          </div>
          <div className="hidden items-center gap-1.5 sm:flex"><span className="text-slate-500">{volume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}</span><input aria-label="음악 볼륨" type="range" min="0" max="100" value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="w-16 accent-teal-300" /></div>
          <button type="button" onClick={() => toggleFavorite(track)} aria-label="즐겨찾기" className={`rounded-lg p-2 ${favoriteIds.includes(track.id) ? 'text-rose-300' : 'text-slate-400'} hover:bg-white/10`}><Heart size={15} fill={favoriteIds.includes(track.id) ? 'currentColor' : 'none'} /></button>
-        <Link href="/music" className="hidden rounded-lg border border-white/10 px-3 py-2 text-xs font-black text-slate-300 hover:border-teal-300/40 hover:text-teal-200 sm:block">MUSIC</Link>
+        <Link href="/music" className="hidden rounded-lg border border-white/10 px-3 py-2 text-xs font-black text-slate-300 hover:border-teal-300/40 hover:text-teal-200 sm:block">MUSIC VIDEO</Link>
            <iframe ref={frameRef} onLoad={() => { subscribeToPlayerState(frameRef.current); syncFrame(); }} title="GYOPO music player" src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&cc_load_policy=0&iv_load_policy=3&playsinline=1`} className="pointer-events-none absolute h-px w-px opacity-0" allow="autoplay; encrypted-media" />
       </div>
 
