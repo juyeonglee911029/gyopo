@@ -35,7 +35,7 @@ service cloud.firestore {
         && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age);
     }
     function isSafePublicProfile(data) {
-      return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'updatedAt'])
+      return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'walletAddress', 'walletNetwork', 'updatedAt'])
         && data.keys().hasAll(['name', 'image', 'gender', 'country', 'isSubscribed', 'isPublic', 'updatedAt'])
         && data.name is string
         && data.name.size() > 0
@@ -43,13 +43,17 @@ service cloud.firestore {
         && hasCompletedOnboarding(data)
         && data.isPublic == true
         && data.isSubscribed is bool
+        && (!data.keys().hasAny(['walletAddress']) || (data.walletAddress is string && data.walletAddress.matches('^T[1-9A-HJ-NP-Za-km-z]{33}$')))
+        && (!data.keys().hasAny(['walletNetwork']) || data.walletNetwork == 'TRC20')
         && data.updatedAt is timestamp
         && (!data.keys().hasAny(['age']) || (data.age is int && data.age > 0 && data.age <= 130));
     }
     function publicProfileMatchesPrivate(userId) {
       return request.resource.data.gender == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.gender
         && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country
-        && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age;
+        && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age
+        && (!request.resource.data.keys().hasAny(['walletAddress']) || request.resource.data.walletAddress == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.walletAddress)
+        && (!request.resource.data.keys().hasAny(['walletNetwork']) || request.resource.data.walletNetwork == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.walletNetwork);
     }
     function isSafePresence(data) {
       return data.keys().hasOnly(['userId', 'name', 'image', 'gender', 'country', 'age', 'lastSeenAt', 'updatedAt'])
@@ -190,9 +194,21 @@ service cloud.firestore {
      }
     match /transferRequests/{requestId} {
       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.pinHash is string
+        && request.resource.data.pinHash.size() == 64;
       allow update: if isMaster();
       allow delete: if false;
+    }
+    match /ledgerTransactions/{transactionId} {
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      allow create: if request.auth != null && (
+        isMaster()
+        || (request.resource.data.userId == request.auth.uid
+          && request.resource.data.immutable == true
+          && request.resource.data.status == 'PENDING')
+      );
+      allow update, delete: if false;
     }
     match /escrowOrders/{orderId} {
       allow read: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
