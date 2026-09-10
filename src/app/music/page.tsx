@@ -2,29 +2,37 @@
 
 import { Heart, Pause, Play, Search, Music2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { emitMusicEvent, hydrateMusicTrack, musicFavoritesKey, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
+import { emitMusicEvent, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
+import { getSessionToken, saveProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 export default function MusicPage() {
   const user = useGlobalStore((state) => state.user);
+  const setUser = useGlobalStore((state) => state.setUser);
   const [track, setTrack] = useState<MusicTrack>(MUSIC_TRACKS[0]);
-  const [catalogTracks, setCatalogTracks] = useState<MusicTrack[]>(MUSIC_TRACKS);
   const [query, setQuery] = useState('');
   const [remoteResults, setRemoteResults] = useState<MusicTrack[]>([]);
-  const [favoriteTracks, setFavoriteTracks] = useState<MusicTrack[]>([]);
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [favoritesLoop, setFavoritesLoop] = useState(false);
   const [volume, setVolume] = useState(70);
   const [playing, setPlaying] = useState(true);
+  const [favoriteTracks, setFavoriteTracks] = useState<MusicTrack[]>([]);
+  const [favoriteLoop, setFavoriteLoop] = useState(false);
+  const metadataLoadedRef = useRef(new Set<string>());
   const frameRef = useRef<HTMLIFrameElement>(null);
   const originRef = useRef('music-page');
-  const favoriteStorageKey = musicFavoritesKey(user?.id);
-  const localResults = useMemo(() => searchMusicTracks(query).map((item) => catalogTracks.find((catalogItem) => catalogItem.id === item.id) || item), [catalogTracks, query]);
-  const results = favoritesOnly && !query.trim() ? favoriteTracks : query.trim() ? (remoteResults.length ? remoteResults : localResults) : catalogTracks;
+  const localResults = useMemo(() => searchMusicTracks(query), [query]);
+  const results = query.trim() ? (remoteResults.length ? remoteResults : localResults) : MUSIC_TRACKS;
+  const favoriteIds = favoriteTracks.map((item) => item.id);
 
   useEffect(() => {
     const saved = Number(window.localStorage.getItem('gyopo-music-volume'));
     if (Number.isFinite(saved)) setVolume(Math.min(100, Math.max(0, saved)));
+    try {
+      const stored = user?.musicFavorites || JSON.parse(window.localStorage.getItem(`gyopo-music-favorites:${user?.id || 'guest'}`) || '[]');
+      setFavoriteTracks(stored);
+    } catch {
+      setFavoriteTracks([]);
+    }
+    setFavoriteLoop(window.localStorage.getItem(`gyopo-music-favorite-loop:${user?.id || 'guest'}`) === '1');
     const syncTopPlayer = (event: Event) => {
       const detail = (event as CustomEvent<MusicSyncDetail>).detail;
       if (!detail?.track?.videoId || detail.player !== 'top') return;
@@ -35,28 +43,15 @@ export default function MusicPage() {
     window.addEventListener('gyopo-music-local', syncTopPlayer);
     window.dispatchEvent(new Event('gyopo-music-request-state'));
     return () => window.removeEventListener('gyopo-music-local', syncTopPlayer);
-  }, []);
+  }, [user?.id, user?.musicFavorites]);
 
   useEffect(() => {
-    const missing = MUSIC_TRACKS.filter((item) => !item.views || !item.published);
-    if (!missing.length) return;
-    let active = true;
-    void Promise.all(missing.map((item) => hydrateMusicTrack(item))).then((enriched) => {
-      if (!active) return;
-      setCatalogTracks((current) => current.map((item) => enriched.find((next) => next.id === item.id) || item));
-    });
-    return () => { active = false; };
+    const receiveFavorites = (event: Event) => setFavoriteTracks((event as CustomEvent<{ tracks?: MusicTrack[] }>).detail?.tracks || []);
+    const receiveLoop = (event: Event) => setFavoriteLoop(Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled));
+    window.addEventListener('gyopo-music-favorites', receiveFavorites);
+    window.addEventListener('gyopo-music-favorite-loop', receiveLoop);
+    return () => { window.removeEventListener('gyopo-music-favorites', receiveFavorites); window.removeEventListener('gyopo-music-favorite-loop', receiveLoop); };
   }, []);
-
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(favoriteStorageKey) || '[]') as unknown;
-      if (Array.isArray(saved) && saved.every((item) => typeof item === 'object' && item !== null)) setFavoriteTracks(saved as MusicTrack[]);
-      else if (Array.isArray(saved)) setFavoriteTracks(MUSIC_TRACKS.filter((item) => saved.includes(item.id)));
-    } catch {
-      setFavoriteTracks([]);
-    }
-  }, [favoriteStorageKey]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -76,23 +71,46 @@ export default function MusicPage() {
     };
   }, [query]);
 
-  const saveFavorites = (next: MusicTrack[]) => {
-    setFavoriteTracks(next);
-    window.localStorage.setItem(favoriteStorageKey, JSON.stringify(next));
-    window.dispatchEvent(new CustomEvent('gyopo-music-favorites', { detail: { tracks: next } }));
-  };
+  useEffect(() => {
+    if (metadataLoadedRef.current.has(track.videoId) || (track.views && track.published)) return;
+    metadataLoadedRef.current.add(track.videoId);
+    void fetch(`/api/music/details?videoId=${encodeURIComponent(track.videoId)}`, { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() as Promise<Partial<MusicTrack>> : null)
+      .then((metadata) => {
+        if (!metadata) return;
+        setTrack((current) => current.videoId === track.videoId ? { ...current, ...metadata } : current);
+        setFavoriteTracks((current) => current.map((item) => item.videoId === track.videoId ? { ...item, ...metadata } : item));
+      })
+      .catch(() => undefined);
+  }, [track.videoId, track.views, track.published]);
 
-  const toggleFavorite = (item: MusicTrack) => {
-    saveFavorites(favoriteTracks.some((favorite) => favorite.id === item.id) ? favoriteTracks.filter((favorite) => favorite.id !== item.id) : [...favoriteTracks, item]);
-  };
-
-  const selectTrack = async (item: MusicTrack) => {
-    const enriched = await hydrateMusicTrack(item);
-    setTrack(enriched);
-    setFavoriteTracks((current) => current.some((favorite) => favorite.id === enriched.id) ? current.map((favorite) => favorite.id === enriched.id ? enriched : favorite) : current);
+  const selectTrack = (item: MusicTrack) => {
+    setTrack(item);
     setPlaying(true);
-    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track: enriched, playing: true, position: 0, startedAt: Date.now(), volume });
+    emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track: item, playing: true, position: 0, startedAt: Date.now(), volume });
   };
+
+  useEffect(() => {
+    const handlePlayerMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.youtube.com' || typeof event.data !== 'string') return;
+      let payload: { event?: string; info?: number | { playerState?: number } };
+      try {
+        payload = JSON.parse(event.data) as typeof payload;
+      } catch {
+        return;
+      }
+      const ended = payload.event === 'onStateChange'
+        ? Number(payload.info) === 0
+        : payload.event === 'infoDelivery' && typeof payload.info === 'object' && payload.info?.playerState === 0;
+      if (!ended) return;
+      const pool = favoriteLoop && favoriteTracks.length ? favoriteTracks : MUSIC_TRACKS;
+      if (!pool.length) return;
+      const index = pool.findIndex((item) => item.id === track.id);
+      selectTrack(pool[(Math.max(index, 0) + 1) % pool.length]);
+    };
+    window.addEventListener('message', handlePlayerMessage);
+    return () => window.removeEventListener('message', handlePlayerMessage);
+  }, [favoriteLoop, favoriteTracks, track.id, volume]);
 
   const togglePlaying = () => {
     const next = !playing;
@@ -108,35 +126,45 @@ export default function MusicPage() {
     emitMusicEvent('gyopo-music-local', { source: 'local', player: 'top', origin: originRef.current, track, playing, position: 0, startedAt: Date.now(), volume: next });
   };
 
-  const toggleFavoritesLoop = () => {
-    const next = !favoritesLoop;
-    setFavoritesLoop(next);
+  const toggleFavorite = (item: MusicTrack) => {
+    const next = favoriteIds.includes(item.id) ? favoriteTracks.filter((favorite) => favorite.id !== item.id) : [...favoriteTracks, item];
+    setFavoriteTracks(next);
+    window.localStorage.setItem(`gyopo-music-favorites:${user?.id || 'guest'}`, JSON.stringify(next));
+    if (user) {
+      const nextUser = { ...user, musicFavorites: next };
+      setUser(nextUser);
+      void saveProfile(nextUser, getSessionToken()).catch(() => undefined);
+    }
+    window.dispatchEvent(new CustomEvent('gyopo-music-favorites', { detail: { tracks: next } }));
+  };
+
+  const toggleFavoriteLoop = () => {
+    const next = !favoriteLoop;
+    setFavoriteLoop(next);
     window.localStorage.setItem(`gyopo-music-favorite-loop:${user?.id || 'guest'}`, next ? '1' : '0');
     window.dispatchEvent(new CustomEvent('gyopo-music-favorite-loop', { detail: { enabled: next } }));
   };
 
-  const playlist = favoritesLoop && favoriteTracks.length ? `&loop=1&playlist=${favoriteTracks.map((item) => item.videoId).join(',')}` : '&loop=0';
-
   return (
     <div className="music-page min-h-screen bg-[#070b17] px-4 py-8 text-white md:px-8 md:py-12">
       <div className="mx-auto max-w-7xl">
-        <div className="music-page-header mb-8 flex flex-wrap items-end justify-between gap-5">
-           <div><div className="music-page-kicker mb-3 flex items-center gap-2 text-[7px] font-normal uppercase tracking-[0.28em] text-teal-300"><Music2 size={14} /> MUSIC VIDEO</div><h1 className="music-page-title whitespace-nowrap text-4xl font-normal tracking-tight md:text-6xl">MUSIC VIDEO</h1><p className="mt-3 text-sm text-slate-400">등록곡과 YouTube 뮤직비디오를 검색하고 즐겨찾기 목록으로 계속 재생합니다.</p></div>
-          <div className="flex flex-wrap gap-2">{MUSIC_HOT_KEYWORDS.map((keyword) => <button type="button" key={keyword} onClick={() => setQuery(keyword)} className="music-keyword-button rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-normal text-slate-300 hover:border-teal-300/50 hover:bg-teal-300/10 hover:text-teal-200">#{keyword}</button>)}</div>
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
+            <div><div className="mb-3 flex items-center gap-2 text-sm font-medium tracking-[0.12em] text-teal-300"><Music2 size={16} /> MUSIC VIDEO</div><h1 className="text-4xl font-medium tracking-tight md:text-6xl">MUSIC VIDEO</h1><p className="mt-3 text-sm text-slate-400">등록곡뿐 아니라 YouTube에서 검색한 뮤직비디오도 바로 재생하고 함께 들을 수 있습니다.</p></div>
+          <div className="flex flex-wrap gap-2">{MUSIC_HOT_KEYWORDS.map((keyword) => <button type="button" key={keyword} onClick={() => setQuery(keyword)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 hover:border-teal-300/50 hover:text-teal-200">#{keyword}</button>)}</div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]">
-          <section className="music-video-card overflow-hidden bg-[#10182b] shadow-2xl">
-            <div className="aspect-video bg-black"><iframe ref={frameRef} key={`${track.videoId}-${favoritesLoop ? favoriteTracks.map((item) => item.videoId).join('-') : 'all'}`} onLoad={() => { const frame = frameRef.current?.contentWindow; frame?.postMessage(JSON.stringify({ event: 'command', func: 'unMute', args: [] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [volume] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: playing ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com'); }} src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&rel=0${playlist}`} title={track.title} className="h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>
-            <div className="flex flex-wrap items-center justify-between gap-3 p-5 md:p-7"><div><div className="text-xs font-medium uppercase tracking-[0.2em] text-teal-300">Now playing</div><h2 className="mt-2 text-3xl font-medium">{track.title}</h2><p className="mt-1 text-sm font-normal text-slate-400">{track.artist}</p><div className="mt-3 flex flex-wrap gap-2 text-[11px] font-normal text-slate-500"><span className="music-meta-chip px-2.5 py-1.5">조회수 · {track.views || '집계 중'}</span><span className="music-meta-chip px-2.5 py-1.5">발매일 · {track.published || '정보 확인 중'}</span></div></div><div className="flex items-center gap-3"><button type="button" onClick={togglePlaying} className="music-action-button flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-normal">{playing ? <Pause size={14} /> : <Play size={14} />}{playing ? '일시정지' : '재생'}</button><label className="flex items-center gap-2 text-xs text-slate-400">볼륨<input type="range" min="0" max="100" value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="accent-teal-300" /></label></div></div>
+          <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
+               <div className="aspect-video bg-black"><iframe ref={frameRef} key={track.videoId} onLoad={() => { const frame = frameRef.current?.contentWindow; frame?.postMessage(JSON.stringify({ event: 'listening', id: 'gyopo-music-page' }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onStateChange'] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: 'unMute', args: [] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [volume] }), 'https://www.youtube.com'); frame?.postMessage(JSON.stringify({ event: 'command', func: playing ? 'playVideo' : 'pauseVideo', args: [] }), 'https://www.youtube.com'); }} src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&rel=0`} title={track.title} className="h-full w-full" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div>
+               <div className="flex flex-wrap items-center justify-between gap-3 p-5 md:p-7"><div><div className="text-xs font-black uppercase tracking-[0.2em] text-teal-300">Now playing</div><h2 className="mt-2 text-3xl font-black">{track.title}</h2><p className="mt-1 text-sm font-bold text-slate-400">{track.artist}</p><div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500"><span className="border border-white/10 bg-white/[.04] px-2.5 py-1.5">조회수 · {track.views || '조회 중'}</span><span className="border border-white/10 bg-white/[.04] px-2.5 py-1.5">발매일 · {track.published || '조회 중'}</span></div></div><div className="flex items-center gap-3"><button type="button" onClick={() => toggleFavorite(track)} className={`border px-3 py-2 text-xs font-black ${favoriteIds.includes(track.id) ? 'border-rose-300/50 text-rose-200' : 'border-white/10 text-slate-300'}`}><Heart size={14} fill={favoriteIds.includes(track.id) ? 'currentColor' : 'none'} /></button><button type="button" onClick={togglePlaying} className="flex items-center gap-2 border border-teal-300/30 bg-teal-300 px-3 py-2 text-xs font-black text-slate-950">{playing ? <Pause size={14} /> : <Play size={14} />}{playing ? '일시정지' : '재생'}</button><label className="flex items-center gap-2 text-xs text-slate-400">볼륨<input type="range" min="0" max="100" value={volume} onChange={(event) => changeVolume(Number(event.target.value))} className="accent-teal-300" /></label></div></div>
           </section>
 
-          <aside className="music-search-aside p-5">
-            <div className="music-search-field flex items-center gap-2 px-3 py-2.5"><Search size={16} className="text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="YouTube 곡·가수 검색" className="music-search-input w-full text-sm outline-none placeholder:text-slate-500" /></div>
-            <div className="mt-5 flex items-center justify-between gap-2"><h3 className="music-section-heading text-xs uppercase tracking-[0.2em] text-slate-300">즐겨찾기 플레이리스트</h3><button type="button" disabled={!favoriteTracks.length} onClick={toggleFavoritesLoop} className="music-toggle-button px-2.5 py-1 text-[10px] disabled:opacity-40">{favoritesLoop ? '즐겨찾기 반복 중' : '즐겨찾기만 반복'}</button></div>
-            <div className="mt-2 space-y-2">{favoriteTracks.length ? favoriteTracks.map((item) => <div key={`favorite-${item.id}`} className="music-favorite-row flex items-center gap-2 p-2"><button type="button" onClick={() => void selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-2 text-left">{item.thumbnail && <img src={item.thumbnail} alt="" className="h-9 w-14 shrink-0 object-cover" />}<span className="min-w-0"><b className="block truncate text-xs">{item.title}</b><span className="block truncate text-[10px] text-slate-400">{item.artist}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label="즐겨찾기 해제" className="music-heart-button inline-flex items-center justify-center p-1 text-rose-300"><Heart size={14} fill="currentColor" /></button></div>) : <p className="music-empty-state p-2 text-[11px] text-slate-500">하트 버튼으로 좋아하는 뮤직비디오를 담아보세요.</p>}</div>
-            <div className="mt-6 flex items-center justify-between gap-2"><h3 className="music-section-heading text-xs uppercase tracking-[0.2em] text-slate-300">YouTube 검색 결과</h3><button type="button" onClick={() => setFavoritesOnly((value) => !value)} className="music-toggle-button px-2.5 py-1 text-[10px]">{favoritesOnly ? '전체 보기' : '즐겨찾기만 보기'}</button></div>
-            <div className="mt-3 space-y-2">{results.map((item) => <div key={item.id} className={`music-result-row flex items-center gap-2 p-2 ${track.id === item.id ? 'is-active' : ''}`}><button type="button" onClick={() => void selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-3 text-left">{item.thumbnail ? <img src={item.thumbnail} alt="" className="h-12 w-20 shrink-0 object-cover" /> : <span className="music-result-placeholder flex h-9 w-9 shrink-0 items-center justify-center text-teal-300"><Play size={14} fill="currentColor" /></span>}<span className="min-w-0"><span className="block truncate text-sm font-normal">{item.title}</span><span className="block truncate text-xs text-slate-400">{item.artist}</span><span className="block truncate text-[10px] text-slate-500">{item.views || '등록곡'}{item.published ? ` · ${item.published}` : ''}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label={favoriteTracks.some((favorite) => favorite.id === item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'} className={`music-heart-button inline-flex items-center justify-center p-1 ${favoriteTracks.some((favorite) => favorite.id === item.id) ? 'text-rose-300' : 'text-slate-500'}`}><Heart size={15} fill={favoriteTracks.some((favorite) => favorite.id === item.id) ? 'currentColor' : 'none'} /></button></div>)}{!results.length && <p className="music-empty-state p-3 text-sm text-slate-500">즐겨찾기 목록이 비어 있습니다.</p>}</div>
+           <aside className="border border-white/10 bg-[#10182b] p-5">
+              <div className="music-search-box flex items-center gap-2 px-3 py-2"><Search size={16} className="text-slate-500" /><input aria-label="뮤직비디오 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="YouTube 곡·가수 검색" className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" /></div>
+             <div className="mt-4 flex items-center justify-between border-b border-white/10 pb-3"><span className="text-xs font-black text-slate-300">♥ 즐겨찾기 보관함</span><button type="button" onClick={toggleFavoriteLoop} className={`border px-2 py-1 text-[10px] font-black ${favoriteLoop ? 'border-rose-300/50 text-rose-200' : 'border-white/10 text-slate-500'}`}>{favoriteLoop ? '즐겨찾기 반복 ON' : '즐겨찾기만 반복'}</button></div>
+             {favoriteTracks.length > 0 && <div className="mt-3 space-y-2">{favoriteTracks.map((item) => <button type="button" key={item.id} onClick={() => selectTrack(item)} className="flex w-full items-center gap-2 border-0 bg-white/5 p-2 text-left"><img src={item.thumbnail || `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`} alt="" className="h-10 w-16 object-cover" /><span className="min-w-0 flex-1"><b className="block truncate text-xs">{item.title}</b><span className="block truncate text-[10px] text-slate-500">{item.artist}</span></span><Heart size={13} className="shrink-0 text-rose-300" fill="currentColor" /></button>)}</div>}
+             <h3 className="mt-6 text-xs font-black uppercase tracking-[0.2em] text-slate-500">YouTube 검색 결과</h3>
+             <div className="mt-3 space-y-2">{results.map((item) => <div key={item.id} className={`flex items-center gap-2 border p-3 text-left transition ${track.id === item.id ? 'border-teal-300/50 bg-teal-300/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}><button type="button" onClick={() => selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-3 border-0 text-left"><img src={item.thumbnail || `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`} alt="" className="h-12 w-20 object-cover" /><span className="min-w-0"><b className="block truncate text-sm">{item.title}</b><span className="block truncate text-xs text-slate-400">{item.artist}</span><span className="block truncate text-[10px] text-slate-500">{item.views || '조회 중'}{item.published ? ` · ${item.published}` : ''}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label="즐겨찾기" className={`border-0 ${favoriteIds.includes(item.id) ? 'text-rose-300' : 'text-slate-500'}`}><Heart size={14} fill={favoriteIds.includes(item.id) ? 'currentColor' : 'none'} /></button></div>)}{!results.length && <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`} target="_blank" rel="noreferrer" className="block text-sm font-bold text-teal-200 underline">YouTube에서 이 키워드 검색하기</a>}</div>
           </aside>
         </div>
       </div>
