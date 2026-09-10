@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, Film, Gamepad2, Home, MessageCircle, Music2, Newspaper, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
+import { BriefcaseBusiness, Film, Gamepad2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 const primaryLinks = [
@@ -10,6 +10,7 @@ const primaryLinks = [
   { href: '/news', label: '오늘의 뉴스', english: 'News', icon: Newspaper },
   { href: '/jobs', label: '구인구직', english: 'Jobs', icon: BriefcaseBusiness },
   { href: '/directory', label: '업소록', english: 'Directory', icon: Store },
+  { href: '/market', label: '장터', english: 'Market', icon: ShoppingBag },
   { href: '/community', label: '커뮤니티', english: 'Community', icon: MessageCircle },
 ];
 
@@ -35,7 +36,7 @@ export default function PortalSidebar() {
   const pathname = usePathname();
   const language = useGlobalStore((state) => state.language);
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-cyan-300/10 bg-[#070c18]/97 pt-24 shadow-[20px_0_70px_rgba(0,0,0,.24)] backdrop-blur-xl lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-0 bg-transparent pt-24 shadow-none backdrop-blur-none lg:flex">
        <div className="border-b border-white/8 px-4 py-4">
         <div className="text-[10px] font-black uppercase tracking-[.24em] text-teal-300">GYOPO NETWORK</div>
        </div>
@@ -48,7 +49,7 @@ export default function PortalSidebar() {
           <p className="mb-2 mt-7 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">{language === 'ko' ? '라이브 / LIVE & PLAY' : 'LIVE & PLAY / 라이브'}</p>
         <div className="space-y-1">
            {utilityLinks.map((link) => <LinkRow key={link.href} {...link} language={language} active={pathname.startsWith(link.href)} />)}
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/7 hover:text-white">
+             <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/7 hover:text-white">
              <UserRoundCheck size={17} className="text-slate-500 transition group-hover:text-teal-300" />
                <span>{language === 'ko' ? '친구 채팅·통화' : 'Friends'} <small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {language === 'ko' ? 'Friends' : '친구 채팅·통화'}</small></span>
           </button>
