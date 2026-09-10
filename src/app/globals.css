@@ -80,6 +80,8 @@ body { padding-top: 7rem !important; }
 .portal-chrome > section > div:first-child { height: 4rem; max-width: none; margin: 0; padding: 0 .35rem; }
 .portal-chrome > section > div:first-child > div:nth-child(2) { min-width: 0; }
 .portal-chrome > section > div:nth-child(2) { position: absolute; top: 4rem; left: 0; width: min(28rem, calc(100vw - 2rem)); margin: 0; border: 1px solid rgba(165, 243, 252, .14); border-radius: 1rem; background: rgba(9, 17, 32, .72); padding: .7rem; box-shadow: 0 24px 70px rgba(0, 0, 0, .28); backdrop-filter: blur(18px); }
+.portal-chrome .music-player-results { border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; }
+.portal-chrome .music-player-results button, .portal-chrome .music-player-results a { border: 0 !important; outline: 0 !important; box-shadow: none !important; text-decoration: none !important; }
 body.webrtc-compact-shell { padding-top: 0 !important; overflow: hidden; }
 body.webrtc-compact-shell > header,
 body.webrtc-compact-shell > section,
@@ -221,7 +223,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .games-page > .mx-auto:not(.tetris-modern-shell) { display: none; }
 .tetris-modern-shell { position: relative; }
 .tetris-modern-shell::before { position: absolute; top: -8rem; right: 5%; width: 32rem; height: 32rem; border-radius: 999px; background: rgba(34, 211, 238, .08); content: ""; filter: blur(70px); pointer-events: none; }
-.tetris-waiting-state { min-height: 15rem; padding-block: 2.5rem; }
 .tetris-arena-card, .tetris-panel { position: relative; border-radius: 0 !important; background: rgba(8, 16, 31, .34); box-shadow: none; }
 .tetris-chat-panel { overflow: hidden; }
 .tetris-chat-messages { scrollbar-width: thin; scrollbar-color: rgba(45, 212, 191, .45) transparent; }
@@ -256,10 +257,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .battle-fx-incoming { border-color: rgba(244, 63, 94, .7); color: #fecdd3; box-shadow: 0 0 45px rgba(244, 63, 94, .45); }
 
 @media (min-width: 1024px) {
-  .games-page { padding-inline: 1rem !important; }
-  .games-page > .tetris-modern-shell { width: min(calc(100% - .5rem), 1280px) !important; max-width: 1280px !important; transform: scale(.94); transform-origin: top center; }
-  .tetris-modern-shell > .grid { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr) !important; }
-  .tetris-video-panel { width: 100%; max-width: 34rem; justify-self: end; }
   .portal-text-rail { display: block; }
   body:has(#global-lounge.translate-x-0) .portal-frame { margin-right: 21rem; }
   body:has(#global-lounge.translate-x-0) .portal-chrome #global-lounge ~ button { right: 21rem !important; }
@@ -267,13 +264,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   body:has(#global-lounge.global-lounge-fullscreen) .portal-chrome #global-lounge ~ button { right: 1rem !important; }
   .webrtc-page { margin-right: 0; }
   .webrtc-shell > section { display: none; }
-}
-
-.global-lounge-mobile-toggle { display: grid !important; height: 2.75rem !important; width: 2.75rem !important; flex: 0 0 auto; place-items: center; border: 0 !important; border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; color: #fff; box-shadow: none !important; }
-.global-lounge-mobile-toggle:hover { background: rgba(255, 255, 255, .18) !important; }
-
-@media (max-width: 639px) {
-  .global-lounge-mobile-toggle { height: 3rem !important; width: 3rem !important; }
 }
 
 @media (max-width: 1023px) {
@@ -724,138 +714,111 @@ body { padding-top: 5.75rem !important; }
   .webrtc-grid > aside > section:nth-child(3) > div.grid { margin-top: .35rem !important; }
   .webrtc-grid > aside > section:nth-child(3) > p { display: none !important; }
 }
-/* Final mobile pass: keep the video dominant and move matching controls below it. */
-.jobs-page main > a > div { border-bottom-color: transparent !important; background: transparent !important; }
-.jobs-page main > a:hover > div { background: transparent !important; }
-.jobs-page aside > div:first-child { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
-.users-page > .mx-auto > header { border: 0 !important; background: transparent !important; box-shadow: none !important; }
 
+/* Final mobile pass: keep LIVE CHAT video and its two compact controls visible together. */
 @media (max-width: 639px) {
-  .portal-frame > main > .container,
-  .portal-frame > main > .jobs-page,
-  .portal-frame > main > .directory-page,
-  .portal-frame > main > .users-page,
-  .portal-frame > main > .news-page { padding-top: 5.5rem !important; }
-  .portal-frame > main > .news-page > header { padding-top: 0 !important; }
+  .portal-chrome > header,
+  html[data-theme="dark"] .portal-chrome > header,
+  html[data-theme="light"] .portal-chrome > header {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
 
-  .webrtc-page { height: calc(100svh - 5.4rem) !important; }
-  .webrtc-grid { display: flex !important; height: 100% !important; flex-direction: column !important; gap: 0 !important; }
-  .webrtc-grid > section { position: relative !important; inset: auto !important; flex: 0 0 60% !important; height: 60% !important; min-height: 0 !important; }
-  .webrtc-grid > aside { position: relative !important; inset: auto !important; flex: 0 0 40% !important; width: 100% !important; max-height: none !important; overflow-y: auto !important; display: flex !important; flex-direction: column !important; gap: .45rem !important; padding: .45rem 0 0 !important; }
-  .webrtc-grid > aside > section { margin: 0 !important; padding: .7rem !important; border-radius: 1rem !important; }
-  .webrtc-grid > aside > section:nth-child(2),
-  .webrtc-grid > aside > section:nth-child(4),
-  .webrtc-grid > aside > section.webrtc-sidebar-screen { display: none !important; }
-  .webrtc-grid > aside > section:nth-child(1),
-  .webrtc-grid > aside > section:nth-child(3) { display: block !important; }
-  .webrtc-grid > aside > section:nth-child(1) button { padding-block: .65rem !important; font-size: .78rem !important; }
-  .webrtc-grid > aside > section:nth-child(3) { font-size: .72rem !important; }
-  .webrtc-grid > aside > section:nth-child(3) select { margin-top: .35rem !important; padding-block: .45rem !important; font-size: .72rem !important; }
-}
-/* Apply the final pass to the existing route markup. */
-.portal-frame > main > div > div > div.flex > main > a > div { border-bottom-color: transparent !important; background: transparent !important; }
-.portal-frame > main > div > div > div.flex > main > a:hover > div { background: transparent !important; }
-@media (max-width: 639px) {
-  .portal-frame > main > div.min-h-screen[class*="bg-[#070b17]"],
-  .portal-frame > main > div.min-h-screen[class*="bg-[#f5f7fb]"] { padding-top: 5.5rem !important; }
-  .portal-frame > main > div.min-h-screen[class*="bg-[#070b17]"] > header { padding-top: 0 !important; }
-}
-/* Remove the remaining jobs tint and normalize Friends typography. */
-.portal-frame > main > .jobs-page header { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
-.portal-frame > main > .jobs-page main > a > div,
-.portal-frame > main > .jobs-page main > a > div[class*="bg-white"] { border-bottom-color: transparent !important; background: transparent !important; box-shadow: none !important; }
-.portal-text-link.portal-text-link-button { font-family: inherit !important; font-size: .7rem !important; font-weight: 500 !important; line-height: 1.35 !important; }
-#friend-dock header .text-sm, #friend-dock header .text-sm *, #friend-dock .text-xs { font-size: .7rem !important; line-height: 1.35 !important; }
-/* Match the actual page-transition route wrapper. */
-.portal-frame .jobs-page header { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
-.portal-frame .jobs-page main a > div,
-.portal-frame .jobs-page main a > div[class*="bg-white"] { border-bottom-color: transparent !important; background: transparent !important; box-shadow: none !important; }
-/* Use the square, borderless sidebar surface language across content panels. */
-.portal-rail-card, #friend-dock, #global-lounge { border-radius: 0 !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-.portal-frame > main div[class*="rounded-"],
-.portal-frame > main section[class*="rounded-"],
-.portal-frame > main article[class*="rounded-"],
-.portal-frame > main aside[class*="rounded-"],
-.portal-frame > main header[class*="rounded-"],
-.portal-frame > main form[class*="rounded-"] { border-radius: 0 !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-.portal-frame > main [class*="backdrop-blur"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-#friend-dock [class*="rounded-"], #global-lounge [class*="rounded-"] { border-radius: 0 !important; border-color: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-#friend-dock > header, #global-lounge > div:first-child, #global-lounge > div:last-child { border-color: transparent !important; background: transparent !important; }
-/* Standardize frosted friend chat and square white controls. */
-#friend-dock { background: rgba(255, 255, 255, .08) !important; border: 1px solid rgba(255, 255, 255, .18) !important; box-shadow: 0 18px 70px rgba(0, 0, 0, .45) !important; backdrop-filter: blur(18px) saturate(140%) !important; -webkit-backdrop-filter: blur(18px) saturate(140%) !important; }
-#friend-dock > header, #friend-dock > div { background: transparent !important; border-color: rgba(255, 255, 255, .14) !important; }
-#friend-dock > div > button, #friend-dock > div > button img { border-radius: 0 !important; }
-#friend-dock > div > button { background: rgba(255, 255, 255, .1) !important; border: 1px solid rgba(255, 255, 255, .18) !important; color: rgba(255, 255, 255, .94) !important; }
-#friend-dock > div > button[class*="bg-cyan"], #friend-dock > div > button[aria-selected="true"] { background: rgba(255, 255, 255, .2) !important; color: #fff !important; }
-.portal-frame button, #friend-dock button, #global-lounge button { border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; border: 1px solid rgba(255, 255, 255, .2) !important; color: rgba(255, 255, 255, .94) !important; box-shadow: none !important; }
-.portal-frame button:hover, #friend-dock button:hover, #global-lounge button:hover { background: rgba(255, 255, 255, .18) !important; }
-.portal-frame button[class*="bg-rose"], .portal-frame button[class*="bg-red"], .portal-frame button[aria-label*="종료"], #friend-dock button[class*="bg-rose"], #friend-dock button[class*="bg-red"] { background: rgba(244, 63, 94, .82) !important; border-color: rgba(255, 255, 255, .3) !important; color: #fff !important; }
-.webrtc-page button[class*="bg-cyan"], .webrtc-page button[class*="bg-teal"] { background: rgba(255, 255, 255, .14) !important; border-color: rgba(255, 255, 255, .24) !important; color: #fff !important; }
-.portal-frame input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .portal-frame textarea, .portal-frame select { border-radius: 0 !important; border: 1px solid rgba(255, 255, 255, .24) !important; background: rgba(255, 255, 255, .1) !important; color: #fff !important; box-shadow: none !important; }
-.portal-frame input::placeholder, .portal-frame textarea::placeholder { color: rgba(255, 255, 255, .55) !important; }
-.portal-frame select option { background: #182236 !important; color: #fff !important; }
-.webrtc-page .webrtc-grid > aside, .webrtc-page .webrtc-grid > aside > section, .webrtc-page .webrtc-grid > aside > section > div { border-radius: 0 !important; border-color: transparent !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-/* Keep high-specificity mobile rules square and restore the frosted dock. */
-#friend-dock[class*="rounded-"] { -webkit-backdrop-filter: blur(18px) saturate(140%) !important; backdrop-filter: blur(18px) saturate(140%) !important; }
-@supports (backdrop-filter: blur(1px)) { #friend-dock[class*="rounded-"] { backdrop-filter: blur(18px) saturate(140%) !important; } }
-.portal-frame .webrtc-grid > section .webrtc-mobile-controls button { border-radius: 0 !important; }
-/* Keep control borders consistently white and translucent. */
-#friend-dock button[class*="rounded-"], #global-lounge button[class*="rounded-"] { border-color: rgba(255, 255, 255, .2) !important; }
-.portal-frame .webrtc-grid > aside > section input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .portal-frame .webrtc-grid > aside > section select, .portal-frame .webrtc-grid > aside > section textarea { border-color: rgba(255, 255, 255, .24) !important; }
+  .portal-text-link-button {
+    font-size: inherit !important;
+    font-weight: inherit !important;
+  }
 
-/* Final control pass: square translucent fields, centered delete actions, and borderless chat controls. */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select {
-  border: 1px solid rgba(255, 255, 255, .22) !important;
-  border-radius: 0 !important;
-  background: rgba(255, 255, 255, .08) !important;
+  .portal-frame > main > .news-page > header,
+  .portal-frame > main > .directory-page > div > header,
+  .portal-frame > main > .jobs-page > div > header,
+  .portal-frame > main > .community-page > div:first-child,
+  .portal-frame > main > .market-page > div:first-child,
+  .portal-frame > main > .music-page > div > div:first-child,
+  .portal-frame > main > .assistant-page > div > header {
+    padding-top: 5.5rem !important;
+  }
+
+  .portal-frame > main .webrtc-page { padding: .35rem !important; }
+  .portal-frame > main .webrtc-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: .35rem !important;
+    height: calc(100% - 2.45rem) !important;
+    overflow: hidden !important;
+  }
+  .portal-frame > main .webrtc-grid > section {
+    position: relative !important;
+    inset: auto !important;
+    flex: 0 0 60% !important;
+    width: 100% !important;
+    height: 60% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    border-radius: 1rem !important;
+  }
+  .portal-frame > main .webrtc-grid > aside {
+    position: relative !important;
+    inset: auto !important;
+    flex: 1 1 40% !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(1),
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) {
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding: .35rem !important;
+    border-radius: .7rem !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(1) .mb-5 {
+    margin-bottom: .25rem !important;
+    padding: .25rem !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(1) button,
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) select {
+    min-height: 1.8rem !important;
+    padding: .25rem !important;
+    font-size: .56rem !important;
+    line-height: 1.2 !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(1) .text-xs,
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) .text-xs,
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) label {
+    font-size: .55rem !important;
+    line-height: 1.2 !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) .mb-4 {
+    margin-bottom: .2rem !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) select {
+    margin-top: .1rem !important;
+  }
+  .portal-frame > main .webrtc-grid > aside > section:nth-child(3) > div.grid {
+    margin-top: .2rem !important;
+    gap: .2rem !important;
+  }
+}
+
+/* Job rows should float on the shared background without dark separators. */
+.jobs-page main > a > div,
+.jobs-page main > a > div:hover {
+  border-bottom-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Keep the global header transparent and borderless in every viewport. */
+html[data-theme="dark"] .portal-chrome > header,
+html[data-theme="light"] .portal-chrome > header {
+  border: 0 !important;
+  background: transparent !important;
   box-shadow: none !important;
+  backdrop-filter: none !important;
 }
-.music-player-search { border: 0 !important; border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; }
-.music-player-search input { border: 0 !important; border-radius: 0 !important; background: transparent !important; }
-.portal-frame button, .portal-chrome button, .music-player-shell button, #friend-dock button, #global-lounge button { border: 0 !important; border-color: transparent !important; }
-.delete-action, button[class*="text-red-"], button[class*="text-rose-"] { display: inline-flex !important; min-width: 4rem; min-height: 2.25rem; align-items: center !important; justify-content: center !important; padding: .55rem .75rem !important; border: 0 !important; border-radius: 0 !important; background: rgba(244, 63, 94, .82) !important; color: #fff !important; text-align: center !important; vertical-align: middle; white-space: nowrap; line-height: 1 !important; text-decoration: none !important; }
-#friend-dock { border: 0 !important; border-color: transparent !important; }
-#friend-dock > header, #friend-dock > div, #friend-dock input, #friend-dock button { border-color: transparent !important; }
-#friend-dock input { background: rgba(255, 255, 255, .08) !important; }
-.webrtc-page .webrtc-grid > aside, .webrtc-page .webrtc-grid > aside > section, .webrtc-page .webrtc-grid > aside > section > div { border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; }
-.tetris-modern-shell button, .tetris-modern-shell a { border: 0 !important; border-radius: 0 !important; background: rgba(255, 255, 255, .1) !important; color: #fff !important; box-shadow: none !important; }
-.tetris-modern-shell .tetris-action-danger { background: rgba(244, 63, 94, .82) !important; color: #fff !important; }
-
-
-/* Music controls keep the original rounded language instead of the global square pass. */
-.portal-frame .music-page .music-video-card { border: 1px solid rgba(255, 255, 255, .1) !important; border-radius: 1.5rem !important; background: rgba(16, 24, 43, .55) !important; box-shadow: 0 24px 70px rgba(0, 0, 0, .22) !important; }
-.portal-frame .music-page .music-page-kicker, .portal-frame .music-page .music-page-title { font-weight: 400 !important; }
-.portal-frame .music-page .music-search-aside { border: 1px solid rgba(148, 163, 184, .16) !important; border-radius: 1.5rem !important; background: linear-gradient(160deg, rgba(19, 31, 53, .78), rgba(9, 17, 32, .72)) !important; box-shadow: 0 24px 70px rgba(0, 0, 0, .2) !important; backdrop-filter: blur(18px) !important; -webkit-backdrop-filter: blur(18px) !important; }
-.portal-frame .music-page .music-search-field { border: 1px solid rgba(148, 163, 184, .22) !important; border-radius: 1rem !important; background: rgba(255, 255, 255, .055) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 10px 26px rgba(0, 0, 0, .12) !important; transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
-.portal-frame .music-page .music-search-field:focus-within { border-color: rgba(94, 234, 212, .55) !important; background: rgba(255, 255, 255, .08) !important; box-shadow: 0 0 0 3px rgba(45, 212, 191, .1), 0 12px 30px rgba(0, 0, 0, .16) !important; }
-.portal-frame .music-page .music-search-input { border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }
-.portal-frame .music-page .music-keyword-button { border: 1px solid rgba(255, 255, 255, .12) !important; border-radius: 999px !important; background: rgba(255, 255, 255, .05) !important; font-weight: 400 !important; transition: border-color .18s ease, background-color .18s ease, color .18s ease, transform .18s ease; }
-.portal-frame .music-page .music-keyword-button:hover { transform: translateY(-1px); }
-.portal-frame .music-page .music-action-button { border: 1px solid rgba(94, 234, 212, .35) !important; border-radius: .85rem !important; background: linear-gradient(135deg, rgba(94, 234, 212, .95), rgba(56, 189, 248, .9)) !important; color: #06232a !important; font-weight: 400 !important; box-shadow: 0 10px 24px rgba(45, 212, 191, .14) !important; }
-.portal-frame .music-page .music-meta-chip { border: 1px solid rgba(255, 255, 255, .09) !important; border-radius: .65rem !important; background: rgba(255, 255, 255, .055) !important; }
-.portal-frame .music-page .music-section-heading { font-weight: 400 !important; }
-.portal-frame .music-page .music-toggle-button { border: 1px solid rgba(255, 255, 255, .12) !important; border-radius: 999px !important; background: rgba(255, 255, 255, .06) !important; color: #cbd5e1 !important; font-weight: 400 !important; transition: border-color .18s ease, background-color .18s ease, color .18s ease; }
-.portal-frame .music-page .music-toggle-button:hover { border-color: rgba(94, 234, 212, .45) !important; background: rgba(45, 212, 191, .12) !important; color: #ccfbf1 !important; }
-.portal-frame .music-page .music-favorite-row, .portal-frame .music-page .music-result-row { border: 1px solid rgba(255, 255, 255, .08) !important; border-radius: .95rem !important; background: rgba(255, 255, 255, .045) !important; transition: border-color .18s ease, background-color .18s ease, transform .18s ease; }
-.portal-frame .music-page .music-result-row:hover, .portal-frame .music-page .music-favorite-row:hover { border-color: rgba(94, 234, 212, .25) !important; background: rgba(255, 255, 255, .075) !important; transform: translateY(-1px); }
-.portal-frame .music-page .music-result-row.is-active { border-color: rgba(94, 234, 212, .42) !important; background: rgba(45, 212, 191, .1) !important; }
-.portal-frame .music-page .music-result-placeholder { border-radius: .7rem; background: rgba(15, 23, 42, .8); }
-.portal-frame .music-page .music-heart-button { border: 0 !important; border-radius: 999px !important; background: transparent !important; color: inherit !important; box-shadow: none !important; }
-.portal-frame .music-page .music-empty-state { border-radius: .8rem; background: rgba(255, 255, 255, .04); }
-
-.music-player-shell .music-player-skip, .music-player-shell .music-player-favorite { border: 0 !important; border-radius: .7rem !important; background: transparent !important; color: #94a3b8 !important; box-shadow: none !important; transition: background-color .18s ease, color .18s ease; }
-.music-player-shell .music-player-skip:hover, .music-player-shell .music-player-favorite:hover { background: rgba(255, 255, 255, .09) !important; color: #fff !important; }
-.music-player-shell .music-player-toggle { border: 0 !important; border-radius: 999px !important; background: #5eead4 !important; color: #0f172a !important; box-shadow: 0 8px 20px rgba(45, 212, 191, .18) !important; }
-.music-player-shell .music-player-search { border: 1px solid rgba(148, 163, 184, .18) !important; border-radius: 999px !important; background: rgba(255, 255, 255, .055) !important; transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease; }
-.music-player-shell .music-player-search:focus-within { border-color: rgba(94, 234, 212, .55) !important; background: rgba(255, 255, 255, .08) !important; box-shadow: 0 0 0 3px rgba(45, 212, 191, .1) !important; }
-.music-player-shell .music-player-search-input { border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }
-.music-player-shell .music-video-link { border: 1px solid rgba(148, 163, 184, .18) !important; border-radius: 999px !important; background: rgba(255, 255, 255, .055) !important; color: #cbd5e1 !important; font-size: 7px !important; font-weight: 400 !important; letter-spacing: .12em; line-height: 1 !important; white-space: nowrap; transition: border-color .18s ease, background-color .18s ease, color .18s ease; }
-.music-player-shell .music-video-link:hover { border-color: rgba(94, 234, 212, .5) !important; background: rgba(45, 212, 191, .1) !important; color: #ccfbf1 !important; }
-.music-player-shell .music-player-results { border: 1px solid rgba(148, 163, 184, .16) !important; border-radius: 1.25rem !important; background: rgba(11, 18, 34, .92) !important; box-shadow: 0 24px 70px rgba(0, 0, 0, .3) !important; backdrop-filter: blur(20px) !important; -webkit-backdrop-filter: blur(20px) !important; }
-.music-player-shell .music-results-label { color: #cbd5e1; font-size: 11px; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; }
-.music-player-shell .music-search-toggle, .music-player-shell .music-search-keyword { border: 1px solid rgba(255, 255, 255, .1) !important; border-radius: 999px !important; background: rgba(255, 255, 255, .055) !important; color: #94a3b8 !important; font-weight: 400 !important; transition: border-color .18s ease, background-color .18s ease, color .18s ease; }
-.music-player-shell .music-search-toggle:hover, .music-player-shell .music-search-keyword:hover { border-color: rgba(94, 234, 212, .42) !important; background: rgba(45, 212, 191, .1) !important; color: #ccfbf1 !important; }
-.music-player-shell .music-search-favorite, .music-player-shell .music-search-result { border: 1px solid rgba(255, 255, 255, .08) !important; border-radius: .85rem !important; background: rgba(255, 255, 255, .045) !important; transition: border-color .18s ease, background-color .18s ease; }
-.music-player-shell .music-search-favorite:hover, .music-player-shell .music-search-result:hover { border-color: rgba(94, 234, 212, .3) !important; background: rgba(255, 255, 255, .075) !important; }
-.music-player-shell .music-search-result.is-active { border-color: rgba(94, 234, 212, .4) !important; background: rgba(45, 212, 191, .1) !important; }
-.music-player-shell .music-search-heart { border: 0 !important; border-radius: 999px !important; background: transparent !important; box-shadow: none !important; }
