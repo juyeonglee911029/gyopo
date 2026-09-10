@@ -7,6 +7,8 @@ import { regionalPostHref } from '@/lib/regionRoutes';
 import RegionalNavigation from '../RegionalNavigation';
 import RegionalPostList from '../RegionalPostList';
 
+export const runtime = 'edge';
+
 type Props = {
   params: Promise<{ country: string; category: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;

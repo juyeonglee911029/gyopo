@@ -6,6 +6,8 @@ import { pageMetadata } from '@/lib/seo';
 import RegionalNavigation from './RegionalNavigation';
 import RegionalPostList from './RegionalPostList';
 
+export const runtime = 'edge';
+
 type Props = { params: Promise<{ country: string }> };
 
 export async function generateMetadata({ params }: Props) {

@@ -3,6 +3,8 @@ import { getRegionalSitemapPosts } from '@/lib/regionalContent';
 import { canonicalUrl } from '@/lib/seo';
 import { regionalPostHref } from '@/lib/regionRoutes';
 
+export const runtime = 'edge';
+
 const routes = ['/', '/news', '/jobs', '/directory', '/market', '/community', '/ads', '/privacy', '/terms'];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
