@@ -57,7 +57,7 @@ async function encryptPrivateKey(privateKey: Uint8Array): Promise<{ ciphertext: 
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(masterKey));
   const key = await crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt']);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, privateKey);
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, privateKey as unknown as BufferSource);
   return { ciphertext: base64(new Uint8Array(encrypted)), iv: base64(iv) };
 }
 
