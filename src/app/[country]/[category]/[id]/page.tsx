@@ -7,6 +7,8 @@ import { getCountryRoute, getRegionalCategory, isRegionalPostId } from '@/lib/re
 import { canonicalUrl, pageMetadata, seoExcerpt, serializeJsonLd } from '@/lib/seo';
 import { postThreadKey } from '@/lib/comments';
 
+export const runtime = 'edge';
+
 type Props = { params: Promise<{ country: string; category: string; id: string }> };
 
 async function resolve(props: Props) {
