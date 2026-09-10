@@ -362,6 +362,10 @@ export async function recordLedgerTransaction(entry: Omit<LedgerTransaction, 'cr
   await createDocument('ledgerTransactions', entry.id, { ...entry, immutable: true, createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date() }, token).catch(() => undefined);
 }
 
+export async function listLedgerTransactions(userId: string, token?: string): Promise<LedgerTransaction[]> {
+  return queryDocuments<LedgerTransaction>('ledgerTransactions', 'userId', userId, token);
+}
+
 export async function publishDocument<T extends Record<string, unknown>>(
   collection: string,
   id: string,
