@@ -1536,8 +1536,8 @@ export default function GamesPage() {
 
   if (true) {
     return (
-      <div className="games-page h-[calc(100dvh-8.5rem)] min-h-0 overflow-hidden bg-[#070b17] px-1.5 py-1.5 text-white sm:px-2 md:px-3 lg:h-[calc(100dvh-9.25rem)]">
-        <div className="tetris-modern-shell mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-1.5">
+      <div className="games-page h-[calc(100dvh-8.5rem)] min-h-0 overflow-hidden bg-transparent px-1.5 py-1.5 text-white sm:px-2 md:px-3 lg:h-[calc(100dvh-9.25rem)]">
+        <div className="tetris-modern-shell tetris-modern-frame mx-auto flex h-full min-h-0 w-full flex-col gap-1.5">
           <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-2 py-1.5 shadow-xl sm:px-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300"><Gamepad2 size={13} /> Arcade / Live battle</div>
@@ -1550,8 +1550,8 @@ export default function GamesPage() {
             <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#0d1526] p-1.5 shadow-2xl sm:rounded-[1.5rem] sm:p-2">
               <div className="grid min-h-0 h-full grid-rows-[minmax(0,1fr)_auto] gap-1.5">
                 <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(52px,82px)] gap-1.5">
-                  <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#050914] p-1 sm:p-1.5">
-                    <div className="mx-auto h-full max-h-full max-w-[20rem] aspect-[.49/1]">
+                  <div className="tetris-board-stage flex min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-transparent bg-transparent p-1 sm:p-1.5">
+                    <div className="tetris-board-shell mx-auto h-full max-h-full max-w-[20rem] aspect-[.49/1]">
                       <div className="relative h-full w-full">
                         <BoardGrid cells={visual} />
                          {battleFx && <div key={battleFx.id} className={`battle-fx ${battleFx.kind === 'incoming' ? 'battle-fx-incoming' : battleFx.kind === 'attack' ? 'battle-fx-attack' : 'battle-fx-clear'}`}><span className="battle-fx-stars">✦ ✦ ✦</span>{battleFx.kind === 'incoming' ? <Zap size={18} /> : <Sparkles size={18} />}<b>{battleFx.title}</b><span>{battleFx.subtitle}</span></div>}
@@ -1581,7 +1581,7 @@ export default function GamesPage() {
              <section className="tetris-video-pane flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-emerald-300/15 bg-[#0d1526] shadow-2xl sm:rounded-[1.5rem]">
               <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-2.5 py-2 sm:px-3"><div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200"><MessageCircle size={13} /> Voice + Video</div><span className="text-[9px] font-bold text-slate-500">게임 시작 시 자동 연결</span></div>
                <div className="h-[40%] min-h-[180px] shrink-0 overflow-hidden p-1 sm:min-h-[220px] sm:p-1.5 lg:min-h-[250px]">
-                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-[#050914]" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-[#050914] p-4 text-center"><div><Camera size={22} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
+                {videoRoomActive && videoRoomUrl ? <iframe key={`${matchId}-${opponent?.id}`} title="게임 상대방 화상 및 마이크" src={videoRoomUrl} allow="camera; microphone; autoplay; display-capture" className="h-full w-full rounded-xl border-0 bg-transparent" /> : <div className="grid h-full place-items-center rounded-xl border border-dashed border-white/10 bg-transparent p-4 text-center"><div><Camera size={22} className="mx-auto text-cyan-200" /><p className="mt-2 text-xs font-black text-slate-300">{matchId && opponent ? '게임 시작을 기다리는 중' : '상대가 입장하면 영상이 연결됩니다'}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">카메라와 마이크 권한을 허용하면 상대 영상과 음성이 자동으로 시작됩니다.</p></div></div>}
               </div>
               <div className="shrink-0 space-y-1 border-t border-white/10 p-1 text-[9px] sm:p-1.5 sm:text-[10px]">
                 {inviteStatus && <p className="rounded-lg bg-cyan-300/[0.07] px-2 py-1.5 leading-4 text-cyan-100">{inviteStatus}</p>}
