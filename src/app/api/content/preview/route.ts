@@ -175,7 +175,8 @@ function bodyFromBlock(value: string) {
   return normalizeSourceBody(value
     .replace(/<(script|style|noscript|nav|header|footer)\b[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/<\/(p|div|li|h[1-6]|tr|td|table)>/gi, '\n'));
+    .replace(/<\/(p|div|li|h[1-6]|tr|td|table)>/gi, '\n')
+    .replace(/<[^>]*$/g, ' '));
 }
 
 function publishedDate(value: string | undefined) {
@@ -185,10 +186,10 @@ function publishedDate(value: string | undefined) {
 }
 
 const countryIds: Record<string, string> = {
-  독일: 'Germany', 네덜란드: 'Netherlands', 헝가리: 'Hungary', 스페인: 'Spain', 포르투갈: 'Portugal', 루마니아: 'Romania', 몰타: 'Malta', 벨기에: 'Belgium', 폴란드: 'Poland', 프랑스: 'France', 체코: 'Czechia', 슬로바키아: 'Slovakia', 오스트리아: 'Austria', 이탈리아: 'Italy', 태국: 'Thailand', 브라질: 'Brazil',
+  독일: 'Germany', 네덜란드: 'Netherlands', 헝가리: 'Hungary', 스페인: 'Spain', 포르투갈: 'Portugal', 루마니아: 'Romania', 몰타: 'Malta', 벨기에: 'Belgium', 폴란드: 'Poland', 프랑스: 'France', 체코: 'Czechia', 슬로바키아: 'Slovakia', 오스트리아: 'Austria', 이탈리아: 'Italy', 튀르키예: 'Turkey', 터키: 'Turkey', 키프로스: 'Cyprus', 태국: 'Thailand', 브라질: 'Brazil',
 };
 
-const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', events: '행사', community: '커뮤니티' };
+const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
 
 function titleCountry(title: string) {
   const label = title.match(/^\s*\[([^\]]+)]/)?.[1]?.trim();
@@ -466,7 +467,7 @@ function fallbackItem(sourceName: string, sourceUrl: string, category: ContentCa
 }
 
 const regionNames: Record<string, string> = {
-  Global: '글로벌', USA: '미국', 'USA-LA': '로스앤젤레스', Brazil: '브라질', Argentina: '아르헨티나', Chile: '칠레', Colombia: '콜롬비아', Bolivia: '볼리비아', Paraguay: '파라과이', Uruguay: '우루과이', Panama: '파나마', Mexico: '멕시코', Portugal: '포르투갈', Spain: '스페인', Netherlands: '네덜란드', Germany: '독일', Romania: '루마니아', Hungary: '헝가리', Malta: '몰타', Thailand: '태국', Vietnam: '베트남',
+  Global: '글로벌', USA: '미국', 'USA-LA': '로스앤젤레스', Brazil: '브라질', Argentina: '아르헨티나', Chile: '칠레', Colombia: '콜롬비아', Bolivia: '볼리비아', Paraguay: '파라과이', Uruguay: '우루과이', Panama: '파나마', Mexico: '멕시코', Portugal: '포르투갈', Spain: '스페인', Italy: '이탈리아', Netherlands: '네덜란드', Germany: '독일', Romania: '루마니아', Hungary: '헝가리', Turkey: '튀르키예', Cyprus: '키프로스', Malta: '몰타', Thailand: '태국', Vietnam: '베트남',
 };
 
 async function fetchRegionalNews(region: string) {
@@ -535,6 +536,65 @@ function extractDiscoveredLinks(html: string, pageUrl: string, fallback: Content
     if (items.length >= 36) break;
   }
   return items;
+}
+
+function isSpainAgainJob(title: string) {
+  return /(?:구인|구직|채용|모집|통역.*구합니다|가이드.*구합니다|운영 요원|파트너를 찾|강사.*되는법|사례비)/i.test(title);
+}
+
+function extractSpainAgainItems(html: string, pageUrl: string) {
+  const items: CrawlItem[] = [];
+  const seen = new Set<string>();
+  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']*\?[^"']*mod=document[^"']*uid=\d+[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let url: URL;
+    try { url = new URL(clean(match[1]), pageUrl); } catch { continue; }
+    const title = normalizeSourceTitle(match[2].replace(/<[^>]+>/g, ' '));
+    if (!title || title.length < 4 || seen.has(url.href)) continue;
+    const rowStart = html.lastIndexOf('<tr', match.index || 0);
+    const rowEnd = html.indexOf('</tr>', match.index || 0);
+    const row = rowStart >= 0 && rowEnd > rowStart ? html.slice(rowStart, rowEnd) : '';
+    const category = isSpainAgainJob(title) ? 'jobs' : 'community';
+    seen.add(url.href);
+    items.push({
+      title,
+      url: normalizeSourceUrl(url.href),
+      category,
+      author: normalizeSourceText(row.match(/class=["'][^"']*kboard-list-user[^"']*["'][^>]*>([\s\S]*?)<\/td>/i)?.[1] || 'SpainAgain 회원'),
+      publishedAt: publishedDate(row.match(/class=["'][^"']*kboard-list-date[^"']*["'][^>]*>([\s\S]*?)<\/td>/i)?.[1]),
+      country: 'Spain',
+      location: '스페인',
+      tag: category === 'jobs' ? '스페인 구인구직' : '스페인 한인 커뮤니티',
+    });
+  }
+  return items;
+}
+
+async function fetchSpainAgainSource(source: ContentSource, requestedCategory: ContentCategory | null) {
+  const html = await fetchHtml(source.url);
+  const rawItems = extractSpainAgainItems(html, source.url);
+  const categories: ContentCategory[] = ['community', 'jobs'];
+  const sections = await Promise.all(categories.map(async (category) => {
+    const candidates = rawItems.filter((item) => item.category === category).slice(0, 20);
+    const items = curateSourceItems(await enrichSpainAgainItems(candidates), category);
+    return { category, label: category === 'jobs' ? '스페인 구인구직' : '스페인 한인 커뮤니티', url: source.url, items };
+  }));
+  const selected = requestedCategory ? sections.find((section) => section.category === requestedCategory)?.items || [] : sections.flatMap((section) => section.items);
+  return { sourceId: source.id, sourceName: source.name, region: source.region, url: source.url, title: 'Spain Again 최신 커뮤니티·구인구직', description: source.note, items: selected, sections, status: selected.length ? 'ready' : 'unavailable', warnings: selected.length ? [] : ['Spain Again에서 조건에 맞는 글을 찾지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
+}
+
+async function enrichSpainAgainItems(items: CrawlItem[]) {
+  return Promise.all(items.map(async (item) => {
+    try {
+      const detail = await fetchHtml(item.url);
+      const data = structuredData(detail);
+      const bodyHtml = classBlock(detail, 'kboard-content', ['kboard-document-action', 'kboard-comments']);
+      const body = bodyFromBlock(bodyHtml) || extractBody(detail, data);
+      const images = extractImages(bodyHtml, item.url, data);
+      return { ...item, body, description: body.slice(0, 320), image: images[0], images };
+    } catch {
+      return item;
+    }
+  }));
 }
 
 async function fetchDiscoveredSource(source: ContentSource, requestedCategory: ContentCategory | null) {
@@ -624,7 +684,8 @@ export async function GET(request: Request) {
     if (source.id === 'kba-europe-jobs') return Response.json(await fetchKbaSource(source));
     if (source.id === 'hanasia-thailand') return Response.json(await fetchHanasiaSource(source, requestedCategory));
      if (source.id === 'naver-news') return Response.json(await fetchNaverSource(source, requestedCategory));
-     if (source.id === 'gutentag-korea' || source.id === 'spainagain-koreans') return Response.json(await fetchDiscoveredSource(source, requestedCategory));
+     if (source.id === 'spainagain-koreans' && (!requestedCategory || requestedCategory === 'community' || requestedCategory === 'jobs')) return Response.json(await fetchSpainAgainSource(source, requestedCategory));
+     if (source.id === 'gutentag-korea') return Response.json(await fetchDiscoveredSource(source, requestedCategory));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'community') return Response.json(await fetchHaninCommunity(source));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'jobs') {
       const response = await fetch('https://hanintoday.com.br/api/jobs', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
