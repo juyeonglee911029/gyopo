@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { Heart, Pause, Play, Search, SkipBack, SkipForward, Volume2, VolumeX, Music2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { emitMusicEvent, emitMusicPlayerEvent, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
+import { emitMusicEvent, emitMusicPlayerEvent, hydrateMusicTrack, musicFavoritesKey, MUSIC_HOT_KEYWORDS, MUSIC_TRACKS, searchMusicTracks, type MusicSyncDetail, type MusicTrack } from '@/lib/music';
+import { useGlobalStore } from '@/store/useGlobalStore';
 
 function sendPlayerCommand(frame: HTMLIFrameElement | null, func: string, args: unknown[] = []) {
   frame?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), 'https://www.youtube.com');
@@ -17,6 +18,7 @@ function subscribeToPlayerState(frame: HTMLIFrameElement | null) {
 }
 
 export default function MusicPlayer() {
+  const user = useGlobalStore((state) => state.user);
   const [track, setTrack] = useState<MusicTrack>(MUSIC_TRACKS[0]);
   const [playing, setPlaying] = useState(true);
   const [volume, setVolume] = useState(70);
@@ -24,6 +26,8 @@ export default function MusicPlayer() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [remoteResults, setRemoteResults] = useState<MusicTrack[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [favoriteTracks, setFavoriteTracks] = useState<MusicTrack[]>([]);
+  const [favoritesLoop, setFavoritesLoop] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const searchShellRef = useRef<HTMLElement>(null);
   const pendingSyncRef = useRef<MusicSyncDetail | null>(null);
@@ -56,11 +60,16 @@ export default function MusicPlayer() {
     const savedVolume = Number(window.localStorage.getItem('gyopo-music-volume'));
     if (Number.isFinite(savedVolume)) setVolume(Math.min(100, Math.max(0, savedVolume)));
     try {
-      setFavoriteIds(JSON.parse(window.localStorage.getItem('gyopo-music-favorites') || '[]'));
+      const saved = JSON.parse(window.localStorage.getItem(musicFavoritesKey(user?.id)) || '[]') as unknown;
+      const tracks = Array.isArray(saved) && saved.every((item) => typeof item === 'object' && item !== null) ? saved as MusicTrack[] : MUSIC_TRACKS.filter((item) => Array.isArray(saved) && saved.includes(item.id));
+      setFavoriteTracks(tracks);
+      setFavoriteIds(tracks.map((item) => item.id));
     } catch {
       setFavoriteIds([]);
+      setFavoriteTracks([]);
     }
-  }, []);
+    setFavoritesLoop(window.localStorage.getItem('gyopo-music-favorite-loop:' + (user?.id || 'guest')) === '1');
+  }, [user?.id]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -152,8 +161,9 @@ export default function MusicPlayer() {
   };
 
   const selectRelativeTrack = (direction: -1 | 1) => {
-    const index = MUSIC_TRACKS.findIndex((item) => item.id === track.id);
-    selectTrack(MUSIC_TRACKS[(index + direction + MUSIC_TRACKS.length) % MUSIC_TRACKS.length]);
+    const pool = favoritesLoop && favoriteTracks.length ? favoriteTracks : MUSIC_TRACKS;
+    const index = pool.findIndex((item) => item.id === track.id);
+    selectTrack(pool[(index + direction + pool.length) % pool.length]);
   };
 
   useEffect(() => {
@@ -196,10 +206,25 @@ export default function MusicPlayer() {
   };
 
   const toggleFavorite = (item: MusicTrack) => {
-    const next = favoriteIds.includes(item.id) ? favoriteIds.filter((id) => id !== item.id) : [...favoriteIds, item.id];
-    setFavoriteIds(next);
-    window.localStorage.setItem('gyopo-music-favorites', JSON.stringify(next));
+    const nextTracks = favoriteIds.includes(item.id) ? favoriteTracks.filter((favorite) => favorite.id !== item.id) : [...favoriteTracks, item];
+    setFavoriteTracks(nextTracks);
+    setFavoriteIds(nextTracks.map((favorite) => favorite.id));
+    window.localStorage.setItem(musicFavoritesKey(user?.id), JSON.stringify(nextTracks));
+    window.dispatchEvent(new CustomEvent('gyopo-music-favorites', { detail: { tracks: nextTracks } }));
   };
+
+  const toggleFavoritesLoop = () => {
+    const next = !favoritesLoop;
+    setFavoritesLoop(next);
+    window.localStorage.setItem('gyopo-music-favorite-loop:' + (user?.id || 'guest'), next ? '1' : '0');
+    window.dispatchEvent(new CustomEvent('gyopo-music-favorite-loop', { detail: { enabled: next } }));
+  };
+
+  useEffect(() => {
+    const onLoop = (event: Event) => setFavoritesLoop(Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled));
+    window.addEventListener('gyopo-music-favorite-loop', onLoop);
+    return () => window.removeEventListener('gyopo-music-favorite-loop', onLoop);
+  }, []);
 
   useEffect(() => {
     sendPlayerCommand(frameRef.current, 'setVolume', [volume]);
@@ -222,7 +247,7 @@ export default function MusicPlayer() {
            </button>
            <button type="button" onClick={() => selectRelativeTrack(1)} aria-label="다음 곡" className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"><SkipForward size={15} /></button>
          </div>
-         <div className="music-player-search relative flex min-w-[110px] max-w-[360px] flex-1 items-center gap-2 rounded-xl bg-white/[.07] px-2 py-2 sm:min-w-[180px] sm:px-3">
+         <div className="music-player-search relative flex min-w-[110px] max-w-[360px] flex-1 items-center gap-2 border border-white/10 bg-white/[.07] px-2 py-2 sm:min-w-[180px] sm:px-3">
            <Search size={15} className="shrink-0 text-slate-400" />
            <input value={query} onFocus={() => setSearchFocused(true)} onBlur={() => window.setTimeout(() => setSearchFocused(false), 160)} onChange={(event) => setQuery(event.target.value)} placeholder="음악 검색 · 핫키워드" className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500" />
          </div>
