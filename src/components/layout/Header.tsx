@@ -81,11 +81,11 @@ export default function Header() {
          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
             <time className="local-clock hidden whitespace-nowrap text-[14px] font-normal text-white/75 sm:block">{localTime || '--:-- --'}</time>
             <TranslateMenu />
-            <Link href="/games" aria-label="테트리스" className="header-action header-action-secondary">
+            <Link href="/games" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'))} aria-label="테트리스" className="header-action header-action-secondary">
               <Gamepad2 size={16} />
               <span>{language === 'ko' ? '테트리스' : 'Tetris'}</span>
             </Link>
-            <Link href="/webrtc" aria-label="화상채팅" className="header-action header-action-primary">
+            <Link href="/webrtc" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-navigation-fx'))} aria-label="화상채팅" className="header-action header-action-primary">
               <Video size={17} />
               <span>{language === 'ko' ? '화상채팅' : 'Video'}</span>
             </Link>
