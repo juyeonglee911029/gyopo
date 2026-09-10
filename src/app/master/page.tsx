@@ -2,13 +2,13 @@
 
 import { useEffect, useEffectEvent, useState } from 'react';
 import { CheckCircle2, LockKeyhole, RefreshCcw, Save, ShieldAlert, WalletCards } from 'lucide-react';
-import { approveDepositRequest, approveTransferRequest, createDocument, getDocument, getOnlineCount, getSessionToken, getSiteStats, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, mergeDocument, reviewDepositRequest, reviewTransferRequest, USDT_NETWORK, type PortalUser, type SiteStats } from '@/lib/firebase';
+import { approveDepositRequest, approveTransferRequest, createDocument, getDocument, getOnlineCount, getSessionToken, getSiteStats, isMasterUser, listDocuments, MASTER_DEPOSIT_ADDRESS, MASTER_EMAIL, mergeDocument, recordLedgerTransaction, reviewDepositRequest, reviewTransferRequest, USDT_NETWORK, type PortalUser, type SiteStats } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { CONTENT_SOURCES, REVIEW_REGIONS, sourceItemId, type ContentCategory, type ContentSource } from '@/lib/contentSources';
 import { curateSourceItems } from '@/lib/sourcepreview';
 import { regionLabel } from '@/lib/regions';
 
-type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number; source?: string; sourceWalletAddress?: string; txHash?: string };
+type RequestRow = { id: string; userId: string; amount: number; status: string; createdAt?: string; network?: string; depositAddress?: string; targetAddress?: string; senderId?: string; recipientId?: string; fee?: number; source?: string; sourceWalletAddress?: string; senderWalletAddress?: string; recipientWalletAddress?: string; txHash?: string };
 type OnchainDeposit = { txHash: string; from: string; to: string; amount: number; blockTimestamp: number; network: string; symbol: string };
 type WalletSettings = { depositAddress?: string; network?: string; updatedAt?: string };
 type ContentSourceSettings = { disabledSourceIds?: string[]; updatedAt?: string };
@@ -296,10 +296,14 @@ export default function MasterPage() {
     try {
       if (collection === 'depositRequests' && status === 'REJECTED') {
         await reviewDepositRequest(request.id, 'REJECTED', user?.email || MASTER_EMAIL, token);
-        setMessage('입금 신청을 거절하고 서버에 기록했습니다.');
+        await recordLedgerTransaction({ id: 'rejected-deposit-' + request.id, userId: request.userId, type: 'DEPOSIT', amount: Number(request.amount || 0), status: 'REJECTED', direction: 'CREDIT', details: 'USDT 입금 거절 기록', requestId: request.id, network: request.network || USDT_NETWORK, walletAddress: request.sourceWalletAddress || '', txHash: request.txHash || '' }, token);
+        setMessage('입금 신청을 거절하고 영구 원장에 기록했습니다.');
       } else {
         await mergeDocument(collection, request.id, { status, reviewedAt: new Date(), reviewedBy: user?.email || MASTER_EMAIL }, token);
-        setMessage('신청 상태가 서버에 저장되었습니다.');
+        if (collection === 'withdrawalRequests') {
+          await recordLedgerTransaction({ id: 'review-withdrawal-' + request.id + '-' + status.toLowerCase(), userId: request.userId, type: 'WITHDRAWAL', amount: Number(request.amount || 0), fee: Number(request.fee || 0), status, direction: 'DEBIT', details: status === 'APPROVED' ? '출금 승인 기록 · 온체인 지급 대기' : '출금 거절 기록', requestId: request.id, network: request.network || USDT_NETWORK, walletAddress: request.targetAddress || '' }, token);
+        }
+        setMessage('신청 상태와 영구 원장 기록이 서버에 저장되었습니다.');
       }
     } catch (error) {
       setMessage(error instanceof Error ? `처리 실패: ${error.message.slice(0, 120)}` : '신청 처리에 실패했습니다.');
@@ -326,7 +330,8 @@ export default function MasterPage() {
     setSavingAction(request.id);
     try {
       await reviewTransferRequest(request.id, 'REJECTED', user?.email || MASTER_EMAIL, token);
-      setMessage('송금 신청을 거절했습니다.');
+      await recordLedgerTransaction({ id: 'rejected-transfer-' + request.id, userId: request.senderId || '', type: 'P2P_SEND', amount: Number(request.amount || 0), fee: Number(request.fee || 0), status: 'REJECTED', direction: 'DEBIT', details: '회원 송금 거절 기록', requestId: request.id, network: request.network || USDT_NETWORK, walletAddress: request.senderWalletAddress || '', counterpartyWalletAddress: request.recipientWalletAddress || '' }, token);
+      setMessage('송금 신청을 거절하고 영구 원장에 기록했습니다.');
     } catch (error) {
       setMessage(error instanceof Error ? `송금 거절 실패: ${error.message.slice(0, 120)}` : '송금 거절에 실패했습니다.');
     } finally {
