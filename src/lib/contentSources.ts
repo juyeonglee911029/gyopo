@@ -1,6 +1,6 @@
 import type { RegionId } from '@/lib/regions';
 
-export type ContentCategory = 'news' | 'directory' | 'jobs' | 'events' | 'community';
+export type ContentCategory = 'news' | 'directory' | 'jobs' | 'market' | 'events' | 'community';
 export type SourceTrust = 'official' | 'verified' | 'review';
 
 export type ContentSource = {
@@ -40,15 +40,16 @@ export const CONTENT_SOURCES: ContentSource[] = [
     name: '한인투데이 · HANIN TODAY',
     url: 'https://hanintoday.com.br/',
     kind: 'news',
-    categories: ['news', 'jobs', 'directory', 'events', 'community'],
+    categories: ['news', 'jobs', 'directory', 'market', 'events', 'community'],
     trust: 'official',
     autoImport: true,
-    note: '브라질 한인 뉴스·구인구직·업소·공동구매·한인광장 통합 사이트',
+    note: '브라질 한인 뉴스·구인구직·업소·공동구매·장터·한인광장 통합 사이트',
     crawlPaths: [
       { category: 'news', label: '한인뉴스', path: '/news' },
       { category: 'jobs', label: '구인구직', path: '/jobs' },
       { category: 'directory', label: '업소', path: '/businesses' },
       { category: 'events', label: '공동구매', path: '/group-buying' },
+      { category: 'market', label: '중고장터', path: '/market' },
       { category: 'community', label: '한인광장', path: '/community' },
     ],
   },
@@ -56,7 +57,7 @@ export const CONTENT_SOURCES: ContentSource[] = [
   { id: 'miargentina', region: 'Argentina', name: 'MIArgentina', url: 'https://miargentina.us/', kind: 'association', categories: ['news', 'events'], trust: 'verified', autoImport: false, note: '아르헨티나 생활·커뮤니티 정보' },
   { id: 'spain-embassy', region: 'Spain', name: '주스페인 대한민국 대사관', url: 'https://overseas.mofa.go.kr/es-ko/index.do', kind: 'government', categories: ['news', 'events'], trust: 'official', autoImport: false, note: '공관 공지·영사·재외국민 정보' },
   { id: 'adece', region: 'Spain', name: 'ADECCE', url: 'https://adecce.blogspot.com/', kind: 'association', categories: ['news', 'events'], trust: 'verified', autoImport: false, note: '스페인 한국학·문화 교류 단체' },
-  { id: 'spainagain-koreans', region: 'Spain', name: 'Spain Again · 스페인 어게인', url: 'https://spainagain.net/koreans-in-spain/', kind: 'news', categories: ['news', 'community', 'directory', 'events'], trust: 'verified', autoImport: false, note: '스페인 한인 뉴스·생활 정보·커뮤니티 출처', crawlPaths: [{ category: 'news', label: '스페인 한인 뉴스', path: '/koreans-in-spain/' }] },
+  { id: 'spainagain-koreans', region: 'Spain', name: 'Spain Again · 스페인 어게인', url: 'https://spainagain.net/koreans-in-spain/', kind: 'news', categories: ['news', 'community', 'jobs', 'directory', 'events'], trust: 'verified', autoImport: true, note: '스페인 한인 최신 커뮤니티·생활 정보·구인구직 출처', crawlPaths: [{ category: 'community', label: '스페인 한인 커뮤니티', path: '/koreans-in-spain/' }, { category: 'jobs', label: '스페인 구인구직', path: '/koreans-in-spain/' }] },
   { id: 'gutentag-korea', region: 'Germany', name: 'Gutentag Korea', url: 'https://gutentagkorea.com/', kind: 'news', categories: ['news', 'community', 'directory', 'jobs', 'events'], trust: 'verified', autoImport: false, note: '독일 한인 뉴스·구인구직·업소록·생활·행사 정보 출처' },
   { id: 'naver-news', region: 'Global', name: '네이버 뉴스', url: 'https://news.naver.com/', kind: 'news', categories: ['news'], trust: 'verified', autoImport: false, note: '정치·경제·사회·세계·연예·생활 분야 최신 공개 뉴스', crawlPaths: [{ category: 'news', label: '정치', path: '/section/100' }, { category: 'news', label: '사회', path: '/section/102' }, { category: 'news', label: '생활·여행', path: '/section/103' }, { category: 'news', label: '세계', path: '/section/104' }, { category: 'news', label: '연예', path: '/section/106' }] },
   { id: 'nlkrg', region: 'Netherlands', name: 'Netherlands Korean Rights Group', url: 'https://nlkrg.nl/', kind: 'association', categories: ['news', 'events'], trust: 'verified', autoImport: false, note: '네덜란드 입양 한인 권리 단체' },

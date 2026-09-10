@@ -8,6 +8,9 @@ export type FeaturedRestaurant = {
   address: string;
   rating: number;
   reviews: number;
+  tel?: string;
+  lat?: number;
+  lng?: number;
   image: string;
   images: string[];
   mapUrl: string;
@@ -23,6 +26,30 @@ const foodImages = [
   'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=900&q=82',
   'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=900&q=82',
 ];
+
+const cityCoordinates: Record<string, { lat: number; lng: number }> = {
+  'New York': { lat: 40.7484, lng: -73.9857 },
+  'Los Angeles': { lat: 34.0522, lng: -118.2437 },
+  'San Francisco': { lat: 37.7749, lng: -122.4194 },
+  Chicago: { lat: 41.8781, lng: -87.6298 },
+  Toronto: { lat: 43.6532, lng: -79.3832 },
+  London: { lat: 51.5074, lng: -0.1278 },
+  Berlin: { lat: 52.5200, lng: 13.4050 },
+  Paris: { lat: 48.8566, lng: 2.3522 },
+  Sydney: { lat: -33.8688, lng: 151.2093 },
+  Seoul: { lat: 37.5665, lng: 126.9780 },
+  Rome: { lat: 41.9009, lng: 12.5020 },
+  Milan: { lat: 45.4840, lng: 9.1900 },
+  Florence: { lat: 43.7769, lng: 11.2520 },
+  Ferrara: { lat: 44.8381, lng: 11.6198 },
+  Budapest: { lat: 47.4979, lng: 19.0402 },
+  Istanbul: { lat: 41.0082, lng: 28.9784 },
+  Limassol: { lat: 34.6786, lng: 33.0413 },
+  Nicosia: { lat: 35.1856, lng: 33.3823 },
+  Larnaca: { lat: 34.9229, lng: 33.6233 },
+  'Ayia Napa': { lat: 34.9920, lng: 34.0018 },
+  Bucharest: { lat: 44.4268, lng: 26.1025 },
+};
 
 const restaurants: RestaurantSeed[] = [
   { name: 'Her Name is Han', city: 'New York', country: 'USA', address: '17 E 31st St, New York, NY', rating: 4.5, reviews: 2923 },
@@ -75,16 +102,48 @@ const restaurants: RestaurantSeed[] = [
   { name: 'Jihwaja', city: 'Seoul', country: 'South Korea', address: '143-1 Samcheong-ro, Jongno-gu, Seoul', rating: 4.5, reviews: 920 },
   { name: 'Tosokchon', city: 'Seoul', country: 'South Korea', address: '5 Jahamun-ro 5-gil, Jongno-gu, Seoul', rating: 4.6, reviews: 1132 },
   { name: 'Woo Lae Oak', city: 'Seoul', country: 'South Korea', address: '62-29 Changgyeonggung-ro, Jung-gu, Seoul', rating: 4.5, reviews: 1800 },
+  { name: 'Seoul Restaurant Rome', city: 'Rome', country: 'Italy', address: 'Via Filippo Turati 49, Rome', rating: 4.4, reviews: 1368, tel: '+39 06 446 7300', lat: 41.9009, lng: 12.5020 },
+  { name: 'Koreamor', city: 'Rome', country: 'Italy', address: 'Via Panisperna 101, Rome', rating: 4.8, reviews: 680, lat: 41.8969, lng: 12.4904 },
+  { name: 'My Kimchi', city: 'Milan', country: 'Italy', address: 'Via Napo Torriani 10, Milan', rating: 4.5, reviews: 829, lat: 45.4837, lng: 9.2010 },
+  { name: 'Hanya', city: 'Milan', country: 'Italy', address: 'Via Panfilo Castaldi 34, Milan', rating: 4.5, reviews: 365, lat: 45.4778, lng: 9.2055 },
+  { name: 'Gangnam', city: 'Florence', country: 'Italy', address: 'Via San Gallo 89, Florence', rating: 4.4, reviews: 781, tel: '+39 055 384 2434', lat: 43.7800, lng: 11.2580 },
+  { name: 'Moon', city: 'Ferrara', country: 'Italy', address: 'Via San Romano 76, Ferrara', rating: 4.5, reviews: 1126, tel: '+39 0532 772480', lat: 44.8356, lng: 11.6197 },
+  { name: 'Nanum', city: 'Budapest', country: 'Hungary', address: 'Király utca 53, Budapest', rating: 4.9, reviews: 551, lat: 47.5020, lng: 19.0612 },
+  { name: 'Seoul House', city: 'Budapest', country: 'Hungary', address: 'Fő utca 8, Budapest', rating: 4.5, reviews: 0, tel: '+36 1 201 7452', lat: 47.5028, lng: 19.0390 },
+  { name: 'Arirang', city: 'Budapest', country: 'Hungary', address: 'Istenhegyi út 25, Budapest', rating: 4.1, reviews: 1901, lat: 47.4906, lng: 18.9974 },
+  { name: 'K-Bunsik', city: 'Budapest', country: 'Hungary', address: 'József körút 26, Budapest', rating: 4.3, reviews: 307, lat: 47.4948, lng: 19.0717 },
+  { name: 'Hanaro', city: 'Budapest', country: 'Hungary', address: 'Rákóczi út 29, Budapest', rating: 4.7, reviews: 0, lat: 47.4964, lng: 19.0702 },
+  { name: 'Buda K', city: 'Budapest', country: 'Hungary', address: 'Bartók Béla út 62, Budapest', rating: 4.4, reviews: 0, lat: 47.4777, lng: 19.0470 },
+  { name: 'Seorabeol', city: 'Istanbul', country: 'Turkey', address: 'Kore Şehitleri Cad. 57/B, Istanbul', rating: 4.0, reviews: 1426, lat: 41.0740, lng: 29.0110 },
+  { name: 'From Seoul', city: 'Istanbul', country: 'Turkey', address: 'Teşvikiye, Nişantaşı, Istanbul', rating: 4.4, reviews: 480, lat: 41.0474, lng: 28.9947 },
+  { name: 'Norito', city: 'Istanbul', country: 'Turkey', address: 'Beylikdüzü, Istanbul', rating: 4.7, reviews: 704, lat: 41.0060, lng: 28.6470 },
+  { name: 'Korecan', city: 'Istanbul', country: 'Turkey', address: 'Taksim, Istanbul', rating: 4.1, reviews: 746, lat: 41.0369, lng: 28.9850 },
+  { name: 'Seultost', city: 'Istanbul', country: 'Turkey', address: 'Kadıköy, Istanbul', rating: 4.4, reviews: 463, lat: 40.9900, lng: 29.0280 },
+  { name: 'Sojubar', city: 'Istanbul', country: 'Turkey', address: 'Ataşehir, Istanbul', rating: 4.4, reviews: 0, tel: '+90 533 915 6688', lat: 40.9980, lng: 29.1150 },
+  { name: 'MATA Korean Restaurant', city: 'Limassol', country: 'Cyprus', address: 'Limassol, Cyprus', rating: 4.5, reviews: 0, lat: 34.6740, lng: 33.0440 },
+  { name: 'Umami Nicosia', city: 'Nicosia', country: 'Cyprus', address: 'Nicosia, Cyprus', rating: 4.4, reviews: 0, lat: 35.1700, lng: 33.3600 },
+  { name: 'Umami Larnaca', city: 'Larnaca', country: 'Cyprus', address: 'Larnaca, Cyprus', rating: 4.4, reviews: 0, lat: 34.9220, lng: 33.6310 },
+  { name: 'Umami Limassol', city: 'Limassol', country: 'Cyprus', address: 'Limassol, Cyprus', rating: 4.4, reviews: 0, lat: 34.6800, lng: 33.0410 },
+  { name: 'Umami Ayia Napa', city: 'Ayia Napa', country: 'Cyprus', address: 'Ayia Napa, Cyprus', rating: 4.4, reviews: 0, lat: 34.9920, lng: 34.0018 },
+  { name: 'Restaurant Seoul', city: 'Bucharest', country: 'Romania', address: 'Str. Lt. Av. Mircea Zorileanu 89, Bucharest', rating: 4.6, reviews: 2033, lat: 44.4690, lng: 26.0710 },
+  { name: 'The Kimchi', city: 'Bucharest', country: 'Romania', address: 'Bucharest, Romania', rating: 4.7, reviews: 359, lat: 44.4520, lng: 26.1000 },
+  { name: 'Kimu', city: 'Bucharest', country: 'Romania', address: 'Bucharest, Romania', rating: 4.6, reviews: 0, lat: 44.4660, lng: 26.0950 },
+  { name: 'Jeonjuu', city: 'Bucharest', country: 'Romania', address: 'Bucharest, Romania', rating: 4.7, reviews: 0, lat: 44.4310, lng: 26.1010 },
+  { name: 'The Kimchi Bistro', city: 'Bucharest', country: 'Romania', address: 'Bucharest, Romania', rating: 4.4, reviews: 841, lat: 44.4420, lng: 26.0970 },
+  { name: 'Gangnam Pocha', city: 'Bucharest', country: 'Romania', address: 'Bucharest, Romania', rating: 4.3, reviews: 0, lat: 44.4310, lng: 26.1010 },
 ];
 
 export const FEATURED_KOREAN_RESTAURANTS: FeaturedRestaurant[] = restaurants.map((restaurant, index) => {
   const id = `${restaurant.country}-${restaurant.city}-${restaurant.name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const image = foodImages[index % foodImages.length];
+  const reviewLabel = restaurant.reviews ? `리뷰 ${restaurant.reviews.toLocaleString()}개` : '공개 리뷰 수 미확인';
   return {
     ...restaurant,
     id: `featured-${id}`,
     category: '음식점·카페',
-    description: `평점 ${restaurant.rating.toFixed(1)} · 리뷰 ${restaurant.reviews.toLocaleString()}개 · GYOPO 추천 한식당`,
+    description: `평점 ${restaurant.rating.toFixed(1)} · ${reviewLabel} · GYOPO 추천 한식당`,
+    lat: restaurant.lat ?? cityCoordinates[restaurant.city]?.lat,
+    lng: restaurant.lng ?? cityCoordinates[restaurant.city]?.lng,
     image,
     images: [image],
     mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address}`)}`,
