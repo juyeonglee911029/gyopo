@@ -31,20 +31,14 @@ export type PortalUser = {
   country?: string;
   walletAddress?: string;
   walletNetwork?: string;
-  walletStatus?: 'READY' | 'CONNECTED' | 'CUSTODIAL';
-  walletCreatedAt?: string;
-  transferPinHash?: string;
-  transferPinSalt?: string;
-  transferPinSetAt?: string;
+  walletPublic?: boolean;
+  walletPinHash?: string;
+  musicFavorites?: Array<{ id: string; title: string; artist: string; videoId: string; keywords: string[]; views?: string; published?: string; thumbnail?: string }>;
 };
 
 export function isMasterUser(user?: Pick<PortalUser, 'email'> | null): boolean {
   return user?.email?.toLowerCase() === MASTER_EMAIL;
 }
-
-export type LedgerTransaction = {
-  id: string; userId: string; type: 'DEPOSIT' | 'WITHDRAWAL' | 'P2P_SEND' | 'P2P_RECEIVE' | 'FEE'; amount: number; fee?: number; status: string; direction: 'CREDIT' | 'DEBIT'; details: string; requestId?: string; walletAddress?: string; counterpartyWalletAddress?: string; txHash?: string; network?: string; createdAt: string;
-};
 
 export type OnlineUser = {
   id: string;
@@ -67,7 +61,26 @@ export type PublicProfile = {
   isSubscribed?: boolean;
   walletAddress?: string;
   walletNetwork?: string;
+  walletPublic?: boolean;
   updatedAt?: string;
+};
+
+export type WalletLedgerEntry = {
+  userId: string;
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'INTERNAL_TRANSFER' | 'ONCHAIN_SEND' | 'ONCHAIN_RECEIVE' | 'FEE';
+  direction: 'IN' | 'OUT' | 'NONE';
+  amount: number;
+  fee?: number;
+  status: 'PENDING' | 'SUBMITTED' | 'COMPLETED' | 'FAILED' | 'REJECTED';
+  network?: string;
+  symbol?: string;
+  txHash?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  counterpartyId?: string;
+  requestId?: string;
+  memo?: string;
+  createdAt: string | Date;
 };
 
 export type EscrowStatus = 'PAYMENT_HELD' | 'SHIPPING' | 'IN_TRANSIT' | 'DELIVERED';
@@ -303,25 +316,6 @@ export async function queryDocumentsWhere<T>(collection: string, filters: Firest
   return (await runQueryDocuments(collection, filters, token, limit)).map((document) => decodeDocument<T>(document));
 }
 
-export async function listLedgerTransactions(userId: string, token = getSessionToken()): Promise<LedgerTransaction[]> {
-  if (!token) return [];
-  const rows = await queryDocuments<Omit<LedgerTransaction, 'id'>>('ledgerTransactions', 'userId', userId, token).catch(() => []);
-  if (rows.length) return (rows as LedgerTransaction[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const [deposits, withdrawals, sent, received] = await Promise.all([
-    queryDocuments<{ amount?: number; status?: string; createdAt?: string; network?: string; depositAddress?: string; txHash?: string }>('depositRequests', 'userId', userId, token).catch(() => []),
-    queryDocuments<{ amount?: number; fee?: number; status?: string; createdAt?: string; network?: string; targetAddress?: string }>('withdrawalRequests', 'userId', userId, token).catch(() => []),
-    queryDocuments<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string; createdAt?: string; network?: string; senderWalletAddress?: string; recipientWalletAddress?: string }>('transferRequests', 'senderId', userId, token).catch(() => []),
-    queryDocuments<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string; createdAt?: string; network?: string; senderWalletAddress?: string; recipientWalletAddress?: string }>('transferRequests', 'recipientId', userId, token).catch(() => []),
-  ]);
-  const fallback: LedgerTransaction[] = [
-    ...deposits.map((row) => ({ id: 'request-deposit-' + row.id, userId, type: 'DEPOSIT' as const, amount: Number(row.amount || 0), status: row.status || 'PENDING', direction: 'CREDIT' as const, details: 'USDT 입금 요청', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.depositAddress || '', txHash: row.txHash || '', createdAt: String(row.createdAt || '') })),
-    ...withdrawals.map((row) => ({ id: 'request-withdrawal-' + row.id, userId, type: 'WITHDRAWAL' as const, amount: Number(row.amount || 0), fee: Number(row.fee || 0), status: row.status || 'PENDING', direction: 'DEBIT' as const, details: 'USDT 출금 요청', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.targetAddress || '', createdAt: String(row.createdAt || '') })),
-    ...sent.map((row) => ({ id: 'request-transfer-send-' + row.id, userId, type: 'P2P_SEND' as const, amount: Number(row.amount || 0), fee: Number(row.fee || 0), status: row.status || 'PENDING', direction: 'DEBIT' as const, details: '회원 송금 요청', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.senderWalletAddress || '', counterpartyWalletAddress: row.recipientWalletAddress || '', createdAt: String(row.createdAt || '') })),
-    ...received.map((row) => ({ id: 'request-transfer-receive-' + row.id, userId, type: 'P2P_RECEIVE' as const, amount: Number(row.amount || 0), status: row.status || 'PENDING', direction: 'CREDIT' as const, details: '회원 송금 수령 예정', requestId: row.id, network: row.network || USDT_NETWORK, walletAddress: row.recipientWalletAddress || '', counterpartyWalletAddress: row.senderWalletAddress || '', createdAt: String(row.createdAt || '') })),
-  ];
-  return fallback.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
-
 export async function getDocument<T>(collection: string, id: string, token?: string): Promise<(T & { id: string }) | null> {
   const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {}, token);
   if (response.status === 404) return null;
@@ -345,10 +339,6 @@ export async function createDocument<T extends Record<string, unknown>>(
     },
     token,
   );
-}
-
-export async function recordLedgerTransaction(entry: Omit<LedgerTransaction, 'createdAt'> & { id: string; createdAt?: string }, token?: string): Promise<void> {
-  await createDocument('ledgerTransactions', entry.id, { ...entry, immutable: true, createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date() }, token).catch(() => undefined);
 }
 
 export async function publishDocument<T extends Record<string, unknown>>(
@@ -448,7 +438,7 @@ export async function approveDepositRequest(requestId: string, userId: string, r
   if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('입금 신청을 찾을 수 없습니다.');
   if (!profileDocument?.name || !profileDocument.updateTime) throw new Error('회원 지갑을 찾을 수 없습니다.');
 
-  const request = decodeDocument<{ userId?: string; amount?: number; status?: string; txHash?: string; sourceWalletAddress?: string; network?: string }>(requestDocument);
+  const request = decodeDocument<{ userId?: string; amount?: number; status?: string }>(requestDocument);
   if (request.status !== 'PENDING') throw new Error('이미 처리된 입금 신청입니다.');
   if (request.userId !== userId) throw new Error('입금 신청 회원 정보가 일치하지 않습니다.');
   const amount = Number(request.amount || 0);
@@ -500,7 +490,7 @@ export async function reviewDepositRequest(requestId: string, status: 'REJECTED'
 export async function approveTransferRequest(requestId: string, reviewedBy: string, token?: string): Promise<void> {
   const requestDocument = await getRawDocument('transferRequests', requestId, token);
   if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('송금 신청을 찾을 수 없습니다.');
-  const request = decodeDocument<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string; pinHash?: string; senderWalletAddress?: string; recipientWalletAddress?: string; network?: string }>(requestDocument);
+  const request = decodeDocument<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string }>(requestDocument);
   if (request.status !== 'PENDING') throw new Error('이미 처리된 송금 신청입니다.');
   if (!request.senderId || !request.recipientId || request.senderId === request.recipientId) throw new Error('송금 회원 정보가 올바르지 않습니다.');
   const amount = Number(request.amount || 0);
@@ -512,8 +502,6 @@ export async function approveTransferRequest(requestId: string, reviewedBy: stri
   ]);
   if (!senderDocument?.name || !senderDocument.updateTime) throw new Error('보내는 회원 지갑을 찾을 수 없습니다.');
   if (!recipientDocument?.name || !recipientDocument.updateTime) throw new Error('받는 회원 지갑을 찾을 수 없습니다.');
-  const storedPinHash = String(fromFirestoreValue(senderDocument.fields?.transferPinHash) || '');
-  if (!storedPinHash || !request.pinHash || storedPinHash !== request.pinHash) throw new Error('송금 PIN이 일치하지 않거나 설정되지 않았습니다.');
   const senderBalance = Number(fromFirestoreValue(senderDocument.fields?.usdtBalance) || 0);
   if (senderBalance < amount + fee) throw new Error(`보내는 회원 잔고가 부족합니다. ${amount + fee} USDT가 필요합니다.`);
   const recipientBalance = Number(fromFirestoreValue(recipientDocument.fields?.usdtBalance) || 0);
@@ -1402,13 +1390,6 @@ export function isValidTronAddress(value: string): boolean {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value.trim());
 }
 
-export async function hashTransferPin(pin: string, salt: string): Promise<string> {
-  if (!/^\d{4}$/.test(pin)) throw new Error('송금 PIN은 숫자 4자리여야 합니다.');
-  const bytes = new TextEncoder().encode(salt + ':' + pin);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 function privateProfileData(user: PortalUser): Record<string, unknown> {
   return {
     name: user.name,
@@ -1423,13 +1404,9 @@ function privateProfileData(user: PortalUser): Record<string, unknown> {
     ...(isCountry(user.country) ? { country: user.country.trim() } : {}),
     ...(user.walletAddress ? { walletAddress: user.walletAddress.trim() } : {}),
     ...(user.walletNetwork ? { walletNetwork: user.walletNetwork.trim() } : {}),
-    walletStatus: user.walletStatus || (user.walletAddress ? 'CONNECTED' : 'READY'),
-    walletCreatedAt: user.walletCreatedAt || new Date().toISOString(),
-    ...(user.transferPinHash && user.transferPinSalt ? {
-      transferPinHash: user.transferPinHash,
-      transferPinSalt: user.transferPinSalt,
-      ...(user.transferPinSetAt ? { transferPinSetAt: user.transferPinSetAt } : {}),
-    } : {}),
+    ...(user.walletPublic && user.walletAddress ? { walletPublic: true } : {}),
+    ...(user.walletPinHash ? { walletPinHash: user.walletPinHash } : {}),
+    musicFavorites: user.musicFavorites || [],
     updatedAt: new Date(),
   };
 }
@@ -1443,6 +1420,7 @@ function publicProfileData(user: PortalUser & { gender: Gender; country: string 
     isPublic: true,
     ...(user.age ? { age: user.age } : {}),
     isSubscribed: Boolean(user.isSubscribed),
+    ...(user.walletPublic && user.walletAddress ? { walletAddress: user.walletAddress.trim(), walletNetwork: user.walletNetwork || USDT_NETWORK, walletPublic: true } : {}),
     updatedAt: new Date(),
   };
 }
@@ -1562,8 +1540,8 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     country: savedProfile?.country,
     walletAddress: savedProfile?.walletAddress,
     walletNetwork: savedProfile?.walletNetwork,
-    walletStatus: savedProfile?.walletStatus === 'CUSTODIAL' ? 'CUSTODIAL' : savedProfile?.walletStatus === 'CONNECTED' || savedProfile?.walletAddress ? 'CONNECTED' : 'READY',
-    walletCreatedAt: savedProfile?.walletCreatedAt || new Date().toISOString(),
+    walletPublic: Boolean(savedProfile?.walletPublic),
+    walletPinHash: savedProfile?.walletPinHash,
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
   await upsertDocument('profiles', user.id, privateProfileData(user), result.idToken).catch(() => undefined);
@@ -1583,6 +1561,8 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     gender: isGender(savedGender) ? savedGender : user.gender,
     age: Number.isInteger(savedAge) && savedAge >= 13 && savedAge <= 130 ? savedAge : user.age,
     country: isCountry(user.country) ? user.country.trim() : isCountry(savedCountry) ? savedCountry.trim() : String(user.country ?? '').trim(),
+    walletPublic: Boolean(user.walletPublic && user.walletAddress),
+    walletPinHash: user.walletPinHash,
   };
   if (!hasCompletedProfile(persistedUser)) throw new Error('먼저 성별·나이·국가 설정을 완료해주세요.');
   await upsertDocument('profiles', user.id, privateProfileData(persistedUser), token);
