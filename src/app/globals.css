@@ -1226,3 +1226,42 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .webrtc-grid { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr) !important; }
   .webrtc-grid > section { min-width: 0 !important; }
 }
+
+/* Navigation keeps the chrome visible while the selected page cycles through a blank state. */
+.navigation-blank-state { position: fixed; inset: 0; z-index: 40; background: #02040b; pointer-events: none; }
+
+/* Friend calls expand the dock instead of replacing the current page. */
+#friend-dock.friend-dock-call-active { width: min(90vw, 1200px) !important; max-height: calc(100dvh - 2rem); }
+#friend-dock.friend-dock-call-active .friend-call-video { height: min(70dvh, 680px); aspect-ratio: auto !important; }
+
+/* The Tetris workspace is the one route that intentionally reaches both viewport edges. */
+.portal-frame > main > .games-page { padding-left: 0 !important; padding-right: 0 !important; }
+
+@media (max-width: 639px) {
+  body { padding-bottom: 3.35rem !important; }
+  .portal-chrome > header > div:first-child { gap: .35rem !important; padding-inline: .4rem !important; }
+  .portal-chrome > header > div:first-child > div:first-child { gap: .35rem !important; }
+  .portal-chrome > header .header-action span,
+  .portal-chrome > header .translate-control span,
+  .portal-chrome > header .local-clock,
+  .portal-chrome > header .usdt-balance > span:not(.usdt-mark) { display: none !important; }
+  .portal-chrome > header .header-action,
+  .portal-chrome > header .translate-control,
+  .portal-chrome > header .usdt-balance { min-width: 2rem; justify-content: center; padding: .38rem !important; }
+  .portal-chrome > header .header-action svg,
+  .portal-chrome > header .translate-control svg { width: 14px; height: 14px; }
+  .portal-chrome > section { top: 3.25rem !important; left: .25rem !important; right: .25rem !important; height: 2.15rem !important; }
+  .portal-text-rail { top: auto !important; right: .25rem !important; bottom: .3rem !important; left: .25rem !important; z-index: 230 !important; display: flex !important; width: auto !important; height: 2.65rem !important; border: 0 !important; background: rgba(8, 16, 31, .55) !important; }
+  .portal-text-rail .portal-rail-card { height: 100%; min-width: max-content; background: transparent !important; }
+  .portal-text-rail-nav { height: 100%; align-items: center; gap: .1rem; overflow-x: auto; padding: .2rem !important; }
+  .portal-text-link, .portal-text-link-button { padding: .42rem .52rem !important; font-size: .62rem !important; font-weight: 500 !important; line-height: 1 !important; }
+  .portal-frame > main > .games-page { padding-left: 0 !important; padding-right: 0 !important; }
+  .tetris-modern-shell { width: 100vw !important; max-width: none !important; }
+  .tetris-modern-shell > header { padding-right: .55rem !important; padding-left: .55rem !important; }
+  .tetris-modern-shell > .grid { gap: .35rem !important; }
+  .tetris-modern-shell > .grid > section { padding-right: 0 !important; padding-left: 0 !important; border-right: 0 !important; border-left: 0 !important; }
+  .tetris-modern-shell .tetris-board-stage { padding-right: 0 !important; padding-left: 0 !important; border-right: 0 !important; border-left: 0 !important; }
+  .tetris-modern-shell .tetris-board-shell { width: min(68vw, 19rem) !important; max-width: none !important; }
+  #friend-dock.friend-dock-call-active { right: .25rem !important; bottom: .25rem !important; left: .25rem !important; width: auto !important; max-height: calc(100dvh - .5rem); }
+  #friend-dock.friend-dock-call-active .friend-call-video { height: min(58dvh, 440px); }
+}
