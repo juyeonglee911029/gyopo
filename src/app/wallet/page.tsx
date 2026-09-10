@@ -17,7 +17,7 @@ export default function WalletPage() {
   const [depositAddress, setDepositAddress] = useState(configuredDepositAddress);
   const [userSearch, setUserSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; image?: string; country?: string; walletAddress?: string; walletNetwork?: string }>>([]);
-  const [selectedRecipient, setSelectedRecipient] = useState<{ id: string; name: string; image?: string; country?: string } | null>(null);
+  const [selectedRecipient, setSelectedRecipient] = useState<{ id: string; name: string; image?: string; country?: string; walletAddress?: string; walletNetwork?: string } | null>(null);
   const [searchMessage, setSearchMessage] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSending, setIsSending] = useState(false);
