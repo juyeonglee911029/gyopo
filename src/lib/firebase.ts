@@ -33,6 +33,8 @@ export type PortalUser = {
   walletNetwork?: string;
   walletPublic?: boolean;
   walletPinHash?: string;
+  transferPinHash?: string;
+  transferPinSalt?: string;
   musicFavorites?: Array<{ id: string; title: string; artist: string; videoId: string; keywords: string[]; views?: string; published?: string; thumbnail?: string }>;
 };
 
@@ -1438,6 +1440,8 @@ function privateProfileData(user: PortalUser): Record<string, unknown> {
     ...(user.walletNetwork ? { walletNetwork: user.walletNetwork.trim() } : {}),
     ...(user.walletPublic && user.walletAddress ? { walletPublic: true } : {}),
     ...(user.walletPinHash ? { walletPinHash: user.walletPinHash } : {}),
+    ...(user.transferPinHash ? { transferPinHash: user.transferPinHash } : {}),
+    ...(user.transferPinSalt ? { transferPinSalt: user.transferPinSalt } : {}),
     musicFavorites: user.musicFavorites || [],
     updatedAt: new Date(),
   };
@@ -1574,6 +1578,8 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     walletNetwork: savedProfile?.walletNetwork,
     walletPublic: Boolean(savedProfile?.walletPublic),
     walletPinHash: savedProfile?.walletPinHash,
+    transferPinHash: savedProfile?.transferPinHash,
+    transferPinSalt: savedProfile?.transferPinSalt,
   };
   window.localStorage.setItem(sessionKey, JSON.stringify({ idToken: result.idToken, refreshToken: result.refreshToken, user }));
   await upsertDocument('profiles', user.id, privateProfileData(user), result.idToken).catch(() => undefined);
@@ -1595,6 +1601,8 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     country: isCountry(user.country) ? user.country.trim() : isCountry(savedCountry) ? savedCountry.trim() : String(user.country ?? '').trim(),
     walletPublic: Boolean(user.walletPublic && user.walletAddress),
     walletPinHash: user.walletPinHash,
+    transferPinHash: user.transferPinHash,
+    transferPinSalt: user.transferPinSalt,
   };
   if (!hasCompletedProfile(persistedUser)) throw new Error('먼저 성별·나이·국가 설정을 완료해주세요.');
   await upsertDocument('profiles', user.id, privateProfileData(persistedUser), token);
