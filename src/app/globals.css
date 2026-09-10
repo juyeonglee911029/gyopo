@@ -1227,8 +1227,9 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .webrtc-grid > section { min-width: 0 !important; }
 }
 
-/* Navigation keeps the chrome visible while the selected page cycles through a blank state. */
-.navigation-blank-state { position: fixed; inset: 0; z-index: 40; background: #02040b; pointer-events: none; }
+/* Navigation keeps the chrome visible while the selected page minimizes to the video background. */
+.navigation-minimized .portal-frame > main,
+.navigation-minimized .portal-frame > footer { visibility: hidden; opacity: 0; pointer-events: none; }
 
 /* Friend calls expand the dock instead of replacing the current page. */
 #friend-dock.friend-dock-call-active { width: min(90vw, 1200px) !important; max-height: calc(100dvh - 2rem); }
