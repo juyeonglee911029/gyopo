@@ -1415,6 +1415,13 @@ export function isValidTronAddress(value: string): boolean {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value.trim());
 }
 
+export async function hashTransferPin(pin: string, salt: string): Promise<string> {
+  if (!/^\d{4}$/.test(pin)) throw new Error('송금 PIN은 숫자 4자리여야 합니다.');
+  const bytes = new TextEncoder().encode(`${salt}:${pin}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function privateProfileData(user: PortalUser): Record<string, unknown> {
   return {
     name: user.name,
