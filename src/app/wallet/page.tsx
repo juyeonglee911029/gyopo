@@ -31,6 +31,7 @@ export default function WalletPage() {
   const [chainWalletAddress, setChainWalletAddress] = useState(user?.walletAddress || '');
   const [chainSendAddress, setChainSendAddress] = useState('');
   const [chainSendAmount, setChainSendAmount] = useState('');
+  const [chainSendPin, setChainSendPin] = useState('');
   const [chainSendError, setChainSendError] = useState('');
   const [chainTxHash, setChainTxHash] = useState('');
   const [isChainSending, setIsChainSending] = useState(false);
@@ -102,6 +103,10 @@ export default function WalletPage() {
     if (!chainWalletAddress) return setChainSendError('먼저 TronLink 지갑을 연결해주세요.');
     if (!isValidTronAddress(chainSendAddress.trim())) return setChainSendError('받는 사람의 TRON 주소가 올바르지 않습니다.');
     if (!Number.isFinite(value) || value <= 0) return setChainSendError('올바른 USDT 금액을 입력해주세요.');
+    if (!user.transferPinHash || !user.transferPinSalt) return setChainSendError('프로필에서 먼저 4자리 송금 PIN을 설정해주세요.');
+    if (!/^\d{4}$/.test(chainSendPin)) return setChainSendError('송금 PIN 4자리를 입력해주세요.');
+    const chainPinHash = await hashTransferPin(chainSendPin, user.transferPinSalt);
+    if (chainPinHash !== user.transferPinHash) return setChainSendError('송금 PIN이 올바르지 않습니다.');
     setIsChainSending(true);
     setChainSendError('');
     setChainTxHash('');
@@ -113,6 +118,7 @@ export default function WalletPage() {
       setChainTxHash(txHash);
       setChainSendAmount('');
       setChainSendAddress('');
+      setChainSendPin('');
       const balance = await getUsdtBalance(fromAddress).catch(() => null);
       if (typeof balance === 'number') setChainBalance(balance);
     } catch (error) {
@@ -289,6 +295,8 @@ export default function WalletPage() {
                     <div className="border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">TronLink에서 직접 서명하는 실제 USDT TRC20 송금입니다. 사이트 잔액과 별도로 블록체인에서 처리됩니다.</div>
                     <label className="block text-sm font-bold text-gray-700">받는 사람의 TRON 주소</label>
                     <input type="text" value={chainSendAddress} onChange={e => setChainSendAddress(e.target.value)} className="w-full border border-gray-300 bg-gray-50 px-4 py-3 text-sm outline-none" placeholder="T..." />
+                    <label className="block text-sm font-bold text-gray-700">송금 PIN 4자리</label>
+                    <input type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={chainSendPin} onChange={e => setChainSendPin(e.target.value.replace(/\D/g, '').slice(0, 4))} className="w-full border border-gray-300 bg-gray-50 px-4 py-3 font-mono tracking-[.5em] outline-none" placeholder="••••" />
                     <label className="block text-sm font-bold text-gray-700">송금할 금액 (USDT)</label>
                     <input type="number" min="0" step="0.000001" value={chainSendAmount} onChange={e => setChainSendAmount(e.target.value)} className="w-full border border-gray-300 bg-gray-50 px-4 py-3 font-bold outline-none" placeholder="10" />
                     {chainSendError && <p className="text-xs font-bold text-red-600">{chainSendError}</p>}
