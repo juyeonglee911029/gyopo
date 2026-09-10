@@ -9,14 +9,17 @@
 }
 
 .tetris-board-stage {
-  width: min(100%, 26rem);
+  width: auto;
+  height: min(100%, 52rem);
+  max-width: 100%;
   aspect-ratio: 1 / 2;
   justify-content: stretch;
+  justify-self: center;
   padding: 0 !important;
 }
 
 .tetris-board-shell {
-  width: 100%;
+  width: auto;
   height: 100%;
   aspect-ratio: 1 / 2;
 }
@@ -112,7 +115,8 @@
 
   .tetris-board-stage,
   .tetris-board-shell {
-    width: min(100%, 20rem);
+    width: auto;
+    height: min(100%, 40rem);
   }
 
   #friend-dock.friend-dock-call-active {
