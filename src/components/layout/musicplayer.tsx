@@ -31,6 +31,7 @@ export default function MusicPlayer() {
   const [favoriteTracks, setFavoriteTracks] = useState<MusicTrack[]>([]);
   const [favoriteLoop, setFavoriteLoop] = useState(false);
   const [favoriteMenuOpen, setFavoriteMenuOpen] = useState(false);
+  const volumeRef = useRef(70);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const searchShellRef = useRef<HTMLElement>(null);
   const pendingSyncRef = useRef<MusicSyncDetail | null>(null);
@@ -73,6 +74,30 @@ export default function MusicPlayer() {
     }
     setFavoriteLoop(window.localStorage.getItem(`gyopo-music-favorite-loop:${user?.id || 'guest'}`) === '1');
   }, [user?.id, user?.musicFavorites]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    const receiveMusicVideoVolume = (event: Event) => {
+      const nextVideoVolume = Number((event as CustomEvent<{ volume?: number }>).detail?.volume || 0);
+      const target = nextVideoVolume > 0 ? Math.max(10, 50 - Math.round(nextVideoVolume * .4)) : 50;
+      const step = () => {
+        const current = volumeRef.current;
+        if (current === target) return;
+        const next = current + Math.sign(target - current) * Math.min(4, Math.abs(target - current));
+        volumeRef.current = next;
+        setVolume(next);
+        sendPlayerCommand(frameRef.current, 'unMute');
+        sendPlayerCommand(frameRef.current, 'setVolume', [next]);
+        window.setTimeout(step, 80);
+      };
+      step();
+    };
+    window.addEventListener('gyopo-music-video-volume', receiveMusicVideoVolume);
+    return () => window.removeEventListener('gyopo-music-video-volume', receiveMusicVideoVolume);
+  }, []);
 
   useEffect(() => {
     const receiveLoop = (event: Event) => setFavoriteLoop(Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled));
@@ -231,6 +256,7 @@ export default function MusicPlayer() {
   };
 
   const changeVolume = (next: number) => {
+    volumeRef.current = next;
     setVolume(next);
     window.localStorage.setItem('gyopo-music-volume', String(next));
     sendPlayerCommand(frameRef.current, 'setVolume', [next]);
@@ -299,7 +325,7 @@ export default function MusicPlayer() {
            </div>
            <button type="button" onClick={toggleFavoriteLoop} className={`music-player-utility hidden sm:block ${favoriteLoop ? 'text-rose-200' : 'text-slate-300'}`}>Repeat</button>
              <Link href="/music" className="music-player-utility hidden sm:block text-slate-300 hover:text-teal-200">MUSIC VIDEO</Link>
-           <iframe ref={frameRef} onLoad={() => { subscribeToPlayerState(frameRef.current); syncFrame(); }} title="GYOPO music player" src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&mute=1&cc_load_policy=0&iv_load_policy=3&playsinline=1`} className="pointer-events-none absolute h-px w-px opacity-0" allow="autoplay; encrypted-media" />
+            <iframe ref={frameRef} onLoad={() => { subscribeToPlayerState(frameRef.current); sendPlayerCommand(frameRef.current, 'unMute'); syncFrame(); }} title="GYOPO music player" src={`https://www.youtube.com/embed/${track.videoId}?enablejsapi=1&origin=https%3A%2F%2Fgyopo.pages.dev&autoplay=1&cc_load_policy=0&iv_load_policy=3&playsinline=1`} className="pointer-events-none absolute h-px w-px opacity-0" allow="autoplay; encrypted-media" />
       </div>
 
          {searchFocused && <div className="music-player-results mx-auto mt-2 max-w-[1440px] border-0 bg-[#0b1222]/92 p-2 shadow-none backdrop-blur-none"><div className="flex flex-wrap gap-1.5">{MUSIC_HOT_KEYWORDS.map((keyword) => <button type="button" key={keyword} onMouseDown={(event) => event.preventDefault()} onClick={() => setQuery(keyword)} className="border-0 bg-white/[.06] px-2.5 py-1.5 text-[11px] font-bold text-slate-400 outline-none ring-0 hover:bg-teal-300/10 hover:text-teal-200">#{keyword}</button>)}</div>{favoriteTracks.length > 0 && <div className="mt-2 flex items-center justify-between border-b border-white/10 pb-2 text-[11px] text-slate-400"><span>♥ 즐겨찾기 {favoriteTracks.length}곡 {favoriteLoop ? '반복 재생 중' : ''}</span><button type="button" onClick={toggleFavoriteLoop} className="border-0 text-rose-200">{favoriteLoop ? '반복 끄기' : '즐겨찾기만 반복'}</button></div>}{query && <div className="mt-2 grid gap-2 sm:grid-cols-2">{results.length ? results.map((item) => <div key={item.id} className={`flex items-center gap-2 border-0 px-2 py-2 ${item.id === track.id ? 'bg-teal-300/10' : 'bg-white/[.05]'}`}><button type="button" onClick={() => selectTrack(item)} className="flex min-w-0 flex-1 items-center gap-2 border-0 text-left outline-none ring-0">{item.thumbnail ? <img src={item.thumbnail} alt="" className="h-10 w-16 object-cover" /> : <span className="h-10 w-16 bg-black" />}<span className="min-w-0"><b className="block truncate text-xs">{item.title}</b><span className="block truncate text-[11px] text-slate-400">{item.artist}</span><span className="block truncate text-[10px] text-slate-500">{item.views || 'YouTube 검색 결과'}{item.published ? ` · ${item.published}` : ''}</span></span></button><button type="button" onClick={() => toggleFavorite(item)} aria-label="즐겨찾기" className={`border-0 outline-none ring-0 ${favoriteIds.includes(item.id) ? 'text-rose-300' : 'text-slate-500'}`}><Heart size={14} fill={favoriteIds.includes(item.id) ? 'currentColor' : 'none'} /></button></div>) : <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-teal-200 no-underline">YouTube에서 이 키워드 검색하기</a>}</div>}</div>}
