@@ -31,7 +31,7 @@ export default function PortalTextRail() {
             const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? 'portal-text-link portal-text-link-active' : 'portal-text-link'}>{language === 'ko' ? label : english}</Link>;
           })}
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button portal-friends-link"><span>{language === 'ko' ? '친구 채팅·통화' : 'Friends Chat / Call'}</span><small>/ {language === 'ko' ? 'Friends Chat / Call' : '친구 채팅·통화'}</small></button>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button portal-friends-link" style={{ fontSize: '.58rem', fontWeight: 400 }}><span>{language === 'ko' ? '친구 채팅·통화' : 'Friends Chat / Call'}</span><small style={{ marginLeft: '.3rem', color: 'rgba(255, 255, 255, .38)', fontSize: '.5rem', fontWeight: 400 }}>/ {language === 'ko' ? 'Friends Chat / Call' : '친구 채팅·통화'}</small></button>
         </nav>
       </div>
     </aside>
