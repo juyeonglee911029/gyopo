@@ -36,6 +36,23 @@ export type PortalUser = {
   musicFavorites?: Array<{ id: string; title: string; artist: string; videoId: string; keywords: string[]; views?: string; published?: string; thumbnail?: string }>;
 };
 
+export type LedgerTransaction = {
+  id: string;
+  userId: string;
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'P2P_SEND' | 'P2P_RECEIVE' | 'FEE';
+  amount: number;
+  fee?: number;
+  status: string;
+  direction: 'CREDIT' | 'DEBIT';
+  details: string;
+  requestId?: string;
+  walletAddress?: string;
+  counterpartyWalletAddress?: string;
+  txHash?: string;
+  network?: string;
+  createdAt: string;
+};
+
 export function isMasterUser(user?: Pick<PortalUser, 'email'> | null): boolean {
   return user?.email?.toLowerCase() === MASTER_EMAIL;
 }
@@ -339,6 +356,10 @@ export async function createDocument<T extends Record<string, unknown>>(
     },
     token,
   );
+}
+
+export async function recordLedgerTransaction(entry: Omit<LedgerTransaction, 'createdAt'> & { id: string; createdAt?: string }, token?: string): Promise<void> {
+  await createDocument('ledgerTransactions', entry.id, { ...entry, immutable: true, createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date() }, token).catch(() => undefined);
 }
 
 export async function publishDocument<T extends Record<string, unknown>>(
