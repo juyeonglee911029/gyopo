@@ -191,7 +191,7 @@ export default function CommunityPage() {
                  <div className="col-span-1 hidden text-center text-xs text-slate-500 md:block md:text-sm">{post.views || 0}</div>
               </div>
               </Link>
-              {user && (user.id === post.authorId || isMasterUser(user)) && !post.id.startsWith('seed-') && <div className="absolute right-3 bottom-2 flex gap-2 text-xs">{user.id === post.authorId && <button onClick={() => openWrite(post)} className="font-bold text-blue-600 hover:underline">수정</button>}<button onClick={() => void handleDelete(post)} className="font-bold text-red-500 hover:underline">삭제</button></div>}
+               {user && (user.id === post.authorId || isMasterUser(user)) && !post.id.startsWith('seed-') && <div className="post-actions flex items-center justify-center gap-2 px-4 py-2 text-xs">{user.id === post.authorId && <button type="button" onClick={() => openWrite(post)} className="font-bold text-blue-600 hover:underline">수정</button>}<button type="button" onClick={() => void handleDelete(post)} className="delete-action font-bold text-red-500 hover:underline">삭제</button></div>}
              </div>
           ))}
         </div>
