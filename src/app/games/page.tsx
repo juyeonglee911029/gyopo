@@ -1531,7 +1531,7 @@ export default function GamesPage() {
   const opponentVisual = opponentState ? buildVisual(opponentState) : emptyBoard();
   const videoRoomActive = Boolean(matchId && opponent && ['countdown', 'playing'].includes(matchPhase));
   const videoRoomUrl = videoRoomActive && matchId && opponent
-    ? `/webrtc?friend=${encodeURIComponent(opponent.id)}&auto=1&compact=1&gameRoom=${encodeURIComponent(matchId)}`
+     ? `/webrtc?friend=${encodeURIComponent(opponent.id)}&auto=1&compact=1&callKind=game&gameRoom=${encodeURIComponent(matchId)}`
     : '';
 
   if (true) {
