@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { completeProfileOnboarding, getSessionToken, getStoredSession, hasCompletedProfile, recordVisit, refreshStoredUser, saveProfile, type Gender } from '@/lib/firebase';
+import { completeProfileOnboarding, getSessionToken, getStoredSession, hasCompletedProfile, isValidTronAddress, recordVisit, refreshStoredUser, saveProfile, USDT_NETWORK, type Gender } from '@/lib/firebase';
 import { REGIONS } from '@/lib/regions';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
@@ -44,7 +44,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
-  const [profileForm, setProfileForm] = useState({ name: '', country: '', image: '' });
+  const [profileForm, setProfileForm] = useState({ name: '', country: '', image: '', walletAddress: '', walletNetwork: USDT_NETWORK });
 
   useEffect(() => {
     setDarkMode(true);
@@ -95,7 +95,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const openProfile = () => {
       if (!user) return;
-      setProfileForm({ name: user.name, country: user.country || '', image: user.image });
+       setProfileForm({ name: user.name, country: user.country || '', image: user.image, walletAddress: user.walletAddress || '', walletNetwork: user.walletNetwork || USDT_NETWORK });
       setProfileError('');
       setProfileOpen(true);
     };
@@ -173,10 +173,15 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
       setProfileError('이름, 국가, 프로필 사진을 확인해주세요.');
       return;
     }
+    const walletAddress = profileForm.walletAddress.trim();
+    if (walletAddress && !isValidTronAddress(walletAddress)) {
+      setProfileError('TRON 지갑 주소는 T로 시작하는 올바른 주소를 입력해주세요.');
+      return;
+    }
     setProfileSaving(true);
     setProfileError('');
     try {
-      const nextUser = { ...user, name, country, image: profileForm.image };
+       const nextUser = { ...user, name, country, image: profileForm.image, walletAddress: walletAddress || undefined, walletNetwork: walletAddress ? profileForm.walletNetwork : undefined };
       await saveProfile(nextUser, getSessionToken());
       setUser(nextUser);
       setProfileOpen(false);
@@ -249,7 +254,8 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
             </div>
             <label className="block text-sm font-bold text-slate-200">이름 / Name<input value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} maxLength={40} className="mt-2 w-full rounded-xl border border-white/10 bg-[#070b17] px-4 py-3 text-white outline-none focus:border-cyan-300" /></label>
             <label className="block text-sm font-bold text-slate-200">국가·지역 / Country<input value={profileForm.country} onChange={(event) => setProfileForm((current) => ({ ...current, country: event.target.value }))} list="profile-country-options" className="mt-2 w-full rounded-xl border border-white/10 bg-[#070b17] px-4 py-3 text-white outline-none focus:border-cyan-300" /><datalist id="profile-country-options">{REGIONS.filter((region) => region.id !== 'Global').map((region) => <option key={region.id} value={region.id}>{region.flag} {region.label}</option>)}</datalist></label>
-            <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm font-bold text-slate-200">성별 / Gender<input disabled value={user.gender === 'male' ? '남성 / Male' : '여성 / Female'} className="mt-2 w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-500" /></label><label className="block text-sm font-bold text-slate-200">나이 / Age<input disabled value={user.age ? `${user.age}세 / years` : ''} className="mt-2 w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-500" /></label></div>
+             <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm font-bold text-slate-200">성별 / Gender<input disabled value={user.gender === 'male' ? '남성 / Male' : '여성 / Female'} className="mt-2 w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-500" /></label><label className="block text-sm font-bold text-slate-200">나이 / Age<input disabled value={user.age ? `${user.age}세 / years` : ''} className="mt-2 w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-500" /></label></div>
+             <div className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[.05] p-4"><div className="text-sm font-black text-emerald-200">입금·출금 지갑 / Crypto wallet</div><p className="mt-1 text-xs leading-5 text-slate-400">TRON 네트워크에서 입금한 지갑을 등록하면 입금자 식별에 사용할 수 있습니다. 개인키는 입력하지 마세요.</p><label className="mt-3 block text-sm font-bold text-slate-200">지갑 주소<input value={profileForm.walletAddress} onChange={(event) => setProfileForm((current) => ({ ...current, walletAddress: event.target.value }))} placeholder="T..." className="mt-2 w-full rounded-xl border border-white/10 bg-[#070b17] px-4 py-3 font-mono text-sm text-white outline-none focus:border-emerald-300" /></label><label className="mt-3 block text-sm font-bold text-slate-200">네트워크<select value={profileForm.walletNetwork} onChange={(event) => setProfileForm((current) => ({ ...current, walletNetwork: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#070b17] px-4 py-3 text-white outline-none focus:border-emerald-300"><option value={USDT_NETWORK}>USDT · TRC20 (TRON)</option></select></label></div>
             <p className="rounded-xl border border-amber-300/15 bg-amber-300/[.06] p-3 text-xs leading-5 text-amber-100/70">성별과 나이는 최초 가입 시 저장되며 변경할 수 없습니다. Gender and age are locked after signup.</p>
             {profileError && <p role="alert" className="rounded-xl border border-rose-300/20 bg-rose-400/10 p-3 text-sm font-bold text-rose-200">{profileError}</p>}
             <button disabled={profileSaving} className="w-full rounded-xl bg-cyan-300 py-3.5 font-black text-slate-950 hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-50">{profileSaving ? '저장 중... / Saving...' : '프로필 저장 / Save profile'}</button>
