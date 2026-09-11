@@ -29,10 +29,47 @@ service cloud.firestore {
     function hasValidProfileState(data) {
       return hasNoOnboardingFields(data) || hasCompletedOnboarding(data);
     }
-    function hasImmutableOnboardingFields() {
+     function hasImmutableOnboardingFields() {
       return hasValidProfileState(request.resource.data)
         && (!hasValidGender(resource.data) || request.resource.data.gender == resource.data.gender)
         && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age);
+    }
+    function hasNoWalletBalanceChange() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['usdtBalance', 'lastTransferId']);
+    }
+    function isDirectTransferProfileUpdate(userId) {
+      return request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usdtBalance', 'lastTransferId', 'updatedAt'])
+        && request.resource.data.lastTransferId is string
+        && request.resource.data.usdtBalance is number
+        && resource.data.usdtBalance is number
+        && request.resource.data.updatedAt is timestamp
+        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.status == 'COMPLETED'
+        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.senderId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.amount is number
+        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.fee is number
+        && (
+          (userId == getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.senderId
+            && request.auth.uid == userId
+            && request.resource.data.usdtBalance == resource.data.usdtBalance
+              - getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.amount
+              - getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.fee)
+          || (userId == getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.recipientId
+            && request.resource.data.usdtBalance == resource.data.usdtBalance
+              + getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.amount)
+        );
+    }
+    function isDirectTransferLedger(data) {
+      return request.auth != null
+        && data.keys().hasAll(['userId', 'requestId', 'amount', 'direction'])
+        && data.requestId is string
+        && data.amount is number
+        && data.direction is string
+        && getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.status == 'COMPLETED'
+        && getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.senderId == request.auth.uid
+        && data.amount == getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.amount
+        && ((data.userId == request.auth.uid && data.direction == 'OUT')
+          || (data.userId == getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.recipientId && data.direction == 'IN'));
     }
      function isSafePublicProfile(data) {
        return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'updatedAt', 'walletAddress', 'walletNetwork', 'walletPublic'])
@@ -212,7 +249,9 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
       allow create: if isMaster() || (request.auth != null && request.auth.uid == userId && hasValidProfileState(request.resource.data));
-      allow update: if isMaster() || (request.auth != null && request.auth.uid == userId && hasImmutableOnboardingFields());
+      allow update: if isMaster()
+        || isDirectTransferProfileUpdate(userId)
+        || (request.auth != null && request.auth.uid == userId && hasImmutableOnboardingFields() && hasNoWalletBalanceChange());
       allow delete: if isMaster();
     }
     match /publicProfiles/{userId} {
@@ -230,23 +269,32 @@ service cloud.firestore {
       allow update: if isMaster();
        allow delete: if false;
      }
-     match /transferRequests/{requestId} {
-      allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
+      match /transferRequests/{requestId} {
+       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
+       allow create: if request.auth != null
+         && request.resource.data.senderId == request.auth.uid
+         && ((request.resource.data.status == 'PENDING')
+           || (request.resource.data.status == 'COMPLETED'
+             && request.resource.data.amount is number
+             && request.resource.data.amount > 0
+             && request.resource.data.fee is number
+             && request.resource.data.fee >= 0
+             && request.resource.data.recipientId is string
+             && request.resource.data.recipientId != request.auth.uid));
       allow update: if isMaster();
       allow delete: if false;
     }
     match /walletLedger/{entryId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.type is string
-        && request.resource.data.direction is string
-        && request.resource.data.amount is number
-        && request.resource.data.amount >= 0
-        && request.resource.data.status is string
-        && request.resource.data.createdAt is timestamp
-        && request.resource.data.keys().hasOnly(['userId', 'type', 'direction', 'amount', 'fee', 'status', 'network', 'symbol', 'txHash', 'fromAddress', 'toAddress', 'counterpartyId', 'requestId', 'memo', 'createdAt']);
+       allow create: if request.auth != null
+          && request.resource.data.type is string
+          && request.resource.data.direction is string
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 0
+          && request.resource.data.status is string
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.keys().hasOnly(['userId', 'type', 'direction', 'amount', 'fee', 'status', 'network', 'symbol', 'txHash', 'fromAddress', 'toAddress', 'counterpartyId', 'requestId', 'memo', 'createdAt'])
+          && (request.resource.data.userId == request.auth.uid || isDirectTransferLedger(request.resource.data));
       allow update, delete: if false;
     }
     match /escrowOrders/{orderId} {
@@ -303,7 +351,9 @@ service cloud.firestore {
       match /liveRooms/{roomId} {
         allow read: if true;
         allow create: if request.auth != null && request.resource.data.hostId == request.auth.uid;
-        allow update: if request.auth != null && resource.data.hostId == request.auth.uid && request.resource.data.hostId == request.auth.uid;
+        allow update: if request.auth != null
+          && request.resource.data.hostId == request.auth.uid
+          && (resource.data.hostId == request.auth.uid || resource.data.status == 'offline');
         allow delete: if request.auth != null && resource.data.hostId == request.auth.uid;
       }
      match /liveRoomMessages/{messageId} {
