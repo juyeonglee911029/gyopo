@@ -18,7 +18,7 @@ const links = [
   ['/webrtc', '화상채팅', 'Video'],
   ['/music', 'MUSIC VIDEO', 'MUSIC VIDEO'],
   ['/watch', '📺 Watch', '📺 Watch'],
-  ['/theater', '극장', 'Theater'],
+   ['/theater', 'LIVE ROOM', 'LIVE ROOM'],
   ['/assistant', 'AI 검색', 'AI Search'],
 ] as const;
 
