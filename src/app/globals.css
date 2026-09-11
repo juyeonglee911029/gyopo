@@ -1367,6 +1367,12 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
   .tetris-board-shell { width: min(100%, 31rem); }
 }
 
+@media (min-width: 900px) {
+  .tetris-call-workspace { grid-template-columns: max-content minmax(0, 1fr); gap: 0; }
+  .tetris-local-panel { width: max-content; padding-right: 0; }
+  .tetris-video-pane { max-width: none; }
+}
+
 /* Auth and first-visit motion stay quiet, centered, and non-blocking once the app is ready. */
 dialog.session-loading-dialog {
   width: 100vw !important;
