@@ -30,6 +30,7 @@ export default function LiveBroadcastPage() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const viewerPeersRef = useRef(new Map<string, RTCPeerConnection>());
+  const viewerOffersRef = useRef(new Map<string, string>());
   const roomRef = useRef('live-room-01');
   const [roomId, setRoomId] = useState('live-room-01');
   const [filters, setFilters] = useState(defaultFilters);
@@ -196,18 +197,24 @@ export default function LiveBroadcastPage() {
     if (!token) return;
     let active = true;
     const acceptViewers = async () => {
-      const rows = await queryDocumentsWhere<ViewerSignal>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: roomRef.current }], token, 50).catch(() => []);
+      const rows = await queryDocumentsWhere<ViewerSignal>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: roomRef.current }, { field: 'hostId', op: 'EQUAL', value: user.id }], token, 50).catch(() => []);
       const now = Date.now();
       const activeViewers = rows.filter((viewer) => viewer.status !== 'ended' && viewer.updatedAt && now - new Date(viewer.updatedAt).getTime() < 15_000);
       await mergeDocument('liveRooms', roomRef.current, { viewers: activeViewers.length }, token).catch(() => undefined);
-      for (const viewer of rows.filter((item) => item.status === 'offer')) {
-        if (!active || viewerPeersRef.current.has(viewer.id) || !viewer.offer) continue;
+      for (const viewer of rows.filter((item) => item.status === 'offer' && item.offer)) {
+        if (!active || !viewer.offer) continue;
+        const previousOffer = viewerOffersRef.current.get(viewer.id);
+        if (previousOffer === viewer.offer && viewerPeersRef.current.has(viewer.id)) continue;
+        const previousPeer = viewerPeersRef.current.get(viewer.id);
+        if (previousPeer) previousPeer.close();
+        viewerPeersRef.current.delete(viewer.id);
+        viewerOffersRef.current.set(viewer.id, viewer.offer);
         const peer = new RTCPeerConnection({ iceServers });
         viewerPeersRef.current.set(viewer.id, peer);
         const stream = streamRef.current;
         if (!stream) { peer.close(); viewerPeersRef.current.delete(viewer.id); continue; }
         stream.getTracks().forEach((track) => peer.addTrack(track, stream));
-        peer.onconnectionstatechange = () => { if (peer.connectionState === 'failed' || peer.connectionState === 'closed') { peer.close(); viewerPeersRef.current.delete(viewer.id); } };
+        peer.onconnectionstatechange = () => { if (peer.connectionState === 'failed' || peer.connectionState === 'closed') { peer.close(); viewerPeersRef.current.delete(viewer.id); viewerOffersRef.current.delete(viewer.id); } };
         try {
           await peer.setRemoteDescription(JSON.parse(viewer.offer) as RTCSessionDescriptionInit);
           const answer = await peer.createAnswer();
@@ -219,7 +226,7 @@ export default function LiveBroadcastPage() {
     };
     void acceptViewers();
     const timer = window.setInterval(() => void acceptViewers(), 1_500);
-    return () => { active = false; window.clearInterval(timer); viewerPeersRef.current.forEach((peer) => peer.close()); viewerPeersRef.current.clear(); };
+      return () => { active = false; window.clearInterval(timer); viewerPeersRef.current.forEach((peer) => peer.close()); viewerPeersRef.current.clear(); viewerOffersRef.current.clear(); };
   }, [live, user?.id]);
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()); }, []);
