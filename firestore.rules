@@ -351,7 +351,7 @@ service cloud.firestore {
        match /liveRooms/{roomId} {
          allow read: if true;
          allow create: if request.auth != null && request.resource.data.hostId == request.auth.uid;
-         allow update: if request.auth != null && (
+           allow update: if request.auth != null && (isMaster() ||
            (request.resource.data.status == 'offline'
              && resource.data.hostId == request.auth.uid
              && request.resource.data.hostId == null)
@@ -368,7 +368,7 @@ service cloud.firestore {
        allow read: if true;
        allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
         allow update: if request.auth != null && resource.data.authorId == request.auth.uid;
-        allow delete: if request.auth != null && (resource.data.authorId == request.auth.uid || isMaster());
+         allow delete: if request.auth != null && (resource.data.authorId == request.auth.uid || isMaster() || get(/databases/$(database)/documents/liveRooms/$(resource.data.roomId)).data.hostId == request.auth.uid);
      }
      match /liveRoomRequests/{requestId} {
        allow read: if request.auth != null && (resource.data.requesterId == request.auth.uid || resource.data.helperId == request.auth.uid || isMaster());
