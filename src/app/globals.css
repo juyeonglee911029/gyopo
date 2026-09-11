@@ -1368,10 +1368,10 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
 }
 
 @media (min-width: 900px) {
-  .tetris-call-workspace { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 0; }
-  .tetris-local-panel { width: 560px; padding-right: 0; }
-  .tetris-local-controls { width: 100%; min-width: 0; }
-  .tetris-video-pane { max-width: none; }
+  .tetris-call-workspace { grid-template-columns: minmax(0, 560px) minmax(0, 1fr) !important; gap: 0 !important; }
+  .tetris-local-panel { width: 560px !important; padding-right: 0 !important; }
+  .tetris-local-controls { width: 100% !important; min-width: 0 !important; }
+  .tetris-video-pane { max-width: none !important; }
 }
 
 /* Auth and first-visit motion stay quiet, centered, and non-blocking once the app is ready. */
