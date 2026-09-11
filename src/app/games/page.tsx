@@ -1542,7 +1542,6 @@ export default function GamesPage() {
         <div className="tetris-modern-shell tetris-modern-frame mx-auto flex h-full min-h-0 w-full flex-col gap-1.5">
           <header className="flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#10182b] px-2 py-1.5 shadow-xl sm:px-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.24em] text-cyan-300"><Gamepad2 size={13} /> Arcade / Live battle</div>
                <h1 className="truncate text-lg font-black tracking-[-0.04em] sm:text-xl md:text-2xl">TETRIS</h1>
             </div>
             <div className="flex shrink-0 items-center gap-1.5 text-right text-[9px] sm:gap-2 sm:text-[10px]"><span className="hidden text-slate-400 sm:inline">{matchStatus}</span><span className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-1.5 py-1 font-black text-emerald-200">{matchPhase.toUpperCase()}</span></div>
