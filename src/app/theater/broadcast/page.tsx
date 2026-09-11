@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Camera, CircleStop, Grid3X3, ImagePlus, Lightbulb, MessageCircle, Mic, MonitorUp, Radio, RotateCcw, Send, Settings2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Camera, CircleStop, Grid3X3, ImagePlus, Lightbulb, Mic, MonitorUp, Radio, RotateCcw, Send, Settings2, Sparkles } from 'lucide-react';
 import { createDocument, getDocument, getSessionToken, mergeDocument, queryDocumentsWhere, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
@@ -52,7 +52,7 @@ export default function LiveBroadcastPage() {
   const [uploadedThumbnail, setUploadedThumbnail] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<LiveMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [studioTab, setStudioTab] = useState<'chat' | 'settings'>('chat');
+  const [studioTab, setStudioTab] = useState<'chat' | 'settings'>('settings');
 
   useEffect(() => {
     const nextRoom = new URLSearchParams(window.location.search).get('room') || 'live-room-01';
@@ -185,7 +185,7 @@ export default function LiveBroadcastPage() {
     return () => window.clearInterval(timer);
   }, [live, quality, user?.id, uploadedThumbnail]);
   useEffect(() => {
-    const loadChat = async () => { if (!sessionRef.current) { setChatMessages([]); return; } const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: roomId }, { field: 'sessionId', op: 'EQUAL', value: sessionRef.current }], getSessionToken(), 40).catch(() => []); setChatMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-20)); };
+     const loadChat = async () => { if (!sessionRef.current) { setChatMessages([]); return; } const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: roomId }, { field: 'sessionId', op: 'EQUAL', value: sessionRef.current }], getSessionToken(), 40).catch(() => []); setChatMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-10)); };
     void loadChat();
     const timer = window.setInterval(() => void loadChat(), 1_000);
     return () => window.clearInterval(timer);
@@ -196,9 +196,41 @@ export default function LiveBroadcastPage() {
     let overlay = preview.querySelector<HTMLDivElement>('.live-broadcast-chat-overlay');
     if (!live || chatMessages.length === 0) { overlay?.remove(); return; }
     if (!overlay) { overlay = document.createElement('div'); overlay.className = 'live-broadcast-chat-overlay'; overlay.setAttribute('aria-live', 'polite'); preview.appendChild(overlay); }
-    overlay.replaceChildren(...chatMessages.slice(-6).map((item) => { const row = document.createElement('div'); const author = document.createElement('b'); const text = document.createElement('span'); author.textContent = item.user; text.textContent = item.text; row.append(author, text); return row; }));
+     overlay.replaceChildren(...chatMessages.slice(-10).map((item) => { const row = document.createElement('div'); const author = document.createElement('b'); const text = document.createElement('span'); author.textContent = item.user; text.textContent = item.text; row.append(author, text); return row; }));
     return () => overlay?.remove();
   }, [chatMessages, live]);
+  useEffect(() => {
+    const preview = document.querySelector('.live-studio-preview .relative');
+    if (!preview) return;
+    let composer = preview.querySelector<HTMLFormElement>('.live-broadcast-chat-composer');
+    if (!live) { composer?.remove(); return; }
+    if (!composer) {
+      composer = document.createElement('form');
+      composer.className = 'live-broadcast-chat-composer';
+      const input = document.createElement('input');
+      input.className = 'live-room-input';
+      input.placeholder = '시청자에게 답장하기';
+      input.setAttribute('aria-label', '시청자에게 답장하기');
+      const button = document.createElement('button');
+      button.type = 'submit';
+      button.className = 'live-room-send';
+      button.setAttribute('aria-label', '방송자 메시지 보내기');
+      button.innerHTML = '<span aria-hidden="true">↗</span>';
+      composer.append(input, button);
+      composer.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        const token = getSessionToken();
+        if (!user || !token || !sessionRef.current || !text) return;
+        try {
+          await createDocument('liveRoomMessages', crypto.randomUUID(), { roomId: roomRef.current, sessionId: sessionRef.current, authorId: user.id, user: user.name, text, createdAt: new Date() }, token);
+          input.value = '';
+        } catch { setMessage('채팅을 보내지 못했습니다. 잠시 후 다시 시도해주세요.'); }
+      });
+      preview.appendChild(composer);
+    }
+    return () => composer?.remove();
+  }, [live, user?.id]);
   useEffect(() => {
     if (!live || !user || !streamRef.current) return;
     const token = getSessionToken();
