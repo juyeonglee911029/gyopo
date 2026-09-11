@@ -623,9 +623,8 @@ export default function GamesPage() {
   }, [roomStartAt]);
 
   const practiceStart = () => {
-    if (!user) return window.alert('로그인 후 게임을 시작할 수 있습니다.');
     const token = getSessionToken();
-    if (token) void deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
+    if (token && currentUserId) void deleteDocument('tetrisQueue', currentUserId, token).catch(() => undefined);
     setMatchId(null);
     setMatchRole(null);
     setRoomNumber(null);
