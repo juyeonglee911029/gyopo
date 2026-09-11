@@ -23,6 +23,7 @@ export type PortalUser = {
   email: string;
   image: string;
   usdtBalance: number;
+  usdBalance: number;
   isSubscribed: boolean;
   gender?: Gender;
   genderPreference?: GenderPreference;
@@ -472,7 +473,7 @@ export async function approveDepositRequest(requestId: string, userId: string, r
   const amount = Number(request.amount || 0);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('입금 금액이 올바르지 않습니다.');
 
-  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
+   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
   const requestFields = {
     ...(requestDocument.fields || {}),
     ...encodeFields({ status: 'APPROVED', reviewedAt: new Date(), reviewedBy }),
@@ -1039,13 +1040,14 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
   const stakeId = `game-${matchId}-${authUserId}`;
   const profileDocument = await getRawDocument('profiles', authUserId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
-  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USDT가 부족합니다.`);
+  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdBalance) || 0);
+  if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USD가 부족합니다.`);
    const profileName = firestoreDocumentName('profiles', authUserId);
    const stakeName = firestoreDocumentName('gameStakes', stakeId);
   const profileFields = {
     ...(profileDocument.fields || {}),
-    usdtBalance: toFirestoreValue(currentBalance - amount),
+    usdBalance: toFirestoreValue(currentBalance - amount),
+    lastUsdOperationId: toFirestoreValue(stakeId),
     updatedAt: toFirestoreValue(new Date()),
   };
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
@@ -1054,7 +1056,7 @@ export async function reserveGameStake(userId: string, matchId: string, amount: 
     body: JSON.stringify({
       writes: [
         { update: { name: profileName, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
-         { update: { name: stakeName, fields: encodeFields({ userId: authUserId, matchId, amount, createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
+         { update: { name: stakeName, fields: encodeFields({ userId: authUserId, matchId, amount, currency: 'USD', createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
       ],
     }),
   }, token);
@@ -1076,7 +1078,7 @@ export async function refundGameStake(userId: string, matchId: string, token?: s
   const profileDocument = await getRawDocument('profiles', authUserId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
   const amount = Number(stake.amount || 0);
-  const balance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
+  const balance = Number(fromFirestoreValue(profileDocument.fields?.usdBalance) || 0);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1085,7 +1087,7 @@ export async function refundGameStake(userId: string, matchId: string, token?: s
         {
           update: {
             name: profileDocument.name,
-            fields: { ...(profileDocument.fields || {}), ...encodeFields({ usdtBalance: balance + amount, updatedAt: new Date() }) },
+            fields: { ...(profileDocument.fields || {}), ...encodeFields({ usdBalance: balance + amount, lastUsdOperationId: stakeId, updatedAt: new Date() }) },
           },
           currentDocument: { updateTime: profileDocument.updateTime },
         },
@@ -1150,7 +1152,7 @@ export async function settleTetrisMatch(
   if (!winnerProfile?.name) throw new Error('승자 프로필을 찾을 수 없습니다.');
 
   const payoutAmount = amount * 2;
-  const winnerBalance = Number(fromFirestoreValue(winnerProfile.fields?.usdtBalance) || 0);
+   const winnerBalance = Number(fromFirestoreValue(winnerProfile.fields?.usdBalance) || 0);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1161,7 +1163,8 @@ export async function settleTetrisMatch(
              name: firestoreDocumentName('profiles', winnerId),
             fields: {
               ...(winnerProfile.fields || {}),
-              usdtBalance: toFirestoreValue(winnerBalance + payoutAmount),
+               usdBalance: toFirestoreValue(winnerBalance + payoutAmount),
+               lastUsdOperationId: toFirestoreValue(payoutId),
               updatedAt: toFirestoreValue(new Date()),
             },
           },
@@ -1177,7 +1180,8 @@ export async function settleTetrisMatch(
               amount,
               payoutAmount,
               status: 'PAID',
-              createdAt: new Date(),
+               currency: 'USD',
+               createdAt: new Date(),
             }),
           },
           currentDocument: { exists: false },
@@ -1199,8 +1203,8 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
   if (await getRawDocument('genderMatchStakes', stakeId, token)) return;
   const profileDocument = await getRawDocument('profiles', authUserId, token);
   if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
-  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USDT가 부족합니다.`);
+   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdBalance) || 0);
+  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USD가 부족합니다.`);
     const profileName = firestoreDocumentName('profiles', authUserId);
    const stakeName = firestoreDocumentName('genderMatchStakes', stakeId);
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
@@ -1211,14 +1215,14 @@ export async function reserveGenderMatchStake(userId: string, callId: string, am
         {
           update: {
             name: profileName,
-            fields: { ...(profileDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) },
+            fields: { ...(profileDocument.fields || {}), usdBalance: toFirestoreValue(currentBalance - amount), lastUsdOperationId: toFirestoreValue(stakeId), updatedAt: toFirestoreValue(new Date()) },
           },
           currentDocument: { updateTime: profileDocument.updateTime },
         },
         {
           update: {
             name: stakeName,
-            fields: encodeFields({ userId: authUserId, callId, amount, createdAt: new Date(), status: 'RESERVED' }),
+            fields: encodeFields({ userId: authUserId, callId, amount, currency: 'USD', createdAt: new Date(), status: 'RESERVED' }),
           },
           currentDocument: { exists: false },
         },
@@ -1240,8 +1244,8 @@ export async function purchasePremiumSubscription(userId: string, token?: string
   if (profile.isSubscribed && (!currentExpiry || currentExpiry.getTime() > Date.now())) {
     return (await refreshStoredUser()) || profile;
   }
-  const currentBalance = Number(profile.usdtBalance || 0);
-  if (currentBalance < cost) throw new Error(`USDT 잔고가 부족합니다. (월정액 ${cost} USDT 필요)`);
+  const currentBalance = Number(profile.usdBalance || 0);
+  if (currentBalance < cost) throw new Error(`USD 잔고가 부족합니다. (월정액 ${cost} USD 필요)`);
   const nextExpiry = currentExpiry && currentExpiry.getTime() > Date.now() ? new Date(currentExpiry) : new Date();
   nextExpiry.setUTCMonth(nextExpiry.getUTCMonth() + 1);
   const subscriptionId = `premium-${userId}-${nextExpiry.toISOString().slice(0, 7)}`;
@@ -1258,7 +1262,8 @@ export async function purchasePremiumSubscription(userId: string, token?: string
             name: profileName,
             fields: {
               ...(profileDocument.fields || {}),
-              usdtBalance: toFirestoreValue(currentBalance - cost),
+               usdBalance: toFirestoreValue(currentBalance - cost),
+               lastUsdOperationId: toFirestoreValue(subscriptionId),
               isSubscribed: toFirestoreValue(true),
               premiumExpiresAt: toFirestoreValue(nextExpiry),
               updatedAt: toFirestoreValue(new Date()),
@@ -1269,7 +1274,7 @@ export async function purchasePremiumSubscription(userId: string, token?: string
         {
           update: {
             name: subscriptionName,
-            fields: encodeFields({ userId, amount: cost, startedAt: new Date(), expiresAt: nextExpiry, status: 'ACTIVE' }),
+           fields: encodeFields({ userId, amount: cost, currency: 'USD', startedAt: new Date(), expiresAt: nextExpiry, status: 'ACTIVE' }),
           },
           currentDocument: { exists: false },
         },
@@ -1282,7 +1287,7 @@ export async function purchasePremiumSubscription(userId: string, token?: string
   }
   return (await refreshStoredUser()) || {
     ...profile,
-    usdtBalance: currentBalance - cost,
+     usdBalance: currentBalance - cost,
     isSubscribed: true,
     premiumExpiresAt: nextExpiry.toISOString(),
   };
@@ -1545,6 +1550,7 @@ function privateProfileData(user: PortalUser): Record<string, unknown> {
     email: user.email,
     image: user.image,
     usdtBalance: Number(user.usdtBalance || 0),
+    usdBalance: Number(user.usdBalance || 0),
     isSubscribed: Boolean(user.isSubscribed),
     ...(isGender(user.gender) ? { gender: user.gender } : {}),
     ...(user.genderPreference ? { genderPreference: user.genderPreference } : {}),
@@ -1684,6 +1690,7 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     email: savedProfile?.email || result.email || '',
     image: savedProfile?.image || result.photoUrl || 'https://www.gravatar.com/avatar/?d=mp',
     usdtBalance: Number(savedProfile?.usdtBalance || 0),
+    usdBalance: Number(savedProfile?.usdBalance || 0),
     isSubscribed: Boolean(savedProfile?.isSubscribed),
     gender: savedProfile?.gender,
     genderPreference: savedProfile?.genderPreference,
@@ -1714,6 +1721,7 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
   const persistedUser: PortalUser = {
     ...user,
     usdtBalance: Number(savedProfile?.usdtBalance ?? user.usdtBalance ?? 0),
+    usdBalance: Number(savedProfile?.usdBalance ?? user.usdBalance ?? 0),
     gender: isGender(savedGender) ? savedGender : user.gender,
     age: Number.isInteger(savedAge) && savedAge >= 13 && savedAge <= 130 ? savedAge : user.age,
     country: isCountry(user.country) ? user.country.trim() : isCountry(savedCountry) ? savedCountry.trim() : String(user.country ?? '').trim(),
