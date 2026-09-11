@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { completeProfileOnboarding, getSessionToken, getStoredSession, hasCompletedProfile, recordVisit, refreshStoredUser, saveProfile, USDT_NETWORK, type Gender } from '@/lib/firebase';
+import { completeProfileOnboarding, createDocument, deleteDocument, getSessionToken, getStoredSession, hasCompletedProfile, isMasterUser, mergeDocument, queryDocumentsWhere, recordVisit, refreshStoredUser, saveProfile, sendUserTransfer, USDT_NETWORK, type Gender } from '@/lib/firebase';
 import { REGIONS } from '@/lib/regions';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import StartupExperience from '@/components/layout/StartupExperience';
+import { LiveRoomPlayer, RoomChatPanel, type LiveRoom } from '@/app/theater/page';
+
+type FloatingLiveMessage = { id: string; roomId: string; sessionId?: string; authorId: string; user: string; text: string; createdAt: string };
 
 function resizeProfileImage(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) return Promise.reject(new Error('이미지 파일만 선택해주세요.'));
@@ -46,6 +49,12 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileForm, setProfileForm] = useState({ name: '', country: '', image: '', walletAddress: '', walletNetwork: USDT_NETWORK, walletPublic: false });
+  const [floatingRoom, setFloatingRoom] = useState<LiveRoom | null>(null);
+  const [floatingMinimized, setFloatingMinimized] = useState(false);
+  const [floatingMessages, setFloatingMessages] = useState<FloatingLiveMessage[]>([]);
+  const [floatingInput, setFloatingInput] = useState('');
+  const [floatingGiftAmount, setFloatingGiftAmount] = useState('1');
+  const [floatingGiftMessage, setFloatingGiftMessage] = useState('');
 
   useEffect(() => {
     setDarkMode(true);
@@ -103,6 +112,37 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     window.addEventListener('gyopo-profile-edit', openProfile);
     return () => window.removeEventListener('gyopo-profile-edit', openProfile);
   }, [user]);
+
+  useEffect(() => {
+    const openFloatingRoom = (event: Event) => {
+      const room = (event as CustomEvent<LiveRoom>).detail;
+      if (!room?.id) return;
+      setFloatingRoom(room);
+      setFloatingMinimized(false);
+      window.sessionStorage.setItem('gyopo-floating-live-room', JSON.stringify(room));
+    };
+    const saved = window.sessionStorage.getItem('gyopo-floating-live-room');
+    if (saved) {
+      try { setFloatingRoom(JSON.parse(saved) as LiveRoom); } catch { window.sessionStorage.removeItem('gyopo-floating-live-room'); }
+    }
+    window.addEventListener('gyopo-live-room-open', openFloatingRoom);
+    return () => window.removeEventListener('gyopo-live-room-open', openFloatingRoom);
+  }, []);
+
+  useEffect(() => {
+    if (!floatingRoom?.id || !floatingRoom.sessionId) {
+      setFloatingMessages([]);
+      return;
+    }
+    let active = true;
+    const load = async () => {
+      const rows = await queryDocumentsWhere<FloatingLiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }, { field: 'sessionId', op: 'EQUAL', value: floatingRoom.sessionId }], getSessionToken(), 100).catch(() => []);
+      if (active) setFloatingMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    };
+    void load();
+    const timer = window.setInterval(load, 1_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [floatingRoom?.id, floatingRoom?.sessionId]);
 
   const savedGender = user?.gender === 'male' || user?.gender === 'female' ? user.gender : '';
   const savedCountry = user?.country && user.country.trim() !== 'Global' ? user.country.trim() : '';
@@ -188,10 +228,55 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const closeFloatingRoom = () => {
+    setFloatingRoom(null);
+    setFloatingMessages([]);
+    window.sessionStorage.removeItem('gyopo-floating-live-room');
+  };
+
+  const sendFloatingMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !floatingRoom?.sessionId || !floatingInput.trim()) return;
+    const token = getSessionToken();
+    if (!token) return;
+    await createDocument('liveRoomMessages', crypto.randomUUID(), { roomId: floatingRoom.id, sessionId: floatingRoom.sessionId, authorId: user.id, user: user.name, text: floatingInput.trim(), createdAt: new Date() }, token).catch(() => undefined);
+    setFloatingInput('');
+  };
+
+  const sendFloatingGift = async () => {
+    if (!user || !floatingRoom?.hostId || floatingRoom.hostId === user.id) return setFloatingGiftMessage('방송자에게만 선물할 수 있습니다.');
+    const amount = Number(floatingGiftAmount);
+    const token = getSessionToken();
+    if (!token || !Number.isFinite(amount) || amount <= 0 || amount > user.usdtBalance) return setFloatingGiftMessage('USDT 잔고와 금액을 확인해주세요.');
+    try {
+      await sendUserTransfer(user.id, floatingRoom.hostId, amount, 0, token, { kind: 'LIVE_GIFT', roomId: floatingRoom.id, memo: `${floatingRoom.title} 방송 USDT 선물` });
+      const refreshed = await refreshStoredUser().catch(() => null);
+      if (refreshed) setUser(refreshed);
+      setFloatingGiftMessage(`${amount} USDT 선물을 보냈습니다.`);
+    } catch { setFloatingGiftMessage('선물에 실패했습니다. Firebase Rules와 잔고를 확인해주세요.'); }
+  };
+
+  const resetFloatingRoom = async () => {
+    if (!floatingRoom || !isMasterUser(user)) return;
+    const token = getSessionToken();
+    if (!token) return;
+    const [viewers, messages] = await Promise.all([
+      queryDocumentsWhere<{ roomId?: string }>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }], token, 200).catch(() => []),
+      floatingRoom.sessionId ? queryDocumentsWhere<{ roomId?: string; sessionId?: string }>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }, { field: 'sessionId', op: 'EQUAL', value: floatingRoom.sessionId }], token, 200).catch(() => []) : Promise.resolve([]),
+    ]);
+    await Promise.all([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]);
+    await mergeDocument('liveRooms', floatingRoom.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+    closeFloatingRoom();
+  };
+
   return (
     <>
       <StartupExperience ready={sessionChecked}>{children}</StartupExperience>
       {!sessionChecked && <div className="fixed inset-0 z-[190] cursor-wait bg-[#070b17]" aria-hidden="true" />}
+      {floatingRoom && user && <div className={`global-live-room-window ${floatingMinimized ? 'is-minimized' : ''}`}>
+        <header className="global-live-room-header"><button type="button" onClick={() => setFloatingMinimized((value) => !value)} className="min-w-0 flex-1 truncate text-left text-xs font-black"><span className="mr-1 text-rose-300">●</span>{floatingRoom.title || 'LIVE ROOM'}</button><div className="flex gap-1"><button type="button" aria-label={floatingMinimized ? '라이브 창 복원' : '라이브 창 최소화'} onClick={() => setFloatingMinimized((value) => !value)} className="live-room-icon-button">{floatingMinimized ? '□' : '−'}</button><button type="button" aria-label={isMasterUser(user) ? 'Master 방 종료 및 초기화' : '라이브 창 닫기'} onClick={() => isMasterUser(user) ? void resetFloatingRoom() : closeFloatingRoom()} className="live-room-icon-button">×</button></div></header>
+        {floatingMinimized ? <div className="global-live-room-mini-video"><LiveRoomPlayer room={floatingRoom} user={user} compact /></div> : <div className="global-live-room-body"><LiveRoomPlayer room={floatingRoom} user={user} /><RoomChatPanel room={floatingRoom} user={user} messages={floatingMessages} message={floatingInput} onMessageChange={setFloatingInput} onSubmit={sendFloatingMessage} /><div className="global-live-room-gift"><div className="text-[10px] font-black text-pink-200">USDT 선물 · 방송인에게</div><div className="mt-1 flex gap-1"><input value={floatingGiftAmount} onChange={(event) => setFloatingGiftAmount(event.target.value)} type="number" min="1" step="1" className="min-w-0 flex-1 bg-white/10 px-2 py-1 text-xs text-white outline-none" /><button type="button" onClick={() => void sendFloatingGift()} className="bg-pink-300 px-2 py-1 text-[10px] font-black text-slate-950">선물</button></div>{floatingGiftMessage && <p className="mt-1 text-[10px] text-emerald-200">{floatingGiftMessage}</p>}</div></div>}
+      </div>}
       <dialog ref={dialogRef} onCancel={(event) => event.preventDefault()} className={`m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] p-0 text-white shadow-2xl backdrop:bg-[#050812]/90 ${!sessionChecked ? 'session-loading-dialog' : ''}`}>
         {!sessionChecked ? (
           <div className="app-session-loading" role="status" aria-label="GYOPO 로딩 중">
@@ -265,4 +350,3 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     </>
   );
 }
-
