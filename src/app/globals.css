@@ -1370,6 +1370,44 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
 .tetris-video-pane { overflow: hidden; }
 .tetris-vs-card { align-self: center; text-align: center; }
 .tetris-vs-card > .overflow-hidden, .tetris-vs-card .grid-cols-10 { width: min(100%, 6.25rem); margin-inline: auto; }
+
+/* Jobs: make the list feel like a focused marketplace rather than a text dump. */
+.jobs-page > div > header {
+  margin-bottom: 1.1rem !important;
+  padding: 1.25rem 1.4rem !important;
+  border: 1px solid rgba(255, 255, 255, .12) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .11), rgba(255, 255, 255, .035)) !important;
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, .18) !important;
+  backdrop-filter: blur(24px);
+}
+.jobs-page main {
+  display: grid !important;
+  gap: .75rem !important;
+}
+.jobs-page .job-row {
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, .1) !important;
+  background: rgba(0, 0, 0, .22) !important;
+  box-shadow: 0 .8rem 2rem rgba(0, 0, 0, .14) !important;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease !important;
+}
+.jobs-page .job-row:hover {
+  border-color: rgba(153, 246, 228, .32) !important;
+  background: rgba(255, 255, 255, .09) !important;
+  transform: translateY(-2px);
+}
+.jobs-page .job-row > a > div {
+  min-height: 5.5rem;
+  padding: 1rem 1.1rem !important;
+}
+.jobs-page .job-row-actions {
+  border-top-color: rgba(255, 255, 255, .09);
+  background: rgba(0, 0, 0, .12);
+}
+@media (max-width: 639px) {
+  .jobs-page > div > header { padding: 1rem !important; }
+  .jobs-page .job-row > a > div { padding: .85rem !important; }
+}
 .market-fx-card > select { min-width: 0; width: 100%; border: 0; background: transparent; color: #cbd5e1; font-size: .65rem; font-weight: 800; outline: none; }
 .market-fx-card > select option { background: #0b1221; color: #f8fafc; }
 .market-fx-result { grid-template-columns: minmax(0, 1fr) !important; }
