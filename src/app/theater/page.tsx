@@ -222,7 +222,7 @@ export default function LiveRoomPage() {
     };
     window.addEventListener('gyopo-master-room-terminate', handleMasterTerminate);
     return () => window.removeEventListener('gyopo-master-room-terminate', handleMasterTerminate);
-  }, []);
+  }, [user?.id, selectedRoom?.id]);
   useEffect(() => {
     if (entryRoom?.status !== 'live') return;
     const room = entryRoom;
