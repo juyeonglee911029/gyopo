@@ -63,8 +63,23 @@ const turnServers = [
   { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 const iceServers = [...stunServers, ...turnServers];
+const waitForIce = (peer: RTCPeerConnection) => new Promise<void>((resolve) => {
+  if (peer.iceGatheringState === 'complete') return resolve();
+  const finish = () => {
+    if (peer.iceGatheringState === 'complete') {
+      peer.removeEventListener('icegatheringstatechange', finish);
+      resolve();
+    }
+  };
+  peer.addEventListener('icegatheringstatechange', finish);
+  window.setTimeout(() => {
+    peer.removeEventListener('icegatheringstatechange', finish);
+    resolve();
+  }, 4_000);
+});
 const requestMediaWithTimeout = (constraints: MediaStreamConstraints) => new Promise<MediaStream>((resolve, reject) => {
   let timedOut = false;
   const timer = window.setTimeout(() => {
@@ -774,10 +789,11 @@ export default function WebRTCPage() {
           setStatus('상대에게 연결을 요청하는 중');
           const connection = ensureConnection(nextCall);
           if (nextCall.initiator) {
-             const offer = await connection.createOffer();
-             if (stale()) return;
-             await connection.setLocalDescription(offer);
-             if (stale()) return;
+              const offer = await connection.createOffer();
+              if (stale()) return;
+              await connection.setLocalDescription(offer);
+              await waitForIce(connection);
+              if (stale()) return;
              // Only termination writes status, so late SDP writes cannot erase an ended marker.
              await mergeDocument('webrtcCalls', nextCall.callId, { callId: nextCall.callId, callerId: user.id, calleeId: nextCall.peer.userId, offer }, token);
              if (stale()) return;
@@ -800,10 +816,11 @@ export default function WebRTCPage() {
         if (stale()) return;
         if (!call) {
           if (current.initiator) {
-             const offer = await connection.createOffer();
-             if (stale()) return;
-             await connection.setLocalDescription(offer);
-             if (stale()) return;
+              const offer = await connection.createOffer();
+              if (stale()) return;
+              await connection.setLocalDescription(offer);
+              await waitForIce(connection);
+              if (stale()) return;
              await mergeDocument('webrtcCalls', current.callId, { callId: current.callId, callerId: user.id, calleeId: current.peer.userId, offer }, token);
              if (stale()) return;
           }
@@ -818,10 +835,11 @@ export default function WebRTCPage() {
           await connection.setRemoteDescription(call.offer);
           if (stale()) return;
           offerApplied.current = true;
-          const answer = await connection.createAnswer();
-          if (stale()) return;
-          await connection.setLocalDescription(answer);
-          if (stale()) return;
+           const answer = await connection.createAnswer();
+           if (stale()) return;
+           await connection.setLocalDescription(answer);
+           await waitForIce(connection);
+           if (stale()) return;
           await mergeDocument('webrtcCalls', current.callId, { answer }, token);
           if (stale()) return;
         }
