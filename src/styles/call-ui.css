@@ -1,11 +1,16 @@
 .tetris-call-workspace {
-  grid-template-columns: minmax(0, 1.18fr) minmax(19rem, .82fr);
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
 }
 
 .tetris-local-boards {
-  grid-template-columns: minmax(19rem, 26rem) minmax(0, 1fr);
+  grid-template-columns: minmax(16rem, 24rem) minmax(7.5rem, 10rem);
   align-items: start;
   justify-content: start;
+}
+
+.tetris-adjacent-boards {
+  width: min(100%, 10rem);
+  justify-self: center;
 }
 
 .tetris-board-stage {
@@ -31,6 +36,28 @@
   min-width: 0;
   flex-direction: column;
   align-items: stretch;
+  height: fit-content;
+}
+
+.tetris-vs-card > .overflow-hidden,
+.tetris-vs-card .grid-cols-10 {
+  aspect-ratio: 1 / 2;
+}
+
+.tetris-vs-card > .overflow-hidden {
+  max-height: 15rem;
+}
+
+.tetris-video-pane {
+  width: 100%;
+  max-width: 22rem;
+  justify-self: end;
+}
+
+.tetris-video-pane > div:nth-child(2) {
+  height: auto !important;
+  min-height: 0 !important;
+  aspect-ratio: 16 / 9;
 }
 
 .tetris-vs-title {
@@ -119,18 +146,60 @@
 
 @media (max-width: 639px) {
   .tetris-call-workspace {
-    grid-template-columns: minmax(0, 1fr);
+    display: flex !important;
+    min-height: 0 !important;
+    flex-direction: column;
     overflow-y: auto;
+  }
+
+  .games-page {
+    height: auto !important;
+    min-height: calc(100dvh - 7rem) !important;
+    overflow: visible !important;
+    padding-bottom: 5.5rem !important;
+  }
+
+  .tetris-modern-shell {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .tetris-local-panel {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .tetris-local-panel > div {
+    height: auto !important;
   }
 
   .tetris-local-boards {
     grid-template-columns: minmax(0, 1fr) 5.75rem;
+    height: auto !important;
   }
 
   .tetris-board-stage,
   .tetris-board-shell {
     width: auto;
-    height: min(100%, 34rem);
+    height: auto !important;
+    max-height: none;
+    aspect-ratio: 1 / 2;
+  }
+
+  .tetris-board-stage { width: 100%; }
+  .tetris-board-shell { width: 100%; }
+
+  .tetris-adjacent-boards { width: 100%; }
+  .tetris-vs-card > .overflow-hidden { max-height: none; }
+
+  .tetris-video-pane {
+    align-self: center;
+    max-width: 22rem;
+    min-height: 0 !important;
+  }
+
+  .tetris-video-pane .tetris-chat-messages {
+    max-height: 14rem;
   }
 
   #friend-dock.friend-dock-call-active {
@@ -194,150 +263,3 @@
 .wallet-history-page .wallet-history-shell .text-slate-400,
 .wallet-history-page .wallet-history-shell .text-slate-500 { color: #607086 !important; }
 .wallet-history-page .wallet-history-shell .text-white { color: #102238 !important; }
-.tetris-call-workspace {
-  grid-template-columns: minmax(0, 1.18fr) minmax(19rem, .82fr);
-}
-
-.tetris-local-boards {
-  grid-template-columns: minmax(19rem, 26rem) minmax(0, 1fr);
-  align-items: start;
-  justify-content: start;
-}
-
-.tetris-board-stage {
-  width: auto;
-  height: min(100%, 52rem);
-  max-width: 100%;
-  aspect-ratio: 1 / 2;
-  justify-content: stretch;
-  justify-self: center;
-  padding: 0 !important;
-}
-
-.tetris-board-shell {
-  width: auto;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  aspect-ratio: 1 / 2;
-}
-
-.tetris-vs-card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.tetris-vs-title {
-  align-self: center;
-  letter-spacing: .22em;
-}
-
-.tetris-board-shell > div,
-.tetris-board-shell .grid-cols-10 {
-  height: 100%;
-}
-
-.tetris-board-shell .grid-cols-10 {
-  grid-template-rows: repeat(20, minmax(0, 1fr));
-}
-
-.tetris-board-shell .grid-cols-10 > div {
-  min-height: 0;
-  aspect-ratio: auto !important;
-}
-
-.call-connecting-logo {
-  display: inline-flex;
-  gap: .08em;
-  color: #a5f3fc;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  font-weight: 900;
-  letter-spacing: .18em;
-  text-shadow: 0 0 24px rgba(103, 232, 249, .72);
-}
-
-.call-connecting-logo span {
-  animation: call-logo-pulse 1.1s ease-in-out infinite;
-}
-
-.call-permission-error {
-  display: grid;
-  gap: .55rem;
-  padding: .65rem .75rem;
-  background: rgba(245, 158, 11, .1);
-  color: #fef3c7;
-  font-size: .68rem;
-  line-height: 1.45;
-}
-
-.call-permission-error button {
-  width: fit-content;
-  border: 0;
-  background: #67e8f9;
-  padding: .4rem .6rem;
-  color: #04202a;
-  font-size: .68rem;
-  font-weight: 900;
-}
-
-#friend-dock.friend-dock-call-active {
-  width: min(50vw, 600px) !important;
-  max-height: calc(100dvh - 2rem);
-}
-
-#friend-dock.friend-dock-call-active .friend-call-video {
-  height: min(35dvh, 340px);
-  aspect-ratio: auto !important;
-}
-
-#friend-dock.friend-dock-call-closing {
-  pointer-events: none;
-  animation: friend-call-slide-out .28s ease-in both;
-}
-
-@keyframes call-logo-pulse {
-  0%, 100% { opacity: .28; transform: translateY(.12rem) scale(.92); }
-  50% { opacity: 1; transform: translateY(-.12rem) scale(1.08); }
-}
-
-@keyframes friend-call-slide-out {
-  from { opacity: 1; transform: translateX(0) scale(1); }
-  to { opacity: 0; transform: translateX(2rem) scale(.96); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .call-connecting-logo span,
-  #friend-dock.friend-dock-call-closing { animation: none; }
-}
-
-@media (max-width: 639px) {
-  .tetris-call-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    overflow-y: auto;
-  }
-
-  .tetris-local-boards {
-    grid-template-columns: minmax(0, 1fr) 5.75rem;
-  }
-
-  .tetris-board-stage,
-  .tetris-board-shell {
-    width: auto;
-    height: min(100%, 34rem);
-  }
-
-  #friend-dock.friend-dock-call-active {
-    right: .25rem !important;
-    bottom: .25rem !important;
-    left: auto !important;
-    width: min(50vw, 600px) !important;
-    max-width: calc(100vw - .5rem);
-  }
-
-  #friend-dock.friend-dock-call-active .friend-call-video {
-    height: min(35dvh, 260px);
-  }
-}
