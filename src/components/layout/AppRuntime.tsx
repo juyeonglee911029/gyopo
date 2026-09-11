@@ -285,15 +285,15 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
 
   const resetFloatingRoom = async () => {
     if (!floatingRoom || !isMasterUser(user)) return;
+    const token = getSessionToken();
+    if (!token) return closeFloatingRoom();
     try {
-      const token = getSessionToken();
-      if (!token) return;
-      await mergeDocument('liveRooms', floatingRoom.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
       const [viewers, messages] = await Promise.all([
         queryDocumentsWhere<{ roomId?: string }>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }], token, 200).catch(() => []),
         floatingRoom.sessionId ? queryDocumentsWhere<{ roomId?: string; sessionId?: string }>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }, { field: 'sessionId', op: 'EQUAL', value: floatingRoom.sessionId }], token, 200).catch(() => []) : Promise.resolve([]),
       ]);
-      await Promise.all([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]).catch(() => undefined);
+      await mergeDocument('liveRooms', floatingRoom.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+      await Promise.allSettled([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]);
     } finally {
       closeFloatingRoom();
     }
@@ -303,10 +303,11 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     <>
       <StartupExperience ready={sessionChecked}>{children}</StartupExperience>
       {!sessionChecked && <div className="fixed inset-0 z-[190] cursor-wait bg-[#070b17]" aria-hidden="true" />}
-      {floatingRoom && user && <div className={`global-live-room-window ${floatingMinimized ? 'is-minimized' : ''}`} style={{ transform: `translate(${floatingOffset.x}px, ${floatingOffset.y}px)` }}>
+       {floatingRoom && user && <div className={`global-live-room-window ${floatingMinimized ? 'is-minimized' : ''}`} style={{ transform: `translate(${floatingOffset.x}px, ${floatingOffset.y}px)` }}>
         <header className="global-live-room-header" onPointerDown={startFloatingDrag} onPointerMove={moveFloatingDrag} onPointerUp={stopFloatingDrag} onPointerCancel={stopFloatingDrag}><div className="min-w-0 flex-1 truncate text-left text-xs font-black"><span className="mr-1 text-rose-300">●</span>{floatingRoom.title || 'LIVE ROOM'}</div><div className="flex gap-1"><button type="button" onPointerDown={(event) => event.stopPropagation()} aria-label={floatingMinimized ? '라이브 창 복원' : '라이브 창 최소화'} onClick={() => setFloatingMinimized((value) => !value)} className="live-room-icon-button">{floatingMinimized ? '□' : '−'}</button><button type="button" onPointerDown={(event) => event.stopPropagation()} aria-label={isMasterUser(user) ? 'Master 방 종료 및 초기화' : '라이브 창 닫기'} onClick={() => isMasterUser(user) ? void resetFloatingRoom() : closeFloatingRoom()} className="live-room-icon-button">×</button></div></header>
-        {floatingMinimized ? <div className="global-live-room-mini-video"><LiveRoomPlayer room={floatingRoom} user={user} compact /></div> : <div className="global-live-room-body"><LiveRoomPlayer room={floatingRoom} user={user} /><RoomChatPanel room={floatingRoom} user={user} messages={floatingMessages} message={floatingInput} onMessageChange={setFloatingInput} onSubmit={sendFloatingMessage} /><div className="global-live-room-gift"><div className="text-[10px] font-black text-pink-200">USDT 선물 · 방송인에게</div><div className="mt-1 flex gap-1"><input value={floatingGiftAmount} onChange={(event) => setFloatingGiftAmount(event.target.value)} type="number" min="1" step="1" className="min-w-0 flex-1 bg-white/10 px-2 py-1 text-xs text-white outline-none" /><button type="button" onClick={() => void sendFloatingGift()} className="bg-pink-300 px-2 py-1 text-[10px] font-black text-slate-950">선물</button></div>{floatingGiftMessage && <p className="mt-1 text-[10px] text-emerald-200">{floatingGiftMessage}</p>}</div></div>}
-      </div>}
+         {floatingMinimized ? <div className="global-live-room-mini-video" role="button" tabIndex={0} aria-label="최소화된 LIVE ROOM 열기" onClick={() => setFloatingMinimized(false)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setFloatingMinimized(false); }}><LiveRoomPlayer room={floatingRoom} user={user} compact /></div> : <div className="global-live-room-body"><LiveRoomPlayer room={floatingRoom} user={user} /><RoomChatPanel room={floatingRoom} user={user} messages={floatingMessages} message={floatingInput} onMessageChange={setFloatingInput} onSubmit={sendFloatingMessage} /><div className="global-live-room-gift"><div className="text-[10px] font-black text-pink-200">USDT 선물 · 방송인에게</div><div className="mt-1 flex gap-1"><input value={floatingGiftAmount} onChange={(event) => setFloatingGiftAmount(event.target.value)} type="number" min="1" step="1" className="min-w-0 flex-1 bg-white/10 px-2 py-1 text-xs text-white outline-none" /><button type="button" onClick={() => void sendFloatingGift()} className="bg-pink-300 px-2 py-1 text-[10px] font-black text-slate-950">선물</button></div>{floatingGiftMessage && <p className="mt-1 text-[10px] text-emerald-200">{floatingGiftMessage}</p>}</div></div>}
+       </div>}
+       {floatingRoom && floatingMinimized && <button type="button" className="global-live-room-restore" onClick={() => setFloatingMinimized(false)} aria-label="최소화된 LIVE ROOM 열기">LIVE ROOM</button>}
       <dialog ref={dialogRef} onCancel={(event) => event.preventDefault()} className={`m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] p-0 text-white shadow-2xl backdrop:bg-[#050812]/90 ${!sessionChecked ? 'session-loading-dialog' : ''}`}>
         {!sessionChecked ? (
           <div className="app-session-loading" role="status" aria-label="GYOPO 로딩 중">
@@ -380,3 +381,4 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     </>
   );
 }
+
