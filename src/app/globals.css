@@ -754,6 +754,18 @@ button[class*="text-red"], button[class*="text-rose"] { display: inline-flex !im
     font-weight: inherit !important;
   }
 
+  .portal-text-rail .portal-text-link,
+  .portal-text-rail .portal-text-link-button,
+  .portal-text-rail .portal-friends-link {
+    min-width: 4.4rem !important;
+    padding: .3rem .35rem !important;
+    font-size: .58rem !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+  }
+
+  .portal-text-rail .portal-friends-link { min-width: 5.7rem !important; }
+
   .portal-frame > main > .news-page > header,
   .portal-frame > main > .directory-page > div > header,
   .portal-frame > main > .jobs-page > div > header,
@@ -1222,6 +1234,12 @@ html[data-theme="light"] .portal-chrome > header {
 .live-broadcast-chat-overlay div { display: flex; align-items: baseline; gap: .45rem; width: fit-content; max-width: 92%; background: rgba(2, 6, 23, .42); padding: .35rem .5rem; color: #f8fafc; font-size: .7rem; line-height: 1.35; text-shadow: 0 1px 8px rgba(0, 0, 0, .75); backdrop-filter: blur(8px); }
 .live-broadcast-chat-overlay b { color: #fda4af; font-size: .64rem; }
 .live-broadcast-chat-overlay span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-broadcast-chat-composer { position: absolute; right: .85rem; bottom: .85rem; left: .85rem; z-index: 5; display: flex; gap: .35rem; }
+.live-broadcast-chat-composer .live-room-input { background: rgba(2, 6, 23, .7); backdrop-filter: blur(8px); }
+.live-broadcast-chat-composer .live-room-send { width: 2rem; }
+.live-studio-settings .live-studio-tab:first-child,
+.live-studio-settings .live-studio-chat { display: none; }
+.profile-edit-panel { border: 0 !important; border-radius: 0 !important; background: rgba(8, 16, 31, .86) !important; box-shadow: none !important; backdrop-filter: blur(20px); }
 .live-indicator { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid rgba(148, 163, 184, .2); padding: .4rem .55rem; color: #94a3b8; font-size: .62rem; font-weight: 900; letter-spacing: .14em; }
 .live-indicator span { height: .45rem; width: .45rem; background: #64748b; }
 .live-indicator.is-live { border-color: rgba(251, 113, 133, .55); color: #fecdd3; }
@@ -1244,6 +1262,8 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
   .live-room-window .live-room-player { min-height: calc((100vw - 1.5rem) * .5625); }
   .live-room-window .live-room-chat-panel { min-height: 17rem; }
   .live-room-mini-window { right: .6rem; bottom: .6rem; width: min(88vw, 22rem); }
+  .live-broadcast-chat-overlay { right: .55rem; bottom: 3.8rem; left: .55rem; max-height: 48%; }
+  .live-broadcast-chat-composer { right: .55rem; bottom: .55rem; left: .55rem; }
 }
 .assistant-page,
 .assistant-page > div,
