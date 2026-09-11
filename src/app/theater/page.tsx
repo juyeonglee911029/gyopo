@@ -141,6 +141,7 @@ export default function LiveRoomPage() {
   const [roomError, setRoomError] = useState('');
   const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const resetLiveRoomRef = useRef<(room: LiveRoom) => void>(() => undefined);
 
   const loadRooms = async () => {
     try {
@@ -215,14 +216,15 @@ export default function LiveRoomPage() {
       setRoomError('방 초기화에 실패했습니다. Firebase Rules가 최신인지 확인해주세요.');
     }
   };
+  resetLiveRoomRef.current = (room) => { void resetLiveRoom(room); };
   useEffect(() => {
     const handleMasterTerminate = (event: Event) => {
       const room = (event as CustomEvent<LiveRoom>).detail;
-      if (room?.id) void resetLiveRoom(room);
+      if (room?.id) resetLiveRoomRef.current(room);
     };
     window.addEventListener('gyopo-master-room-terminate', handleMasterTerminate);
     return () => window.removeEventListener('gyopo-master-room-terminate', handleMasterTerminate);
-  }, [user?.id, selectedRoom?.id]);
+  }, []);
   useEffect(() => {
     if (entryRoom?.status !== 'live') return;
     const room = entryRoom;
