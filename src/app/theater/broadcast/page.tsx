@@ -104,6 +104,8 @@ export default function LiveBroadcastPage() {
     if (!token) return false;
     const current = await getDocument<{ hostId?: string | null; status?: 'live' | 'offline'; updatedAt?: string }>('liveRooms', roomRef.current, token).catch(() => null);
     if (!current || current.hostId === user.id || current.status !== 'live') return true;
+    const updatedAt = current.updatedAt ? new Date(current.updatedAt).getTime() : 0;
+    if (Number.isFinite(updatedAt) && Date.now() - updatedAt > 20_000) return true;
     setMessage('이 방은 현재 다른 방송자가 방송 중입니다. 방송이 끝난 뒤 다시 입장해주세요.');
     return false;
   };
