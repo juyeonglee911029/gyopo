@@ -357,7 +357,10 @@ service cloud.firestore {
              && request.resource.data.hostId == null)
            || (request.resource.data.status == 'live'
              && request.resource.data.hostId == request.auth.uid
-             && (resource.data.hostId == request.auth.uid || resource.data.status == 'offline'))
+             && (resource.data.hostId == request.auth.uid
+               || resource.data.status == 'offline'
+               || (resource.data.updatedAt is timestamp
+                 && request.time > resource.data.updatedAt + duration.value(20, 's'))))
          );
          allow delete: if request.auth != null && resource.data.hostId == request.auth.uid;
        }
