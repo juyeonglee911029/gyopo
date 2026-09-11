@@ -775,25 +775,30 @@ export default function GamesPage() {
     const leavingMatchId = matchId;
     const token = getSessionToken();
     if (!token) return;
+    let cleanupError: unknown = null;
     try {
       if (roomNumber) await releaseTetrisLobbyRoom(roomNumber, leavingMatchId, matchRole, token, ['waiting', 'betting', 'holding'].includes(matchPhase)).catch(() => undefined);
       if (matchPhase === 'playing') {
         await updateRoom(matchRole === 'A'
           ? { phase: 'finished', playerAResult: 'lose' }
           : { phase: 'finished', playerBResult: 'lose' });
-      } else if (matchPhase === 'finished') {
-        await deleteDocument('tetrisRooms', leavingMatchId, token).catch(() => undefined);
       } else {
         if (stakeReserved) await refundGameStake(currentUserId, leavingMatchId, token);
-        await deleteDocument('tetrisRooms', leavingMatchId, token);
+        await mergeDocument('tetrisRooms', leavingMatchId, {
+          phase: 'finished',
+          canceledBy: currentUserId,
+          updatedAt: new Date(),
+        }, token).catch(() => undefined);
       }
       if (sentInviteId) await mergeDocument('tetrisInvites', sentInviteId, { status: 'rejected', updatedAt: new Date() }, token).catch(() => undefined);
-      resetBattleRoom('대전방을 나갔습니다.');
+    } catch (error) {
+      cleanupError = error;
+    }
+    resetBattleRoom(cleanupError ? '대전방에서 나왔습니다. 서버 정리가 완료되지 않았습니다.' : '대전방을 나갔습니다.');
+    try {
       const refreshed = await refreshStoredUser().catch(() => null);
       if (refreshed) setUser(refreshed);
-    } catch (error) {
-      setMatchStatus(error instanceof Error ? error.message : '대전방을 나가지 못했습니다.');
-    }
+    } catch { /* Local room state is already reset. */ }
   };
 
   const sendInvite = async (online: OnlineUser) => {
