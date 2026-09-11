@@ -4,6 +4,19 @@ service cloud.firestore {
     function isMaster() {
       return request.auth != null && request.auth.token.email == 'juyeonglee911029@gmail.com';
     }
+    function isAdultUser(userId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/profiles/$(userId))
+        && get(/databases/$(database)/documents/profiles/$(userId)).data.age is int
+        && get(/databases/$(database)/documents/profiles/$(userId)).data.age >= 18;
+    }
+    function isAccountAllowed(userId) {
+      return !exists(/databases/$(database)/documents/accountModeration/$(userId))
+        || get(/databases/$(database)/documents/accountModeration/$(userId)).data.status == 'active'
+        || (get(/databases/$(database)/documents/accountModeration/$(userId)).data.status == 'suspended'
+          && get(/databases/$(database)/documents/accountModeration/$(userId)).data.until is timestamp
+          && request.time >= get(/databases/$(database)/documents/accountModeration/$(userId)).data.until);
+    }
     function hasValidGender(data) {
       return data.keys().hasAny(['gender']) && (data.gender == 'male' || data.gender == 'female');
     }
@@ -224,14 +237,34 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if request.auth != null && resource.data.expiresAt != null && request.time >= resource.data.expiresAt;
     }
-    match /webrtcChatMessages/{messageId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
-      allow update: if false;
-      allow delete: if request.auth != null && resource.data.expiresAt != null
-        && (request.time >= resource.data.expiresAt
-          || get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.status == 'ended');
-    }
+     match /webrtcChatMessages/{messageId} {
+       allow read: if request.auth != null
+         && exists(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId))
+         && (get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.callerId == request.auth.uid
+           || get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.calleeId == request.auth.uid);
+       allow create: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && isAccountAllowed(request.auth.uid)
+         && request.resource.data.keys().hasOnly(['callId', 'authorId', 'user', 'text', 'createdAt', 'expiresAt'])
+         && request.resource.data.authorId == request.auth.uid
+         && request.resource.data.callId is string
+         && request.resource.data.text is string
+         && request.resource.data.text.size() > 0
+         && request.resource.data.text.size() <= 500
+         && request.resource.data.text.matches('[\\s\\S]*\\S[\\s\\S]*')
+         && !request.resource.data.text.matches('(?i).*(https?://|www\\.|카카오톡|카톡|telegram|whatsapp|discord|디스코드|주소|우편번호|연락처|아이디).*')
+         && !request.resource.data.text.matches('.*(01[016789][- .]?[0-9]{3,4}[- .]?[0-9]{4}).*')
+         && exists(/databases/$(database)/documents/webrtcCalls/$(request.resource.data.callId))
+         && (get(/databases/$(database)/documents/webrtcCalls/$(request.resource.data.callId)).data.callerId == request.auth.uid
+           || get(/databases/$(database)/documents/webrtcCalls/$(request.resource.data.callId)).data.calleeId == request.auth.uid);
+       allow update: if false;
+       allow delete: if request.auth != null
+         && (isMaster()
+           || resource.data.authorId == request.auth.uid
+           || (resource.data.expiresAt is timestamp && request.time >= resource.data.expiresAt)
+           || (exists(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId))
+             && get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.status == 'ended'));
+     }
      match /depositRequests/{requestId} {
        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
        allow create: if request.auth != null && (
@@ -339,14 +372,98 @@ service cloud.firestore {
         && presenceMatchesPrivate(request.resource.data);
       allow delete: if false;
     }
-    match /webrtcQueue/{userId} {
-      allow read, create, update, delete: if request.auth != null;
-    }
-    match /webrtcCalls/{callId} {
-      allow read, create, update, delete: if request.auth != null;
-    }
-     match /webrtcCandidates/{candidateId} {
-       allow read, create, update, delete: if request.auth != null;
+     match /userBlocks/{blockId} {
+       allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+       allow create: if request.auth != null
+         && request.resource.data.keys().hasOnly(['ownerId', 'blockedUserId', 'blockedName', 'callId', 'createdAt'])
+         && request.resource.data.ownerId == request.auth.uid
+         && request.resource.data.blockedUserId is string
+         && request.resource.data.blockedUserId != request.auth.uid
+         && request.resource.data.blockedName is string
+         && request.resource.data.blockedName.size() <= 80
+         && request.resource.data.createdAt is timestamp;
+       allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+       allow update: if false;
+     }
+     match /safetyReports/{reportId} {
+       allow read: if request.auth != null && (resource.data.reporterId == request.auth.uid || isMaster());
+       allow create: if request.auth != null
+         && request.resource.data.keys().hasOnly(['reporterId', 'reportedUserId', 'callId', 'category', 'details', 'createdAt', 'status'])
+         && request.resource.data.reporterId == request.auth.uid
+         && request.resource.data.reportedUserId is string
+         && request.resource.data.reportedUserId != request.auth.uid
+         && request.resource.data.category in ['sexual_content', 'minor_safety', 'harassment', 'privacy', 'spam', 'other']
+         && request.resource.data.details is string
+         && request.resource.data.details.size() <= 500
+         && request.resource.data.createdAt is timestamp
+         && request.resource.data.status == 'open';
+       allow update: if isMaster();
+       allow delete: if false;
+     }
+     match /accountModeration/{userId} {
+       allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
+       allow write: if isMaster();
+     }
+     match /safetyAuditLogs/{logId} {
+       allow read: if isMaster();
+       allow create: if request.auth != null
+         && request.resource.data.keys().hasOnly(['actorId', 'action', 'targetUserId', 'callId', 'metadata', 'createdAt'])
+         && request.resource.data.actorId == request.auth.uid
+         && request.resource.data.action in ['report', 'block', 'call_start', 'call_end']
+         && request.resource.data.metadata is string
+         && request.resource.data.metadata.size() <= 500
+         && request.resource.data.createdAt is timestamp;
+       allow update, delete: if false;
+     }
+     match /webrtcQueue/{userId} {
+       allow read: if request.auth != null && isAdultUser(request.auth.uid) && isAccountAllowed(request.auth.uid);
+       allow create: if request.auth != null
+         && request.auth.uid == userId
+         && isAdultUser(request.auth.uid)
+         && isAccountAllowed(request.auth.uid)
+         && request.resource.data.userId == request.auth.uid
+         && request.resource.data.age is int
+         && request.resource.data.age >= 18;
+       allow update: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && isAccountAllowed(request.auth.uid)
+         && (request.auth.uid == userId
+           || (resource.data.status == 'waiting'
+             && request.resource.data.status == 'matched'
+             && request.resource.data.matchedBy == request.auth.uid));
+       allow delete: if request.auth != null && (request.auth.uid == userId || isMaster());
+     }
+     match /webrtcCalls/{callId} {
+       allow read: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && (resource.data.callerId == request.auth.uid || resource.data.calleeId == request.auth.uid);
+       allow create: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && isAccountAllowed(request.auth.uid)
+         && request.resource.data.callerId == request.auth.uid
+         && request.resource.data.calleeId is string
+         && isAdultUser(request.resource.data.calleeId);
+       allow update: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && (resource.data.callerId == request.auth.uid || resource.data.calleeId == request.auth.uid)
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['callId', 'callerId', 'calleeId', 'offer', 'answer', 'status', 'endedAt']);
+       allow delete: if request.auth != null && (resource.data.callerId == request.auth.uid || resource.data.calleeId == request.auth.uid || isMaster());
+     }
+      match /webrtcCandidates/{candidateId} {
+       allow read: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && exists(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId))
+         && (get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.callerId == request.auth.uid
+           || get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.calleeId == request.auth.uid);
+       allow create: if request.auth != null
+         && isAdultUser(request.auth.uid)
+         && request.resource.data.fromUserId == request.auth.uid
+         && exists(/databases/$(database)/documents/webrtcCalls/$(request.resource.data.callId))
+         && (get(/databases/$(database)/documents/webrtcCalls/$(request.resource.data.callId)).data.callerId == request.auth.uid
+           || get(/databases/$(database)/documents/webrtcCalls/$(request.resource.data.callId)).data.calleeId == request.auth.uid);
+       allow update: if false;
+       allow delete: if request.auth != null
+         && (isMaster() || resource.data.fromUserId == request.auth.uid);
      }
        match /liveRooms/{roomId} {
          allow read: if true;
