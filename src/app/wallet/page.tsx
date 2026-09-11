@@ -311,15 +311,18 @@ export default function WalletPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+     <div className="wallet-page container mx-auto max-w-4xl px-4 py-8">
       <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-8 text-white mb-8 shadow-xl">
         <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
-           <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
-             <Wallet size={32} className="text-green-400"/> 내 지갑 (USDT)
-           </h1>
+            <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
+              <Wallet size={32} className="text-green-400"/> 내 지갑 (USDT)
+            </h1>
+            <Link href="/wallet/history" className="mb-2 inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100 hover:bg-cyan-300/20"><History size={14} /> 전문 거래내역</Link>
+            </div>
             <p className="text-gray-400">UID: {user.id}</p>
-            <button type="button" onClick={() => void connectWallet()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-2 text-sm font-black text-slate-950 hover:bg-emerald-200"><Link2 size={16} />{walletConnected ? 'TronLink 연결됨' : 'TronLink 연결 / 주소 자동 저장'}</button>
+            <button type="button" onClick={() => void connectWallet()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-2 text-sm font-black text-slate-950 hover:bg-emerald-200"><Link2 size={16} />{walletConnected ? 'TronLink 연결됨' : 'TronLink 연결 / 주소 저장'}</button>
         </div>
          <div className="text-right">
              <div className="text-sm text-gray-400 font-bold mb-1">서비스 잔액 (가상)</div>
@@ -327,7 +330,7 @@ export default function WalletPage() {
              <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-left"><div className="text-[10px] font-black uppercase tracking-wider text-emerald-200">실제 TRON 체인 잔고 · USDT TRC20</div><div className="mt-1 text-2xl font-black text-emerald-300">{chainLoading && chainBalance === null ? '조회 중...' : chainAddress ? `${(chainBalance ?? 0).toFixed(6)} USDT` : '지갑 주소 미등록'}</div><div className="mt-1 break-all text-[10px] text-emerald-100/60">{chainError || chainAddress || (chainSyncedAt ? `15초 주기 동기화 · ${new Date(chainSyncedAt).toLocaleTimeString()}` : '동기화 대기')}</div></div>
            </div>
         </div>
-        <p className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-100">서비스 잔액은 사이트 내부 원장이고, 실제 체인 잔액은 TRON 블록체인 조회값입니다. 실제 송금은 TronLink 팝업에서 직접 서명해야 합니다.</p>
+         <p className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-100">서비스 잔액은 사이트 내부 원장이고, 실제 체인 잔액은 TRON 블록체인 조회값입니다. 실제 송금은 TronLink 팝업에서 직접 서명해야 합니다. 사이트는 개인키를 보관하지 않으므로 지갑을 임의로 자동 발급하지 않습니다.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
@@ -428,8 +431,8 @@ export default function WalletPage() {
         <div className="md:col-span-7">
            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col">
               <div className="flex items-center justify-between gap-3 border-b border-gray-100 p-6">
-                <h2 className="text-xl font-black text-gray-800 flex items-center gap-2"><History size={20} className="text-blue-600"/> 영구 거래 원장</h2>
-                <button type="button" onClick={exportLedger} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-200"><Download size={14} />Excel용 CSV</button>
+                 <h2 className="text-xl font-black text-gray-800 flex items-center gap-2"><History size={20} className="text-blue-600"/> 최근 거래 원장</h2>
+                 <div className="flex items-center gap-2"><Link href="/wallet/history" className="rounded-xl bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-700 hover:bg-cyan-100">전체 보기</Link><button type="button" onClick={exportLedger} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-200"><Download size={14} />CSV</button></div>
               </div>
               
               <div className="flex-1 overflow-y-auto p-2">
