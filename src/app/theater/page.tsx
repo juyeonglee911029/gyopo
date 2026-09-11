@@ -16,7 +16,7 @@ const iceServers = [
   { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 
-type LiveRoom = { id: string; roomNumber: number; title?: string; category?: string; hostId?: string | null; hostName?: string | null; hostImage?: string | null; status?: 'offline' | 'live'; viewers?: number; thumbnail?: string | null; sessionId?: string | null; updatedAt?: string };
+export type LiveRoom = { id: string; roomNumber: number; title?: string; category?: string; hostId?: string | null; hostName?: string | null; hostImage?: string | null; status?: 'offline' | 'live'; viewers?: number; thumbnail?: string | null; sessionId?: string | null; updatedAt?: string };
 type LiveMessage = { id: string; roomId: string; sessionId?: string; authorId: string; user: string; text: string; createdAt: string };
 type ViewerSignal = { id: string; roomId: string; sessionId?: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
 
@@ -27,7 +27,7 @@ const waitForIce = (peer: RTCPeerConnection) => new Promise<void>((resolve) => {
   window.setTimeout(() => { peer.removeEventListener('icegatheringstatechange', finish); resolve(); }, 4_000);
 });
 
-function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user: PortalUser | null; compact?: boolean }) {
+export function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user: PortalUser | null; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const viewerIdRef = useRef(`viewer-${user?.id || 'guest'}-${room.id}-${Math.random().toString(36).slice(2)}`);
   const [status, setStatus] = useState('시청 연결 준비 중');
@@ -112,7 +112,7 @@ function LiveRoomCard({ room, user, onOpen, isMaster, onTerminate }: { room: Liv
   return <article className="live-room-card overflow-hidden" onMouseEnter={() => setPreviewing(true)} onMouseLeave={() => setPreviewing(false)}><div className={`live-room-preview ${room.status === 'live' ? 'is-live' : ''}`} style={room.thumbnail ? { backgroundImage: `url(${room.thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><div className="relative z-10 flex items-center justify-between"><span className={`live-room-status ${room.status === 'live' ? 'live' : ''}`}>{room.status === 'live' ? 'LIVE' : 'OFFLINE'}</span><div className="flex items-center gap-1.5"><span className="text-[10px] font-bold text-white/75"><Users size={12} className="mr-1 inline" />{room.viewers || 0}</span>{master && <button type="button" onClick={terminate} aria-label={`${room.title} 강제 종료`} title="Master: 방 종료 및 초기화" className="live-room-master-close"><X size={13} /></button>}</div></div>{room.status === 'live' && previewing && user ? <LiveRoomPlayer room={room} user={user} compact /> : room.thumbnail ? <img src={room.thumbnail} alt={`${room.title || 'LIVE ROOM'} 방송 썸네일`} className="live-room-preview-media" /> : <div className="live-room-preview-fallback"><Camera size={28} className="text-white/65" /><span>웹캠 미리보기</span></div>}</div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="truncate text-sm font-black">{room.title}</h2><p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{room.category} · ROOM {String(room.roomNumber).padStart(2, '0')}</p></div><Heart size={15} className="shrink-0 text-slate-500" /></div><button type="button" onClick={onOpen} className="mt-3 flex w-full items-center justify-center gap-2 bg-rose-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-rose-300"><Eye size={14} /> {room.status === 'live' ? '입장하기' : '방송방 열기'}</button></div></article>;
 }
 
-function RoomChatPanel({ room, user, messages, message, onMessageChange, onSubmit }: { room: LiveRoom; user: PortalUser | null; messages: LiveMessage[]; message: string; onMessageChange: (value: string) => void; onSubmit: (event: React.FormEvent) => void }) {
+export function RoomChatPanel({ room, user, messages, message, onMessageChange, onSubmit }: { room: LiveRoom; user: PortalUser | null; messages: LiveMessage[]; message: string; onMessageChange: (value: string) => void; onSubmit: (event: React.FormEvent) => void }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
   return <div className="live-room-chat-panel"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-rose-300" />{room.title} 채팅</div><span className="text-[10px] font-bold text-slate-500">{room.viewers || 0}명 온라인</span></div><div className="mt-3 h-52 space-y-2 overflow-y-auto rounded-sm bg-black/10 p-2">{messages.length ? messages.map((item) => <div key={item.id} className={`text-xs ${item.authorId === user?.id ? 'live-chat-own' : 'live-chat-other'}`}><b>{item.user}</b> {item.text}</div>) : <p className="py-10 text-center text-xs text-slate-600">아직 메시지가 없습니다.</p>}<div ref={endRef} /></div><form onSubmit={onSubmit} className="mt-3 flex gap-2"><input value={message} onChange={(event) => onMessageChange(event.target.value)} disabled={!user} placeholder={user ? '방송인에게 메시지 보내기' : '로그인 후 채팅할 수 있습니다'} className="live-room-input" /><button type="submit" disabled={!user} aria-label="메시지 보내기" className="live-room-send disabled:cursor-not-allowed disabled:opacity-40"><Send size={14} /></button></form></div>;
@@ -186,10 +186,11 @@ export default function LiveRoomPage() {
       window.location.assign(`/theater/broadcast?room=${encodeURIComponent(room.id)}`);
       return;
     }
+    window.dispatchEvent(new CustomEvent('gyopo-live-room-open', { detail: room }));
     setSelectedRoom(room);
     setRoomOffset({ x: 0, y: 0 });
     setRoomMinimized(false);
-    setRoomOpen(true);
+    setRoomOpen(false);
     setEntryRoom(null);
   };
   const openRoomEntry = (room: LiveRoom) => {
