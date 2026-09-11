@@ -15,8 +15,8 @@ function formatUsdt(value: number, maximumFractionDigits = 6) {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits });
 }
 
-async function hashPin(pin: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+async function hashPin(pin: string, salt = ''): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}:${pin}`));
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -146,7 +146,8 @@ export default function WalletPage() {
       alert('먼저 지갑 보안 PIN을 설정해주세요.');
       return false;
     }
-    return (await hashPin(value)) === user.walletPinHash;
+    const storedHash = user.walletPinSalt ? await hashPin(value, user.walletPinSalt) : await hashPin(value);
+    return storedHash === user.walletPinHash;
   };
 
   const saveWalletPin = async (event: React.FormEvent) => {
@@ -156,7 +157,8 @@ export default function WalletPage() {
       return;
     }
     try {
-      const nextUser = { ...user, walletPinHash: await hashPin(newPin) };
+      const walletPinSalt = crypto.randomUUID();
+      const nextUser = { ...user, walletPinHash: await hashPin(newPin, walletPinSalt), walletPinSalt };
       await saveProfile(nextUser, getSessionToken());
       setUser(nextUser);
       setNewPin('');
