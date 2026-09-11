@@ -111,7 +111,13 @@ export default function LiveBroadcastPage() {
         if (!active || viewerPeersRef.current.has(viewer.id) || !viewer.offer) continue;
         const peer = new RTCPeerConnection({ iceServers });
         viewerPeersRef.current.set(viewer.id, peer);
-        streamRef.current.getTracks().forEach((track) => peer.addTrack(track, streamRef.current as MediaStream));
+        const stream = streamRef.current;
+        if (!stream) {
+          peer.close();
+          viewerPeersRef.current.delete(viewer.id);
+          continue;
+        }
+        stream.getTracks().forEach((track) => peer.addTrack(track, stream));
         peer.onconnectionstatechange = () => {
           if (peer.connectionState === 'failed' || peer.connectionState === 'closed') {
             peer.close();
