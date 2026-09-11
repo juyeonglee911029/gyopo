@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Camera, CircleStop, Grid3X3, ImagePlus, Lightbulb, Mic, MonitorUp, Radio, RotateCcw, Send, Settings2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Camera, CircleStop, Grid3X3, ImagePlus, Lightbulb, MessageCircle, Mic, MonitorUp, Radio, RotateCcw, Send, Settings2, Sparkles } from 'lucide-react';
 import { createDocument, getDocument, getSessionToken, mergeDocument, queryDocumentsWhere, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
