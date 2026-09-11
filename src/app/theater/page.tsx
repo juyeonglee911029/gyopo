@@ -199,7 +199,8 @@ export default function LiveRoomPage() {
     else setEntryRoom(room);
   };
   const resetLiveRoom = async (room: LiveRoom) => {
-    if (!isMasterUser(user)) return;
+    if (!isMasterUser(user)) return setRoomError('Master 권한이 필요한 작업입니다.');
+    setRoomError(`${room.title} 방 초기화 중...`);
     const token = getSessionToken();
     if (!token) return setRoomError('Master 로그인 세션이 만료되었습니다.');
     try {
