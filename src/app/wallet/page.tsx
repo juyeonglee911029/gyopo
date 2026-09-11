@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, isMasterUser, MASTER_DEPOSIT_ADDRESS, queryDocuments, queryDocumentsWhere, saveProfile, USDT_NETWORK, type WalletLedgerEntry } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, isMasterUser, MASTER_DEPOSIT_ADDRESS, queryDocuments, queryDocumentsWhere, saveProfile, sendUserTransfer, USDT_NETWORK, type WalletLedgerEntry } from '@/lib/firebase';
 import { isValidTronAddress, sendUsdtWithTronLink } from '@/lib/tron';
 import { Wallet, Copy, History, Send, AlertCircle, Download, LockKeyhole, ShieldCheck, RefreshCw, Sparkles } from 'lucide-react';
 
@@ -253,10 +253,10 @@ export default function WalletPage() {
     if (!(await verifyPin(requestPin))) return alert('PIN이 올바르지 않습니다.');
     setIsSending(true);
     try {
-      await createDocument('transferRequests', crypto.randomUUID(), { senderId: user.id, recipientId: targetId, amount: val, fee: 9, status: 'PENDING', createdAt: new Date() }, token);
-      await recordLedger({ type: 'INTERNAL_TRANSFER', direction: 'OUT', amount: val, fee: 9, status: 'PENDING', symbol: 'USDT', counterpartyId: targetId, memo: `내부 송금 승인 대기 · ${selectedRecipient?.name || targetId}` });
-      addTransaction({ type: 'P2P_SEND', amount: val, status: 'PENDING', details: `송금 승인 대기 · ${selectedRecipient?.name || targetId}` });
-      alert(`[시스템] ${selectedRecipient?.name || '회원'}에게 ${val} USDT 송금 신청이 접수되었습니다. 운영자 승인 후 잔고에 반영됩니다.`);
+      await sendUserTransfer(user.id, targetId, val, 9, token, { kind: 'P2P', memo: `회원 간 즉시 송금 · ${selectedRecipient?.name || targetId}` });
+      setUser({ ...user, usdtBalance: user.usdtBalance - val - 9 });
+      addTransaction({ type: 'P2P_SEND', amount: val, status: 'COMPLETED', details: `회원 간 즉시 송금 완료 · ${selectedRecipient?.name || targetId}` });
+      alert(`[완료] ${selectedRecipient?.name || '회원'}에게 ${val} USDT를 즉시 보냈습니다. 운영자 승인 없이 회원 권한으로 처리되었습니다.`);
       setAmount('');
       setTargetId('');
       setUserSearch('');
@@ -265,7 +265,7 @@ export default function WalletPage() {
        setSearchMessage('');
        setRequestPin('');
     } catch (error) {
-      alert(error instanceof Error ? `송금 신청 실패: ${error.message.slice(0, 160)}` : '송금 신청에 실패했습니다. 다시 시도해주세요.');
+      alert(error instanceof Error ? `송금 실패: ${error.message.slice(0, 160)}` : '송금에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsSending(false);
     }
@@ -383,7 +383,7 @@ export default function WalletPage() {
                   <div className="space-y-4">
                     <div className="bg-orange-50 text-orange-800 p-3 rounded-xl text-sm mb-4 flex gap-2">
                       <AlertCircle size={16} className="mt-0.5 shrink-0"/> 
-                      <span>유저 간 송금 시 <strong>9 USDT</strong>의 시스템 수수료가 발생합니다.</span>
+                       <span>유저 간 송금은 운영자 승인 없이 즉시 처리됩니다. <strong>9 USDT</strong>의 시스템 수수료가 발생합니다.</span>
                     </div>
                      <label className="block text-sm font-bold text-gray-700">받는 사람 이름 검색</label>
                      <div className="flex gap-2">
@@ -402,7 +402,7 @@ export default function WalletPage() {
                      </div>
                      <label className="block text-sm font-bold text-gray-700">4자리 지갑 PIN</label>
                      <input type="password" inputMode="numeric" maxLength={4} value={requestPin} onChange={(event) => setRequestPin(event.target.value.replace(/\D/g, '').slice(0, 4))} className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 font-bold tracking-[0.4em] focus:ring-2 focus:ring-orange-500 outline-none" placeholder="••••" />
-                     <button onClick={handleP2P} disabled={isSending} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition disabled:opacity-50">{isSending ? '송금 신청 중...' : '송금하기'}</button>
+                      <button onClick={handleP2P} disabled={isSending} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition disabled:opacity-50">{isSending ? '즉시 송금 중...' : '즉시 송금하기'}</button>
                   </div>
                 )}
 
