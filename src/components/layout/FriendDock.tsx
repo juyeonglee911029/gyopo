@@ -48,6 +48,7 @@ export default function FriendDock() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ offsetX: number; offsetY: number; width: number; height: number } | null>(null);
   const callFrameRef = useRef<HTMLIFrameElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const callOperationRef = useRef(0);
   const callBusyRef = useRef(false);
   const closingRef = useRef(false);
@@ -186,6 +187,10 @@ export default function FriendDock() {
   }, [user?.id]);
 
   const selected = friends.find((friend) => friend.id === selectedId) || null;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages.length]);
 
   useEffect(() => {
     setAttachment(null);
@@ -339,7 +344,7 @@ export default function FriendDock() {
 
   return (
     <>
-       <button id="friend-dock-launch" type="button" onClick={() => setOpen(true)} aria-label="친구 채팅 열기" style={{ bottom: '8.25rem', right: '.75rem', transform: 'translateY(-6rem)' }} className="fixed bottom-20 right-3 z-[65] grid h-12 w-12 place-items-center rounded-2xl border border-cyan-200/20 bg-[#10182b] text-cyan-200 shadow-2xl lg:hidden">
+       <button id="friend-dock-launch" type="button" onClick={() => setOpen(true)} aria-label="친구 채팅 열기" style={{ bottom: '8.25rem', right: '.75rem', transform: 'translateY(-3.5rem)' }} className="fixed bottom-20 right-3 z-[65] grid h-12 w-12 place-items-center rounded-2xl border border-cyan-200/20 bg-[#10182b] text-cyan-200 shadow-2xl lg:hidden">
         <UserRoundCheck size={21} />
       </button>
 
@@ -369,7 +374,7 @@ export default function FriendDock() {
               )}
 
                <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[.16em] text-slate-500"><span className="flex items-center gap-1.5"><MessageCircle size={13} /> {isKorean ? '친구 채팅' : 'Friend chat'}</span><span>{isKorean ? '24시간 보관' : 'Stored for 24 hours'}</span></div>
-               <div className="h-32 space-y-1.5 overflow-y-auto bg-black/20 p-2">{messages.length === 0 ? <p className="py-10 text-center text-xs text-slate-600">첫 메시지를 보내보세요.</p> : messages.map((message) => <div key={message.id} className={`max-w-[85%] px-2.5 py-1.5 text-xs ${message.authorId === user.id ? 'ml-auto bg-cyan-300 text-slate-950' : 'bg-white/10 text-slate-200'}`}><b className="block text-[9px] opacity-65">{message.user}</b>{message.attachmentData && (message.attachmentType?.startsWith('image/') ? <a href={message.attachmentData} target="_blank" rel="noreferrer" className="mt-1 block overflow-hidden bg-black/10"><img src={message.attachmentData} alt={message.attachmentName || '첨부 사진'} loading="lazy" className="max-h-28 w-full object-contain" /></a> : <a href={message.attachmentData} download={message.attachmentName} className="mt-1 flex items-center gap-1.5 bg-black/10 px-2 py-1.5 text-[10px] underline"><FileText size={13} /> <span className="truncate">{message.attachmentName || '첨부파일'}</span></a>)}{message.text && <span className="mt-1 block break-words">{message.text}</span>}</div>)}</div>
+                <div className="h-32 space-y-1.5 overflow-y-auto bg-black/20 p-2">{messages.length === 0 ? <p className="py-10 text-center text-xs text-slate-600">첫 메시지를 보내보세요.</p> : messages.map((message) => <div key={message.id} className={`max-w-[85%] px-2.5 py-1.5 text-xs ${message.authorId === user.id ? 'ml-auto bg-emerald-300 text-slate-950' : 'bg-amber-300/15 text-amber-100'}`}><b className="block text-[9px] opacity-65">{message.user}</b>{message.attachmentData && (message.attachmentType?.startsWith('image/') ? <a href={message.attachmentData} target="_blank" rel="noreferrer" className="mt-1 block overflow-hidden bg-black/10"><img src={message.attachmentData} alt={message.attachmentName || '첨부 사진'} loading="lazy" className="max-h-28 w-full object-contain" /></a> : <a href={message.attachmentData} download={message.attachmentName} className="mt-1 flex items-center gap-1.5 bg-black/10 px-2 py-1.5 text-[10px] underline"><FileText size={13} /> <span className="truncate">{message.attachmentName || '첨부파일'}</span></a>)}{message.text && <span className="mt-1 block break-words">{message.text}</span>}</div>)}<div ref={messagesEndRef} /></div>
                {error && <p role="alert" className="mt-2 text-xs font-bold text-rose-300">{error}</p>}
                <form onSubmit={sendMessage} className="mt-2 space-y-2">
                  {attachment && <div className="flex items-center gap-2 bg-white/[.08] px-2 py-1.5 text-[10px] text-slate-200"><span className="grid h-7 w-7 shrink-0 place-items-center bg-black/20">{attachment.type.startsWith('image/') ? <img src={attachment.data} alt="첨부 미리보기" className="h-full w-full object-cover" /> : <FileText size={14} />}</span><span className="min-w-0 flex-1 truncate">{attachment.name}</span><button type="button" onClick={() => setAttachment(null)} aria-label="첨부파일 취소" className="p-1 text-slate-400 hover:text-white"><X size={13} /></button></div>}
