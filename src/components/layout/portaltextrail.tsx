@@ -17,7 +17,7 @@ const links = [
   ['/games', '테트리스', 'Tetris'],
   ['/webrtc', '화상채팅', 'Video'],
   ['/music', 'MUSIC VIDEO', 'MUSIC VIDEO'],
-  ['/watch', '빈 화면', 'Watch'],
+  ['/watch', '📺 Watch', '📺 Watch'],
   ['/theater', '극장', 'Theater'],
   ['/assistant', 'AI 검색', 'AI Search'],
 ] as const;
@@ -31,12 +31,13 @@ export default function PortalTextRail() {
       <div className="portal-rail-card">
         <div className="portal-text-rail-label">EXPLORE / LIVE</div>
         <nav className="portal-text-rail-nav">
-          {links.map(([href, label, english]) => {
-            const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
-             if (href === '/assistant') return <button key={href} type="button" onClick={(event) => { const phase = handleNavigationClick(event, href, '/assistant'); if (phase !== 'blank') window.dispatchEvent(new CustomEvent('gyopo-assistant-open')); }} className="portal-text-link portal-text-link-button">{language === 'ko' ? label : english}</button>;
-             return <Link key={href} href={href} onClick={(event) => handleNavigationClick(event, href, pathname)} className={active ? 'portal-text-link portal-text-link-active' : 'portal-text-link'}>{language === 'ko' ? label : english}</Link>;
-          })}
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button portal-friends-link" style={{ fontSize: '.58rem', fontWeight: 400 }}><span>{language === 'ko' ? '친구 채팅·통화' : 'Friends Chat / Call'}</span></button>
+             {links.map(([href, label, english]) => {
+               const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+               const linkClass = ['portal-text-link', active ? 'portal-text-link-active' : '', href === '/' ? 'portal-text-link-home' : '', href === '/music' ? 'portal-text-link-music' : ''].filter(Boolean).join(' ');
+              if (href === '/assistant') return <button key={href} type="button" onClick={(event) => { const phase = handleNavigationClick(event, href, '/assistant'); if (phase !== 'blank') window.dispatchEvent(new CustomEvent('gyopo-assistant-open')); }} className={`${linkClass} portal-text-link-button`}>{language === 'ko' ? label : english}</button>;
+              return <Link key={href} href={href} onClick={(event) => handleNavigationClick(event, href, pathname)} className={linkClass}>{language === 'ko' ? label : english}</Link>;
+            })}
+           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button portal-friends-link"><span>{language === 'ko' ? '친구 채팅·통화' : 'Friends Chat / Call'}</span></button>
         </nav>
       </div>
     </aside>
