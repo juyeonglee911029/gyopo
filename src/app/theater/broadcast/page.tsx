@@ -48,11 +48,38 @@ export default function LiveBroadcastPage() {
     setRoomId(nextRoom);
   }, []);
 
-  const publishRoom = async (status: 'live' | 'offline') => {
+  const captureThumbnail = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return undefined;
+    const width = 640;
+    canvas.width = width;
+    canvas.height = Math.round(width * video.videoHeight / video.videoWidth);
+    const context = canvas.getContext('2d');
+    if (!context) return undefined;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.72);
+  };
+
+  const publishRoom = async (status: 'live' | 'offline', thumbnail?: string, resetViewers = false) => {
     if (!user) return;
     const token = getSessionToken();
     if (!token) return;
-    await mergeDocument('liveRooms', roomRef.current, { roomNumber: Number(roomRef.current.match(/\d+$/)?.[0] || 1), title: `LIVE ROOM ${roomRef.current.match(/\d+$/)?.[0] || '01'}`, category: '교민 라이브', hostId: user.id, hostName: user.name, hostImage: user.image, status, viewers: 0, updatedAt: new Date(), quality }, token).catch(() => undefined);
+    const roomData = {
+      roomNumber: Number(roomRef.current.match(/\d+$/)?.[0] || 1),
+      title: `LIVE ROOM ${roomRef.current.match(/\d+$/)?.[0] || '01'}`,
+      category: '교민 라이브',
+      hostId: user.id,
+      hostName: user.name,
+      hostImage: user.image,
+      status,
+      updatedAt: new Date(),
+      quality,
+      ...(thumbnail !== undefined ? { thumbnail } : {}),
+      ...(resetViewers || status === 'offline' ? { viewers: 0 } : {}),
+      ...(status === 'offline' ? { thumbnail: null } : {}),
+    };
+    await mergeDocument('liveRooms', roomRef.current, roomData, token).catch(() => undefined);
   };
 
   const startCamera = async () => {
@@ -131,7 +158,8 @@ export default function LiveBroadcastPage() {
     if (!streamRef.current) return;
     setLive(true);
     setEndingIn(null);
-    await publishRoom('live');
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    await publishRoom('live', captureThumbnail(), true);
     setMessage('LIVE 방송 중 · 설정값은 송출 미리보기에 적용됩니다.');
   };
 
@@ -157,7 +185,7 @@ export default function LiveBroadcastPage() {
 
   useEffect(() => {
     if (!live) return;
-    const timer = window.setInterval(() => void publishRoom('live'), 5_000);
+    const timer = window.setInterval(() => void publishRoom('live', captureThumbnail()), 5_000);
     return () => window.clearInterval(timer);
   }, [live, quality, user?.id]);
 
@@ -167,8 +195,11 @@ export default function LiveBroadcastPage() {
     if (!token) return;
     let active = true;
     const acceptViewers = async () => {
-      const rows = await queryDocumentsWhere<ViewerSignal>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: roomRef.current }, { field: 'status', op: 'EQUAL', value: 'offer' }], token, 20).catch(() => []);
-      for (const viewer of rows) {
+      const rows = await queryDocumentsWhere<ViewerSignal>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: roomRef.current }], token, 50).catch(() => []);
+      const now = Date.now();
+      const activeViewers = rows.filter((viewer) => viewer.status !== 'ended' && viewer.updatedAt && now - new Date(viewer.updatedAt).getTime() < 15_000);
+      await mergeDocument('liveRooms', roomRef.current, { viewers: activeViewers.length }, token).catch(() => undefined);
+      for (const viewer of rows.filter((item) => item.status === 'offer')) {
         if (!active || viewerPeersRef.current.has(viewer.id) || !viewer.offer) continue;
         const peer = new RTCPeerConnection({ iceServers });
         viewerPeersRef.current.set(viewer.id, peer);
