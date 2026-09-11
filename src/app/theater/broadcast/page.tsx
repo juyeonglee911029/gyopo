@@ -2,13 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Camera, CircleStop, Grid3X3, ImagePlus, Lightbulb, Mic, MonitorUp, Radio, RotateCcw, Settings2, Sparkles } from 'lucide-react';
-import { getSessionToken, mergeDocument, queryDocumentsWhere, type PortalUser } from '@/lib/firebase';
+import { getDocument, getSessionToken, mergeDocument, queryDocumentsWhere, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type FilterState = { brightness: number; contrast: number; saturation: number; softness: number; beauty: number };
 type ViewerSignal = { id: string; roomId: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
+type LiveMessage = { id: string; roomId: string; authorId: string; user: string; text: string; createdAt: string };
 const defaultFilters: FilterState = { brightness: 100, contrast: 100, saturation: 100, softness: 0, beauty: 0 };
-const iceServers = [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }];
+const iceServers = [
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+];
 
 const waitForIce = (peer: RTCPeerConnection) => new Promise<void>((resolve) => {
   if (peer.iceGatheringState === 'complete') return resolve();
@@ -37,10 +44,11 @@ export default function LiveBroadcastPage() {
   const [live, setLive] = useState(false);
   const [endingIn, setEndingIn] = useState<number | null>(null);
   const [message, setMessage] = useState('카메라를 켜고 방송 설정을 확인하세요.');
-  const [quality, setQuality] = useState('720p');
+  const [quality, setQuality] = useState('1080p');
   const [micOn, setMicOn] = useState(true);
   const [screenSharing, setScreenSharing] = useState(false);
   const [uploadedThumbnail, setUploadedThumbnail] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<LiveMessage[]>([]);
 
   useEffect(() => {
     const nextRoom = new URLSearchParams(window.location.search).get('room') || 'live-room-01';
@@ -74,14 +82,34 @@ export default function LiveBroadcastPage() {
     await Promise.all([...viewerPeersRef.current.values()].map(async (peer) => {
       const sender = peer.getSenders().find((item) => item.track?.kind === track.kind);
       await sender?.replaceTrack(track);
+      if (track.kind === 'video' && sender) {
+        const parameters = sender.getParameters();
+        parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
+        parameters.encodings[0].maxBitrate = 3_000_000;
+        parameters.encodings[0].maxFramerate = 30;
+        parameters.degradationPreference = 'maintain-resolution';
+        await sender.setParameters(parameters).catch(() => undefined);
+      }
     }));
+  };
+
+  const checkRoomAvailability = async () => {
+    if (!user) return false;
+    const token = getSessionToken();
+    if (!token) return false;
+    const current = await getDocument<{ hostId?: string; status?: 'live' | 'offline'; updatedAt?: string }>('liveRooms', roomRef.current, token).catch(() => null);
+    if (!current || current.hostId === user.id || current.status !== 'live') return true;
+    const updatedAt = current.updatedAt ? new Date(current.updatedAt).getTime() : 0;
+    if (Number.isFinite(updatedAt) && Date.now() - updatedAt > 20_000) return true;
+    setMessage('이 방은 현재 다른 방송자가 방송 중입니다. 방송이 끝난 뒤 다시 입장해주세요.');
+    return false;
   };
 
   const startCamera = async () => {
     if (!navigator.mediaDevices?.getUserMedia) return setMessage('이 브라우저는 카메라를 지원하지 않습니다.');
     try {
       const previousCamera = cameraStreamRef.current;
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: quality === '1080p' ? 1920 : 1280, height: quality === '1080p' ? 1080 : 720 }, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: quality === '1080p' ? 1920 : quality === '480p' ? 854 : 1280, max: quality === '1080p' ? 1920 : quality === '480p' ? 854 : 1280 }, height: { ideal: quality === '1080p' ? 1080 : quality === '480p' ? 480 : 720, max: quality === '1080p' ? 1080 : quality === '480p' ? 480 : 720 }, frameRate: { ideal: 30, max: 30 } }, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       previousCamera?.getTracks().forEach((track) => track.stop());
       stream.getAudioTracks().forEach((track) => { track.enabled = micOn; });
       stream.getVideoTracks().forEach((track) => { track.onended = () => setMessage('카메라가 꺼졌습니다. 카메라 다시 켜기를 눌러 재연결하세요.'); });
@@ -156,6 +184,7 @@ export default function LiveBroadcastPage() {
 
   const startBroadcast = async () => {
     if (!user) return setMessage('방송하려면 먼저 로그인해주세요.');
+    if (!(await checkRoomAvailability())) return;
     if (!streamRef.current) await startCamera();
     if (!streamRef.current) return;
     setLive(true);
@@ -192,6 +221,42 @@ export default function LiveBroadcastPage() {
   }, [live, quality, user?.id, uploadedThumbnail]);
 
   useEffect(() => {
+    const loadChat = async () => {
+      const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: roomId }], getSessionToken(), 40).catch(() => []);
+      setChatMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-6));
+    };
+    void loadChat();
+    const timer = window.setInterval(() => void loadChat(), 1_000);
+    return () => window.clearInterval(timer);
+  }, [roomId]);
+
+  useEffect(() => {
+    const preview = document.querySelector('.live-studio-preview .relative');
+    if (!preview) return;
+    let overlay = preview.querySelector<HTMLDivElement>('.live-broadcast-chat-overlay');
+    if (!live || chatMessages.length === 0) {
+      overlay?.remove();
+      return;
+    }
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'live-broadcast-chat-overlay';
+      overlay.setAttribute('aria-live', 'polite');
+      preview.appendChild(overlay);
+    }
+    overlay.replaceChildren(...chatMessages.map((item) => {
+      const row = document.createElement('div');
+      const author = document.createElement('b');
+      const text = document.createElement('span');
+      author.textContent = item.user;
+      text.textContent = item.text;
+      row.append(author, text);
+      return row;
+    }));
+    return () => overlay?.remove();
+  }, [chatMessages, live]);
+
+  useEffect(() => {
     if (!live || !user || !streamRef.current) return;
     const token = getSessionToken();
     if (!token) return;
@@ -213,7 +278,18 @@ export default function LiveBroadcastPage() {
         viewerPeersRef.current.set(viewer.id, peer);
         const stream = streamRef.current;
         if (!stream) { peer.close(); viewerPeersRef.current.delete(viewer.id); continue; }
-        stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+        stream.getTracks().forEach((track) => {
+          track.contentHint = track.kind === 'video' ? 'motion' : '';
+          peer.addTrack(track, stream);
+        });
+        await Promise.all(peer.getSenders().filter((sender) => sender.track?.kind === 'video').map(async (sender) => {
+          const parameters = sender.getParameters();
+          parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
+          parameters.encodings[0].maxBitrate = 3_000_000;
+          parameters.encodings[0].maxFramerate = 30;
+          parameters.degradationPreference = 'maintain-resolution';
+          await sender.setParameters(parameters).catch(() => undefined);
+        }));
         peer.onconnectionstatechange = () => { if (peer.connectionState === 'failed' || peer.connectionState === 'closed') { peer.close(); viewerPeersRef.current.delete(viewer.id); viewerOffersRef.current.delete(viewer.id); } };
         try {
           await peer.setRemoteDescription(JSON.parse(viewer.offer) as RTCSessionDescriptionInit);
