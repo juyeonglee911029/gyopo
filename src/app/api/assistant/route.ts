@@ -15,9 +15,10 @@ export async function POST(request: Request) {
   if (!messages.length) return Response.json({ error: '질문을 입력해주세요.' }, { status: 400 });
 
   const geminiKey = process.env.GEMINI_API_KEY;
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openAiKey = process.env.OPENAI_API_KEY;
-  if (!geminiKey && !anthropicKey && !openAiKey) {
+  if (!geminiKey && !deepseekKey && !anthropicKey && !openAiKey) {
     return Response.json({ error: 'AI 답변 서비스가 아직 연결되지 않았습니다. 관리자에게 AI API 키 설정을 요청해주세요.' }, { status: 503 });
   }
 
@@ -37,6 +38,18 @@ export async function POST(request: Request) {
       if (!response.ok) throw new Error(data.error?.message || 'AI 서비스가 응답하지 않았습니다.');
       const answer = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim();
       return Response.json({ answer: answer || '답변을 만들지 못했습니다.' });
+    }
+
+    if (deepseekKey) {
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Authorization: `Bearer ${deepseekKey}` },
+        body: JSON.stringify({ model: 'deepseek-chat', temperature: 0.25, max_tokens: 1800, messages: [{ role: 'system', content: systemPrompt }, ...messages] }),
+      });
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
+      if (response.status === 401) throw new Error('DeepSeek API 키가 유효하지 않습니다. Cloudflare 환경변수를 확인해주세요.');
+      if (!response.ok) throw new Error(data.error?.message || 'DeepSeek AI 서비스가 응답하지 않았습니다.');
+      return Response.json({ answer: data.choices?.[0]?.message?.content?.trim() || '답변을 만들지 못했습니다.' });
     }
 
     if (anthropicKey) {
