@@ -1,4 +1,4 @@
-AppRuntime.tsx'use client';
+AppRuntime.tsx  AppRuntime.tsx'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { completeProfileOnboarding, createDocument, deleteDocument, getSessionToken, getStoredSession, hasCompletedProfile, isMasterUser, mergeDocument, queryDocumentsWhere, recordVisit, refreshStoredUser, saveProfile, sendUserTransfer, USDT_NETWORK, type Gender } from '@/lib/firebase';
