@@ -22,22 +22,23 @@ const waitForIce = (peer: RTCPeerConnection) => new Promise<void>((resolve) => {
 
 function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user: PortalUser | null; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const viewerIdRef = useRef(`viewer-${user?.id || 'guest'}-${room.id}`);
+  const viewerIdRef = useRef(`viewer-${user?.id || 'guest'}-${room.id}-${Math.random().toString(36).slice(2)}`);
   const [status, setStatus] = useState('시청 연결 준비 중');
+  const [needsPlay, setNeedsPlay] = useState(false);
 
   useEffect(() => {
     if (!user || room.status !== 'live' || !room.hostId) return;
     const token = getSessionToken();
     if (!token) return;
     let active = true;
-    viewerIdRef.current = `viewer-${user.id}-${room.id}`;
+    viewerIdRef.current = `viewer-${user.id}-${room.id}-${Math.random().toString(36).slice(2)}`;
     const peer = new RTCPeerConnection({ iceServers });
     peer.addTransceiver('video', { direction: 'recvonly' });
     peer.addTransceiver('audio', { direction: 'recvonly' });
     peer.ontrack = (event) => {
       if (!videoRef.current || !event.streams[0]) return;
       videoRef.current.srcObject = event.streams[0];
-      void videoRef.current.play().catch(() => undefined);
+      void videoRef.current.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
       setStatus('LIVE 수신 중');
     };
     peer.onconnectionstatechange = () => {
@@ -45,7 +46,7 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
       if (peer.connectionState === 'connected') setStatus('방송 연결 완료');
       if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') setStatus('재연결 중');
     };
-    const touchPresence = (nextStatus: ViewerSignal['status']) => mergeDocument('liveRoomViewers', viewerIdRef.current, { status: nextStatus, updatedAt: new Date() }, token).catch(() => undefined);
+    const touchPresence = (nextStatus: ViewerSignal['status']) => mergeDocument('liveRoomViewers', viewerIdRef.current, { roomId: room.id, viewerId: user.id, hostId: room.hostId, status: nextStatus, updatedAt: new Date() }, token).catch(() => undefined);
     const signal = async () => {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
@@ -74,7 +75,8 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
   }, [room.id, room.hostId, room.status, user?.id]);
 
   if (!user) return <div className={`live-room-player live-room-player-empty ${compact ? 'live-room-player-compact' : ''}`}>로그인 후 방송을 시청할 수 있습니다.</div>;
-  return <div className={`live-room-player ${compact ? 'live-room-player-compact' : ''}`}><video ref={videoRef} autoPlay playsInline muted={compact} className="h-full w-full object-cover" /><div className="live-room-player-status"><span />{status}</div></div>;
+  if (room.status !== 'live' || !room.hostId) return <div className={`live-room-player live-room-player-empty ${compact ? 'live-room-player-compact' : ''}`}>방송 상태를 확인하는 중입니다.<br />방송이 시작되면 자동으로 연결됩니다.</div>;
+  return <div className={`live-room-player ${compact ? 'live-room-player-compact' : ''}`}><video ref={videoRef} autoPlay playsInline muted={compact} controls={!compact} className="h-full w-full object-cover" />{needsPlay && <button type="button" onClick={() => void videoRef.current?.play().then(() => setNeedsPlay(false))} className="live-room-play-button">영상 재생</button>}<div className="live-room-player-status"><span />{status}</div></div>;
 }
 
 function LiveRoomCard({ room, user, onOpen }: { room: LiveRoom; user: PortalUser | null; onOpen: () => void }) {
@@ -104,19 +106,26 @@ export default function LiveRoomPage() {
   const [helperAmount, setHelperAmount] = useState('5');
   const [helperText, setHelperText] = useState('방송 세팅과 채팅을 도와주세요.');
   const [helperMessage, setHelperMessage] = useState('');
+  const [roomError, setRoomError] = useState('');
   const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
 
   const loadRooms = async () => {
-    const rows = await listDocuments<Omit<LiveRoom, 'id'>>('liveRooms', getSessionToken()).catch(() => []);
-    const now = Date.now();
-    const nextRooms = fallbackRooms.map((room) => {
-      const remote = rows.find((row) => row.id === room.id);
-      const lastSeen = remote?.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
-      return { ...room, ...remote, status: remote?.status === 'live' && now - lastSeen < 15_000 ? 'live' : 'offline' };
-    });
-    setRooms(nextRooms);
-    setSelectedRoom((current) => current ? nextRooms.find((room) => room.id === current.id) || current : current);
+    try {
+      const rows = await listDocuments<Omit<LiveRoom, 'id'>>('liveRooms', getSessionToken());
+      const now = Date.now();
+      const nextRooms = fallbackRooms.map((room) => {
+        const remote = rows.find((row) => row.id === room.id);
+        const lastSeen = remote?.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+        const fresh = remote?.status === 'live' && (Number.isNaN(lastSeen) || now - lastSeen < 20_000);
+        return { ...room, ...remote, status: fresh ? 'live' : 'offline' };
+      });
+      setRooms(nextRooms);
+      setSelectedRoom((current) => current ? nextRooms.find((room) => room.id === current.id) || current : current);
+      setRoomError('');
+    } catch {
+      setRoomError('라이브 상태 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    }
   };
 
   useEffect(() => { void loadRooms(); const timer = window.setInterval(() => void loadRooms(), 1_500); return () => window.clearInterval(timer); }, []);
@@ -164,8 +173,11 @@ export default function LiveRoomPage() {
     const amount = Number(giftAmount);
     const token = getSessionToken();
     if (!token || !Number.isFinite(amount) || amount <= 0) return setGiftMessage('올바른 USDT 금액을 입력해주세요.');
+    if (amount > user.usdtBalance) return setGiftMessage('현재 USDT 잔고보다 큰 금액은 선물할 수 없습니다.');
     try {
-      await createDocument('transferRequests', crypto.randomUUID(), { senderId: user.id, recipientId: selectedRoom.hostId, amount, fee: 0, status: 'PENDING', kind: 'LIVE_GIFT', roomId: selectedRoom.id, memo: `${selectedRoom.title} 방송 USDT 선물`, createdAt: new Date() }, token);
+      const requestId = crypto.randomUUID();
+      await createDocument('transferRequests', requestId, { senderId: user.id, senderName: user.name, recipientId: selectedRoom.hostId, amount, fee: 0, status: 'PENDING', kind: 'LIVE_GIFT', roomId: selectedRoom.id, memo: `${selectedRoom.title} 방송 USDT 선물`, createdAt: new Date() }, token);
+      await createDocument('walletLedger', `gift-${requestId}`, { userId: user.id, type: 'INTERNAL_TRANSFER', direction: 'OUT', amount, fee: 0, status: 'PENDING', symbol: 'USDT', counterpartyId: selectedRoom.hostId, requestId, memo: `${selectedRoom.title} 방송 선물 승인 대기`, createdAt: new Date() }, token);
       setGiftMessage(`${amount} USDT 선물 요청을 보냈습니다. 운영자 승인 후 방송자 잔고에 반영됩니다.`);
     } catch { setGiftMessage('선물 요청을 저장하지 못했습니다. Firebase 권한을 확인해주세요.'); }
   };
