@@ -1163,6 +1163,12 @@ html[data-theme="light"] .portal-chrome > header {
   border: 0 !important;
   background: transparent !important;
 }
+.music-player-shell {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
 .music-search-box {
   border: 1px solid rgba(165, 243, 252, .2) !important;
   border-radius: 0 !important;
@@ -1263,10 +1269,22 @@ body:has(.live-room-modal) .page-transition { transform: none !important; }
 .global-live-room-window.is-minimized .global-live-room-header { padding: .25rem; }
 .global-live-room-window.is-minimized .global-live-room-header button:first-child { font-size: .5rem; }
 .global-live-room-window.is-minimized .global-live-room-mini-video { height: calc(100% - 1.6rem); width: 100%; }
+.global-live-room-restore { position: fixed; right: 4.25rem; bottom: 1.25rem; z-index: 290; border: 0; background: rgba(16, 24, 43, .76); padding: .55rem .7rem; color: #ccfbf1; font-family: var(--font-sans); font-size: .62rem; font-weight: 800; letter-spacing: .08em; box-shadow: 0 12px 30px rgba(0, 0, 0, .28); backdrop-filter: blur(14px); }
+.global-live-room-restore:hover { background: rgba(45, 212, 191, .18); color: #fff; }
 .live-indicator { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid rgba(148, 163, 184, .2); padding: .4rem .55rem; color: #94a3b8; font-size: .62rem; font-weight: 900; letter-spacing: .14em; }
 .live-indicator span { height: .45rem; width: .45rem; background: #64748b; }
 .live-indicator.is-live { border-color: rgba(251, 113, 133, .55); color: #fecdd3; }
 .live-indicator.is-live span { background: #fb7185; box-shadow: 0 0 12px rgba(251, 113, 133, .9); }
+
+/* Keep rail links and button links on the same typography scale. */
+.portal-text-rail .portal-text-link,
+.portal-text-rail .portal-text-link-button,
+.portal-text-rail .portal-friends-link {
+  font-family: var(--font-sans) !important;
+  font-size: .7rem !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+}
 
 html[data-theme="dark"] .live-room-page header,
 html[data-theme="light"] .live-room-page header,
@@ -1297,7 +1315,8 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
   .global-live-room-body > .live-room-chat-panel { position: fixed; right: .8rem; bottom: 4.25rem; left: .8rem; z-index: 3; min-height: 0; padding: .55rem; background: rgba(8, 16, 31, .82); }
   .global-live-room-body > .live-room-chat-panel > div:nth-child(2) { height: 6rem; }
   .global-live-room-gift { position: relative; grid-column: auto; }
-  .global-live-room-window.is-minimized { right: auto; bottom: 4rem; left: .65rem; width: 9rem; height: 9rem; }
+   .global-live-room-window.is-minimized { right: .65rem; bottom: 4rem; left: auto; width: 9rem; height: 9rem; }
+   .global-live-room-restore { right: .75rem; bottom: .75rem; }
 }
 .assistant-page,
 .assistant-page > div,
