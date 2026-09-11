@@ -1497,6 +1497,13 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
 /* Keep page headings and the active game canvas free of accidental glass cards. */
 .jobs-page > div > header, .users-page > .mx-auto > header, .users-page > .mx-auto > header > div:last-child { border: 0 !important; background: transparent !important; box-shadow: none !important; }
 .music-player-shell .music-player-search { border: 0 !important; }
+
+/* Final jobs overrides must come after the shared transparent-header rule. */
+.jobs-page > div > header {
+  border: 1px solid rgba(255, 255, 255, .12) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .11), rgba(255, 255, 255, .035)) !important;
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, .18) !important;
+}
 .portal-frame > main > .games-page { width: 100% !important; margin: 0 !important; }
 .tetris-modern-frame, .tetris-modern-shell { max-width: none !important; background: transparent !important; }
 .tetris-board-stage, .tetris-board-shell { background: transparent !important; }
