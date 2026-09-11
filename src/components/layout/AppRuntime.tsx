@@ -292,7 +292,11 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
         queryDocumentsWhere<{ roomId?: string }>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }], token, 200).catch(() => []),
         floatingRoom.sessionId ? queryDocumentsWhere<{ roomId?: string; sessionId?: string }>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: floatingRoom.id }, { field: 'sessionId', op: 'EQUAL', value: floatingRoom.sessionId }], token, 200).catch(() => []) : Promise.resolve([]),
       ]);
-      await mergeDocument('liveRooms', floatingRoom.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+      try {
+        await mergeDocument('liveRooms', floatingRoom.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+      } catch {
+        await deleteDocument('liveRooms', floatingRoom.id, token);
+      }
       await Promise.allSettled([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]);
     } finally {
       closeFloatingRoom();
