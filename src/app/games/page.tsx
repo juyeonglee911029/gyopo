@@ -223,8 +223,10 @@ function lockPiece(state: GameState, landed: Piece): GameState {
   const spawned = { ...clonePiece(state.nextPiece), x: 3, y: 0 };
   const gameOver = collides(nextBoard, spawned);
   const points = [0, 100, 300, 500, 800][cleared];
-  const attackLines = Math.max(0, cleared - 1);
   const combo = cleared ? state.combo + 1 : 0;
+  const baseAttack = [0, 0, 1, 2, 4][cleared] || 0;
+  const comboBonus = cleared ? Math.min(4, Math.max(0, combo - 1)) : 0;
+  const attackLines = baseAttack + comboBonus;
   return {
     ...state,
     board: nextBoard,
@@ -346,6 +348,7 @@ export default function GamesPage() {
   const lastCountdownSoundRef = useRef<number | null>(null);
   const lobbyReleaseRequestedRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const tapTimerRef = useRef<number | null>(null);
   const roomMusicKeyRef = useRef('');
   const togetherListeningRef = useRef(false);
   const currentUserId = user ? (getSessionUserId() || user.id) : '';
@@ -354,6 +357,7 @@ export default function GamesPage() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (window.matchMedia('(max-width: 639px)').matches) return;
     const htmlOverflow = document.documentElement.style.overflow;
     const bodyOverflow = document.body.style.overflow;
     document.documentElement.style.overflow = 'hidden';
@@ -498,7 +502,16 @@ export default function GamesPage() {
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) {
-      dispatch({ type: 'DROP' });
+      if (tapTimerRef.current) {
+        window.clearTimeout(tapTimerRef.current);
+        tapTimerRef.current = null;
+        dispatch({ type: 'DROP' });
+      } else {
+        tapTimerRef.current = window.setTimeout(() => {
+          tapTimerRef.current = null;
+          dispatch({ type: 'ROTATE' });
+        }, 240);
+      }
       return;
     }
     if (Math.abs(dx) > Math.abs(dy)) {
@@ -506,8 +519,12 @@ export default function GamesPage() {
       for (let index = 0; index < steps; index += 1) dispatch({ type: 'MOVE', dx: dx > 0 ? 1 : -1, dy: 0 });
     }
     else if (dy < 0) dispatch({ type: 'SWAP_NEXT' });
-    else dispatch({ type: 'MOVE', dx: 0, dy: 1 });
+    else dispatch({ type: 'DROP' });
   };
+
+  useEffect(() => () => {
+    if (tapTimerRef.current) window.clearTimeout(tapTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!game.running || game.paused) return;
@@ -1657,7 +1674,7 @@ export default function GamesPage() {
             </div>
              <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5"><button onClick={() => dispatch({ type: 'TOGGLE_PAUSE' })} disabled={!game.running} className="tetris-action-secondary">{game.paused ? <Play size={15} /> : <Pause size={15} />}{game.paused ? '계속' : '일시정지'}</button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="tetris-action-secondary"><RotateCw size={15} /> 회전</button><button onClick={() => dispatch({ type: 'SWAP_NEXT' })} disabled={!game.running || game.paused} className="tetris-action-secondary"><ArrowRightLeft size={15} /> C 다음</button><div className="col-span-2 hidden items-center justify-center rounded-xl border border-white/5 bg-white/[0.03] px-3 text-center text-[11px] text-slate-500 md:flex">2줄 클리어 = 상대 1줄 공격 · 이후 클리어 줄마다 1줄 추가</div></div>
              <div className="mt-3 grid grid-cols-5 gap-2 sm:hidden"><button onClick={() => dispatch({ type: 'MOVE', dx: -1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowLeft size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'MOVE', dx: 0, dy: 1 })} disabled={!game.running || game.paused} className="touch-control"><ArrowDown size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'ROTATE' })} disabled={!game.running || game.paused} className="touch-control"><ArrowUp size={16} className="mx-auto" /></button><button onClick={() => dispatch({ type: 'SWAP_NEXT' })} disabled={!game.running || game.paused} className="touch-control">C</button><button onClick={() => dispatch({ type: 'MOVE', dx: 1, dy: 0 })} disabled={!game.running || game.paused} className="touch-control"><ArrowRight size={16} className="mx-auto" /></button></div>
-             <p className="tetris-touch-hint mt-3 text-center text-[11px] text-slate-500">모바일: 좌우 슬라이드 이동 · 위로 슬라이드 블록 교체 · 화면 탭 즉시 내리기 · 회전 버튼</p>
+              <p className="tetris-touch-hint mt-3 text-center text-[11px] text-slate-500">모바일: 좌우 슬라이드 이동 · 위로 스와이프 다음 블록 · 한 번 탭 회전 · 두 번 탭 하드드롭</p>
           </section>
 
           <aside className="space-y-4">
