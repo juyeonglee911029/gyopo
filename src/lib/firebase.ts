@@ -550,6 +550,44 @@ export async function approveTransferRequest(requestId: string, reviewedBy: stri
   if (!response.ok) throw new Error('송금 원장 충돌이 발생했습니다. 목록을 새로고침하고 다시 승인해주세요.');
 }
 
+export async function sendUserTransfer(
+  senderId: string,
+  recipientId: string,
+  amount: number,
+  fee = 0,
+  token = getSessionToken(),
+  options: { kind?: string; roomId?: string; memo?: string } = {},
+): Promise<string> {
+  if (!token) throw new Error('로그인 세션이 만료되었습니다.');
+  if (!senderId || !recipientId || senderId === recipientId) throw new Error('송금 회원 정보가 올바르지 않습니다.');
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(fee) || fee < 0) throw new Error('송금 금액이 올바르지 않습니다.');
+  const senderDocument = await getRawDocument('profiles', senderId, token);
+  if (!senderDocument?.name || !senderDocument.updateTime) throw new Error('보내는 회원 지갑을 찾을 수 없습니다.');
+  const senderBalance = Number(fromFirestoreValue(senderDocument.fields?.usdtBalance) || 0);
+  if (senderBalance < amount + fee) throw new Error(`잔고가 부족합니다. ${amount + fee} USDT가 필요합니다.`);
+
+  const requestId = `transfer-${senderId}-${crypto.randomUUID()}`;
+  const now = new Date();
+  const transferFields = encodeFields({ senderId, recipientId, amount, fee, status: 'COMPLETED', kind: options.kind || 'P2P', roomId: options.roomId, memo: options.memo || '회원 간 USDT 즉시 송금', createdAt: now, completedAt: now });
+  const senderFields = { ...(senderDocument.fields || {}), ...encodeFields({ usdtBalance: senderBalance - amount - fee, lastTransferId: requestId, updatedAt: now }) };
+  const ledgerBase = { amount, fee, status: 'COMPLETED', symbol: 'USDT', requestId, createdAt: now };
+  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      writes: [
+        { update: { name: senderDocument.name, fields: senderFields }, updateMask: { fieldPaths: [...Object.keys(senderFields)] }, currentDocument: { updateTime: senderDocument.updateTime } },
+        { update: { name: firestoreDocumentName('profiles', recipientId), fields: encodeFields({ lastTransferId: requestId, updatedAt: now }) }, updateMask: { fieldPaths: ['lastTransferId', 'updatedAt'] }, updateTransforms: [{ fieldPath: 'usdtBalance', increment: toFirestoreValue(amount) }] },
+        { update: { name: firestoreDocumentName('transferRequests', requestId), fields: transferFields }, currentDocument: { exists: false } },
+        { update: { name: firestoreDocumentName('walletLedger', `send-${requestId}`), fields: encodeFields({ ...ledgerBase, userId: senderId, type: 'INTERNAL_TRANSFER', direction: 'OUT', counterpartyId: recipientId, memo: options.memo || '회원 간 USDT 즉시 송금' }) }, currentDocument: { exists: false } },
+        { update: { name: firestoreDocumentName('walletLedger', `receive-${requestId}`), fields: encodeFields({ ...ledgerBase, userId: recipientId, type: 'INTERNAL_TRANSFER', direction: 'IN', counterpartyId: senderId, memo: options.memo || '회원 간 USDT 수신' }) }, currentDocument: { exists: false } },
+      ],
+    }),
+  }, token);
+  if (!response.ok) throw new Error('송금 처리에 실패했습니다. 잔고가 변경되지 않았습니다.');
+  return requestId;
+}
+
 export async function reviewTransferRequest(requestId: string, status: 'REJECTED', reviewedBy: string, token?: string): Promise<void> {
   const requestDocument = await getRawDocument('transferRequests', requestId, token);
   if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('송금 신청을 찾을 수 없습니다.');
@@ -1623,6 +1661,7 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
   const savedAge = Number(savedProfile?.age || 0);
   const persistedUser: PortalUser = {
     ...user,
+    usdtBalance: Number(savedProfile?.usdtBalance ?? user.usdtBalance ?? 0),
     gender: isGender(savedGender) ? savedGender : user.gender,
     age: Number.isInteger(savedAge) && savedAge >= 13 && savedAge <= 130 ? savedAge : user.age,
     country: isCountry(user.country) ? user.country.trim() : isCountry(savedCountry) ? savedCountry.trim() : String(user.country ?? '').trim(),
