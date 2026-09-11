@@ -16,6 +16,7 @@ const iceServers = [
   { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 
 const waitForIce = (peer: RTCPeerConnection) => new Promise<void>((resolve) => {
@@ -164,7 +165,7 @@ export default function LiveBroadcastPage() {
     setMessage('LIVE 방송 중 · 시청자에게 카메라와 썸네일을 송출하고 있습니다.');
   };
 
-  const stopBroadcast = async () => {
+  const stopBroadcast = async (publish = true) => {
     screenStreamRef.current?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
     screenStreamRef.current = null;
     cameraStreamRef.current = null;
@@ -173,7 +174,7 @@ export default function LiveBroadcastPage() {
     setScreenSharing(false);
     setLive(false);
     setEndingIn(null);
-    await publishRoom('offline');
+    if (publish) await publishRoom('offline');
     sessionRef.current = null;
     setMessage('방송이 종료되었습니다. 방이 초기화되어 다른 회원이 다시 사용할 수 있습니다.');
   };
@@ -184,6 +185,23 @@ export default function LiveBroadcastPage() {
     const timer = window.setInterval(() => void publishRoom('live', uploadedThumbnail || captureThumbnail()), 5_000);
     return () => window.clearInterval(timer);
   }, [live, quality, user?.id, uploadedThumbnail]);
+  useEffect(() => {
+    if (!live || !user) return;
+    let active = true;
+    const monitorStartedAt = Date.now();
+    const checkRoom = async () => {
+      if (Date.now() - monitorStartedAt < 2_500) return;
+      const token = getSessionToken();
+      if (!token || !sessionRef.current) return;
+      const room = await getDocument<{ status?: 'live' | 'offline'; sessionId?: string | null }>('liveRooms', roomRef.current, token).catch(() => null);
+      if (!active || !room || (room.status === 'live' && room.sessionId === sessionRef.current)) return;
+      await stopBroadcast(false);
+      if (active) setMessage('Master가 방송방을 종료해 카메라·채팅·썸네일을 초기화했습니다.');
+    };
+    void checkRoom();
+    const timer = window.setInterval(() => void checkRoom(), 1_500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [live, user?.id]);
   useEffect(() => {
      const loadChat = async () => { if (!sessionRef.current) { setChatMessages([]); return; } const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: roomId }, { field: 'sessionId', op: 'EQUAL', value: sessionRef.current }], getSessionToken(), 40).catch(() => []); setChatMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-10)); };
     void loadChat();
@@ -196,7 +214,7 @@ export default function LiveBroadcastPage() {
     let overlay = preview.querySelector<HTMLDivElement>('.live-broadcast-chat-overlay');
     if (!live || chatMessages.length === 0) { overlay?.remove(); return; }
     if (!overlay) { overlay = document.createElement('div'); overlay.className = 'live-broadcast-chat-overlay'; overlay.setAttribute('aria-live', 'polite'); preview.appendChild(overlay); }
-     overlay.replaceChildren(...chatMessages.slice(-10).map((item) => { const row = document.createElement('div'); const author = document.createElement('b'); const text = document.createElement('span'); author.textContent = item.user; text.textContent = item.text; row.append(author, text); return row; }));
+     overlay.replaceChildren(...chatMessages.slice(-10).map((item) => { const row = document.createElement('div'); const author = document.createElement('b'); const text = document.createElement('span'); row.className = item.authorId === user?.id ? 'live-chat-own' : 'live-chat-other'; author.textContent = item.user; text.textContent = item.text; row.append(author, text); return row; }));
     return () => overlay?.remove();
   }, [chatMessages, live]);
   useEffect(() => {
