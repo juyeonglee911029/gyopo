@@ -1171,6 +1171,10 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-card { min-width: 0; overflow: hidden; }
 .live-room-preview { min-height: 8rem; background: radial-gradient(circle at 50% 20%, rgba(244, 63, 94, .18), transparent 45%), linear-gradient(145deg, rgba(30, 41, 59, .78), rgba(15, 23, 42, .96)); padding: .7rem; }
 .live-room-preview.is-live { background: radial-gradient(circle at 50% 20%, rgba(251, 113, 133, .45), transparent 45%), linear-gradient(145deg, rgba(76, 5, 25, .88), rgba(15, 23, 42, .96)); }
+.live-room-preview { position: relative; overflow: hidden; }
+.live-room-preview-media { position: absolute; inset: 0; height: 100%; width: 100%; object-fit: cover; opacity: .86; transition: transform .55s ease, filter .55s ease; }
+.live-room-card:hover .live-room-preview-media { transform: scale(1.08) translate3d(1%, -1%, 0); filter: saturate(1.12) contrast(1.05); }
+.live-room-preview-fallback { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: .4rem; color: rgba(255, 255, 255, .62); font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .live-room-status { display: inline-flex; align-items: center; border: 1px solid rgba(148, 163, 184, .2); padding: .25rem .4rem; color: #94a3b8; font-size: .58rem; font-weight: 900; letter-spacing: .12em; }
 .live-room-status.live { border-color: rgba(251, 113, 133, .55); color: #fecdd3; }
 .live-room-icon-button { display: inline-grid; height: 2rem; width: 2rem; place-items: center; border: 0; background: rgba(255, 255, 255, .06); color: #cbd5e1; }
@@ -1178,9 +1182,12 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-side { min-width: 0; }
 .live-room-player { position: relative; min-height: 12rem; overflow: hidden; background: #020617; }
 .live-room-player-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; color: #94a3b8; font-size: .72rem; text-align: center; }
+.live-room-player-compact { position: absolute; inset: 0; min-height: 0; z-index: 1; }
 .live-room-player-status { position: absolute; right: .65rem; bottom: .65rem; display: inline-flex; align-items: center; gap: .35rem; background: rgba(2, 6, 23, .72); padding: .35rem .5rem; color: #fecdd3; font-size: .62rem; font-weight: 800; }
 .live-room-player-status span { height: .4rem; width: .4rem; background: #fb7185; box-shadow: 0 0 10px rgba(251, 113, 133, .9); }
 .live-room-chat-panel { min-width: 0; border: 0; background: rgba(8, 16, 31, .34); padding: 1rem; }
+.live-room-gift-panel, .live-room-helper-panel { border: 0; background: rgba(8, 16, 31, .34); padding: .85rem; }
+.live-room-gift-button { flex: 0 0 auto; background: #f9a8d4; padding: .65rem .8rem; color: #3b102b; font-size: .7rem; font-weight: 900; }
 .live-room-side-panel { padding: 1rem; }
 .live-room-input { min-width: 0; width: 100%; border: 0; border-radius: 0; background: rgba(255, 255, 255, .06); padding: .65rem .7rem; color: #fff; font-size: .72rem; outline: none; }
 .live-room-input:focus { box-shadow: 0 0 0 2px rgba(251, 113, 133, .35); }
@@ -1188,6 +1195,11 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-helper-card { display: flex; justify-content: space-between; gap: .5rem; border: 0; background: rgba(255, 255, 255, .05); padding: .65rem .7rem; color: #f8fafc; text-align: left; font-size: .72rem; font-weight: 800; }
 .live-room-helper-card span { color: #94a3b8; font-size: .62rem; font-weight: 500; }
 .live-room-modal { max-height: min(90vh, 40rem); overflow-y: auto; }
+.live-room-window-layer { position: fixed; inset: 0; z-index: 88; display: flex; align-items: center; justify-content: center; overflow-y: auto; background: rgba(0, 0, 0, .78); padding: .75rem; }
+.live-room-window { animation: live-room-window-in .2s ease-out both; will-change: transform; }
+.live-room-drag-handle { cursor: grab; touch-action: none; user-select: none; }
+.live-room-drag-handle:active { cursor: grabbing; }
+@keyframes live-room-window-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .live-studio-preview { overflow: hidden; }
 .live-studio-settings { padding: 1rem; }
 .live-studio-button, .live-studio-start, .live-studio-stop { display: inline-flex; align-items: center; gap: .4rem; border: 0; padding: .65rem .8rem; font-size: .7rem; font-weight: 900; }
@@ -1199,6 +1211,12 @@ html[data-theme="light"] .portal-chrome > header {
 .live-indicator span { height: .45rem; width: .45rem; background: #64748b; }
 .live-indicator.is-live { border-color: rgba(251, 113, 133, .55); color: #fecdd3; }
 .live-indicator.is-live span { background: #fb7185; box-shadow: 0 0 12px rgba(251, 113, 133, .9); }
+
+html[data-theme="dark"] .live-room-page header,
+html[data-theme="light"] .live-room-page header,
+.live-room-page header,
+.live-room-page h1,
+.live-room-window header { background: transparent !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; }
 
 @media (max-width: 639px) {
   .live-room-frame { padding: .65rem; }
