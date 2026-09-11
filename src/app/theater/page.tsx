@@ -208,8 +208,8 @@ export default function LiveRoomPage() {
         queryDocumentsWhere<{ roomId?: string }>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: room.id }], token, 200).catch(() => []),
         room.sessionId ? queryDocumentsWhere<{ roomId?: string; sessionId?: string }>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: room.id }, { field: 'sessionId', op: 'EQUAL', value: room.sessionId }], token, 200).catch(() => []) : Promise.resolve([]),
       ]);
-      await Promise.all([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]);
-      await mergeDocument('liveRooms', room.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+       await mergeDocument('liveRooms', room.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+       await Promise.allSettled([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]);
       if (selectedRoom?.id === room.id) closeRoom();
       setRoomError(`${room.title} 방을 종료하고 썸네일·채팅·시청자 연결을 초기화했습니다.`);
       await loadRooms();
