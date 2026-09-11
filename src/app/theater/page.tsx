@@ -2,12 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Camera, ChevronLeft, ChevronRight, Eye, Gift, GripHorizontal, Heart, MessageCircle, Radio, Send, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
-import { createDocument, getDocument, getSessionToken, listDocuments, mergeDocument, queryDocumentsWhere, reserveEscrowPurchase, type PortalUser } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, listDocuments, mergeDocument, queryDocumentsWhere, reserveEscrowPurchase, sendUserTransfer, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 const ROOM_COUNT = 30;
 const PAGE_SIZE = 10;
-const iceServers = [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }];
+const iceServers = [
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+];
 
 type LiveRoom = { id: string; roomNumber: number; title?: string; category?: string; hostId?: string; hostName?: string; hostImage?: string; status?: 'offline' | 'live'; viewers?: number; thumbnail?: string; updatedAt?: string };
 type LiveMessage = { id: string; roomId: string; authorId: string; user: string; text: string; createdAt: string };
@@ -93,6 +99,7 @@ const roomNumber = (id: string, fallback: number) => Number(id.match(/(\d+)$/)?.
 
 export default function LiveRoomPage() {
   const user = useGlobalStore((state) => state.user) as PortalUser | null;
+  const setUser = useGlobalStore((state) => state.setUser);
   const [rooms, setRooms] = useState<LiveRoom[]>(fallbackRooms);
   const [page, setPage] = useState(0);
   const [selectedRoom, setSelectedRoom] = useState<LiveRoom | null>(null);
@@ -144,6 +151,11 @@ export default function LiveRoomPage() {
   const maxPage = Math.ceil(rooms.length / PAGE_SIZE) - 1;
   const enterRoom = (room: LiveRoom, mode: 'watch' | 'broadcast') => {
     if (mode === 'broadcast') {
+      if (room.status === 'live' && room.hostId && room.hostId !== user?.id) {
+        window.alert('이 방은 현재 다른 방송자가 방송 중입니다. 방송이 끝난 뒤 다시 입장해주세요.');
+        setEntryRoom(null);
+        return;
+      }
       const url = `/theater/broadcast?room=${encodeURIComponent(room.id)}`;
       const popup = window.open(url, '_blank', 'noopener,noreferrer');
       if (!popup) window.location.assign(url);
@@ -175,10 +187,9 @@ export default function LiveRoomPage() {
     if (!token || !Number.isFinite(amount) || amount <= 0) return setGiftMessage('올바른 USDT 금액을 입력해주세요.');
     if (amount > user.usdtBalance) return setGiftMessage('현재 USDT 잔고보다 큰 금액은 선물할 수 없습니다.');
     try {
-      const requestId = crypto.randomUUID();
-      await createDocument('transferRequests', requestId, { senderId: user.id, senderName: user.name, recipientId: selectedRoom.hostId, amount, fee: 0, status: 'PENDING', kind: 'LIVE_GIFT', roomId: selectedRoom.id, memo: `${selectedRoom.title} 방송 USDT 선물`, createdAt: new Date() }, token);
-      await createDocument('walletLedger', `gift-${requestId}`, { userId: user.id, type: 'INTERNAL_TRANSFER', direction: 'OUT', amount, fee: 0, status: 'PENDING', symbol: 'USDT', counterpartyId: selectedRoom.hostId, requestId, memo: `${selectedRoom.title} 방송 선물 승인 대기`, createdAt: new Date() }, token);
-      setGiftMessage(`${amount} USDT 선물 요청을 보냈습니다. 운영자 승인 후 방송자 잔고에 반영됩니다.`);
+      await sendUserTransfer(user.id, selectedRoom.hostId, amount, 0, token, { kind: 'LIVE_GIFT', roomId: selectedRoom.id, memo: `${selectedRoom.title} 방송 USDT 선물` });
+      setUser({ ...user, usdtBalance: user.usdtBalance - amount });
+      setGiftMessage(`${amount} USDT 선물을 즉시 보냈습니다. 운영자 승인 없이 회원 권한으로 처리되었습니다.`);
     } catch { setGiftMessage('선물 요청을 저장하지 못했습니다. Firebase 권한을 확인해주세요.'); }
   };
 
