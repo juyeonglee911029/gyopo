@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Camera, ChevronLeft, ChevronRight, Eye, Gift, GripHorizontal, Heart, Maximize2, MessageCircle, Minimize2, Radio, Send, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
-import { createDocument, getDocument, getSessionToken, listDocuments, mergeDocument, queryDocumentsWhere, reserveEscrowPurchase, sendUserTransfer, type PortalUser } from '@/lib/firebase';
+import { createDocument, deleteDocument, getDocument, getSessionToken, isMasterUser, listDocuments, mergeDocument, queryDocumentsWhere, refreshStoredUser, reserveEscrowPurchase, sendUserTransfer, type PortalUser } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 const ROOM_COUNT = 30;
@@ -13,6 +13,7 @@ const iceServers = [
   { urls: 'turn:openrelay.metered.ca:80', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 
 type LiveRoom = { id: string; roomNumber: number; title?: string; category?: string; hostId?: string | null; hostName?: string | null; hostImage?: string | null; status?: 'offline' | 'live'; viewers?: number; thumbnail?: string | null; sessionId?: string | null; updatedAt?: string };
@@ -31,6 +32,7 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
   const viewerIdRef = useRef(`viewer-${user?.id || 'guest'}-${room.id}-${Math.random().toString(36).slice(2)}`);
   const [status, setStatus] = useState('시청 연결 준비 중');
   const [needsPlay, setNeedsPlay] = useState(false);
+  const [muted, setMuted] = useState(true);
 
   useEffect(() => {
     if (!user || room.status !== 'live' || !room.hostId) return;
@@ -43,19 +45,22 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
     peer.addTransceiver('audio', { direction: 'recvonly' });
     peer.ontrack = (event) => {
       const video = videoRef.current;
-      if (!video || !event.streams[0]) return;
-      video.srcObject = event.streams[0];
+      if (!video) return;
+      const remoteStream = event.streams[0] || (video.srcObject instanceof MediaStream ? video.srcObject : new MediaStream());
+      if (!event.streams[0] && !remoteStream.getTracks().some((track) => track.id === event.track.id)) remoteStream.addTrack(event.track);
+      video.srcObject = remoteStream;
       void (async () => {
         try {
+          video.muted = true;
           await video.play();
           setNeedsPlay(false);
-          setStatus('LIVE 수신 중');
+          setStatus('LIVE 수신 중 · 화면을 누르면 소리 켜기');
         } catch {
           video.muted = true;
           try {
             await video.play();
             setNeedsPlay(false);
-            setStatus('LIVE 수신 중 · 음소거 자동재생');
+          setStatus('LIVE 수신 중 · 음소거 자동재생');
           } catch {
             setNeedsPlay(true);
           }
@@ -97,16 +102,20 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
 
   if (!user) return <div className={`live-room-player live-room-player-empty ${compact ? 'live-room-player-compact' : ''}`}>로그인 후 방송을 시청할 수 있습니다.</div>;
   if (room.status !== 'live' || !room.hostId) return <div className={`live-room-player live-room-player-empty ${compact ? 'live-room-player-compact' : ''}`}>방송 상태를 확인하는 중입니다.<br />방송이 시작되면 자동으로 연결됩니다.</div>;
-  return <div className={`live-room-player ${compact ? 'live-room-player-compact' : ''}`}><video ref={videoRef} autoPlay playsInline muted={compact} controls={!compact} className="h-full w-full object-cover" />{needsPlay && <button type="button" onClick={() => { const video = videoRef.current; if (!video) return; video.muted = false; void video.play().then(() => setNeedsPlay(false)); }} className="live-room-play-button">영상 재생</button>}<div className="live-room-player-status"><span />{room.viewers || 0}명 온라인 · {status}</div></div>;
+  return <div className={`live-room-player ${compact ? 'live-room-player-compact' : ''}`}><video ref={videoRef} autoPlay playsInline muted={compact || muted} controls={!compact} onClick={() => { const video = videoRef.current; if (!video || compact) return; const nextMuted = !video.muted; video.muted = nextMuted; setMuted(nextMuted); void video.play().catch(() => undefined); }} className="h-full w-full object-cover" />{needsPlay && <button type="button" onClick={() => { const video = videoRef.current; if (!video) return; video.muted = true; setMuted(true); void video.play().then(() => setNeedsPlay(false)); }} className="live-room-play-button">영상 재생</button>}<div className="live-room-player-status"><span />{room.viewers || 0}명 온라인 · {status}</div></div>;
 }
 
-function LiveRoomCard({ room, user, onOpen }: { room: LiveRoom; user: PortalUser | null; onOpen: () => void }) {
+function LiveRoomCard({ room, user, onOpen, isMaster, onTerminate }: { room: LiveRoom; user: PortalUser | null; onOpen: () => void; isMaster?: boolean; onTerminate?: () => void }) {
   const [previewing, setPreviewing] = useState(false);
-  return <article className="live-room-card overflow-hidden" onMouseEnter={() => setPreviewing(true)} onMouseLeave={() => setPreviewing(false)}><div className={`live-room-preview ${room.status === 'live' ? 'is-live' : ''}`} style={room.thumbnail ? { backgroundImage: `url(${room.thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><div className="relative z-10 flex items-center justify-between"><span className={`live-room-status ${room.status === 'live' ? 'live' : ''}`}>{room.status === 'live' ? 'LIVE' : 'OFFLINE'}</span><span className="text-[10px] font-bold text-white/75"><Users size={12} className="mr-1 inline" />{room.viewers || 0}</span></div>{room.status === 'live' && previewing && user ? <LiveRoomPlayer room={room} user={user} compact /> : room.thumbnail ? <img src={room.thumbnail} alt={`${room.title || 'LIVE ROOM'} 방송 썸네일`} className="live-room-preview-media" /> : <div className="live-room-preview-fallback"><Camera size={28} className="text-white/65" /><span>웹캠 미리보기</span></div>}</div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="truncate text-sm font-black">{room.title}</h2><p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{room.category} · ROOM {String(room.roomNumber).padStart(2, '0')}</p></div><Heart size={15} className="shrink-0 text-slate-500" /></div><button type="button" onClick={onOpen} className="mt-3 flex w-full items-center justify-center gap-2 bg-rose-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-rose-300"><Eye size={14} /> {room.status === 'live' ? '입장하기' : '방송방 열기'}</button></div></article>;
+  const master = isMaster ?? isMasterUser(user);
+  const terminate = onTerminate || (() => window.dispatchEvent(new CustomEvent('gyopo-master-room-terminate', { detail: room })));
+  return <article className="live-room-card overflow-hidden" onMouseEnter={() => setPreviewing(true)} onMouseLeave={() => setPreviewing(false)}><div className={`live-room-preview ${room.status === 'live' ? 'is-live' : ''}`} style={room.thumbnail ? { backgroundImage: `url(${room.thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><div className="relative z-10 flex items-center justify-between"><span className={`live-room-status ${room.status === 'live' ? 'live' : ''}`}>{room.status === 'live' ? 'LIVE' : 'OFFLINE'}</span><div className="flex items-center gap-1.5"><span className="text-[10px] font-bold text-white/75"><Users size={12} className="mr-1 inline" />{room.viewers || 0}</span>{master && <button type="button" onClick={terminate} aria-label={`${room.title} 강제 종료`} title="Master: 방 종료 및 초기화" className="live-room-master-close"><X size={13} /></button>}</div></div>{room.status === 'live' && previewing && user ? <LiveRoomPlayer room={room} user={user} compact /> : room.thumbnail ? <img src={room.thumbnail} alt={`${room.title || 'LIVE ROOM'} 방송 썸네일`} className="live-room-preview-media" /> : <div className="live-room-preview-fallback"><Camera size={28} className="text-white/65" /><span>웹캠 미리보기</span></div>}</div><div className="p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="truncate text-sm font-black">{room.title}</h2><p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{room.category} · ROOM {String(room.roomNumber).padStart(2, '0')}</p></div><Heart size={15} className="shrink-0 text-slate-500" /></div><button type="button" onClick={onOpen} className="mt-3 flex w-full items-center justify-center gap-2 bg-rose-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-rose-300"><Eye size={14} /> {room.status === 'live' ? '입장하기' : '방송방 열기'}</button></div></article>;
 }
 
 function RoomChatPanel({ room, user, messages, message, onMessageChange, onSubmit }: { room: LiveRoom; user: PortalUser | null; messages: LiveMessage[]; message: string; onMessageChange: (value: string) => void; onSubmit: (event: React.FormEvent) => void }) {
-  return <div className="live-room-chat-panel"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-rose-300" />{room.title} 채팅</div><span className="text-[10px] font-bold text-slate-500">{room.viewers || 0}명 온라인</span></div><div className="mt-3 h-52 space-y-2 overflow-y-auto rounded-sm bg-black/10 p-2">{messages.length ? messages.map((item) => <div key={item.id} className="text-xs text-slate-300"><b className="text-rose-200">{item.user}</b> {item.text}</div>) : <p className="py-10 text-center text-xs text-slate-600">아직 메시지가 없습니다.</p>}</div><form onSubmit={onSubmit} className="mt-3 flex gap-2"><input value={message} onChange={(event) => onMessageChange(event.target.value)} disabled={!user} placeholder={user ? '방송인에게 메시지 보내기' : '로그인 후 채팅할 수 있습니다'} className="live-room-input" /><button type="submit" disabled={!user} aria-label="메시지 보내기" className="live-room-send disabled:cursor-not-allowed disabled:opacity-40"><Send size={14} /></button></form></div>;
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
+  return <div className="live-room-chat-panel"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-rose-300" />{room.title} 채팅</div><span className="text-[10px] font-bold text-slate-500">{room.viewers || 0}명 온라인</span></div><div className="mt-3 h-52 space-y-2 overflow-y-auto rounded-sm bg-black/10 p-2">{messages.length ? messages.map((item) => <div key={item.id} className={`text-xs ${item.authorId === user?.id ? 'live-chat-own' : 'live-chat-other'}`}><b>{item.user}</b> {item.text}</div>) : <p className="py-10 text-center text-xs text-slate-600">아직 메시지가 없습니다.</p>}<div ref={endRef} /></div><form onSubmit={onSubmit} className="mt-3 flex gap-2"><input value={message} onChange={(event) => onMessageChange(event.target.value)} disabled={!user} placeholder={user ? '방송인에게 메시지 보내기' : '로그인 후 채팅할 수 있습니다'} className="live-room-input" /><button type="submit" disabled={!user} aria-label="메시지 보내기" className="live-room-send disabled:cursor-not-allowed disabled:opacity-40"><Send size={14} /></button></form></div>;
 }
 
 const fallbackRooms: LiveRoom[] = Array.from({ length: ROOM_COUNT }, (_, index) => ({ id: `live-room-${String(index + 1).padStart(2, '0')}`, roomNumber: index + 1, title: `LIVE ROOM ${String(index + 1).padStart(2, '0')}`, category: index % 3 === 0 ? 'K-POP' : index % 3 === 1 ? '교민 라이브' : '토크', status: 'offline', viewers: 0 }));
@@ -129,7 +138,7 @@ export default function LiveRoomPage() {
   const [helperAmount, setHelperAmount] = useState('5');
   const [helperText, setHelperText] = useState('방송 세팅과 채팅을 도와주세요.');
   const [helperMessage, setHelperMessage] = useState('');
-  const [, setRoomError] = useState('');
+  const [roomError, setRoomError] = useState('');
   const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
 
@@ -162,7 +171,7 @@ export default function LiveRoomPage() {
     void load();
     const timer = window.setInterval(load, 1_000);
     return () => window.clearInterval(timer);
-  }, [selectedRoom?.id]);
+  }, [selectedRoom?.id, selectedRoom?.sessionId]);
 
   const visibleRooms = useMemo(() => rooms.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [page, rooms]);
   const maxPage = Math.ceil(rooms.length / PAGE_SIZE) - 1;
@@ -183,6 +192,42 @@ export default function LiveRoomPage() {
     setRoomOpen(true);
     setEntryRoom(null);
   };
+  const openRoomEntry = (room: LiveRoom) => {
+    if (room.status === 'live') enterRoom(room, 'watch');
+    else setEntryRoom(room);
+  };
+  const resetLiveRoom = async (room: LiveRoom) => {
+    if (!isMasterUser(user)) return;
+    const token = getSessionToken();
+    if (!token) return setRoomError('Master 로그인 세션이 만료되었습니다.');
+    try {
+      const [viewers, messages] = await Promise.all([
+        queryDocumentsWhere<{ roomId?: string }>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: room.id }], token, 200).catch(() => []),
+        room.sessionId ? queryDocumentsWhere<{ roomId?: string; sessionId?: string }>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: room.id }, { field: 'sessionId', op: 'EQUAL', value: room.sessionId }], token, 200).catch(() => []) : Promise.resolve([]),
+      ]);
+      await Promise.all([...viewers.map((item) => deleteDocument('liveRoomViewers', item.id, token)), ...messages.map((item) => deleteDocument('liveRoomMessages', item.id, token))]);
+      await mergeDocument('liveRooms', room.id, { status: 'offline', hostId: null, hostName: null, hostImage: null, sessionId: null, viewers: 0, thumbnail: null, updatedAt: new Date() }, token);
+      if (selectedRoom?.id === room.id) closeRoom();
+      setRoomError(`${room.title} 방을 종료하고 썸네일·채팅·시청자 연결을 초기화했습니다.`);
+      await loadRooms();
+    } catch {
+      setRoomError('방 초기화에 실패했습니다. Firebase Rules가 최신인지 확인해주세요.');
+    }
+  };
+  useEffect(() => {
+    const handleMasterTerminate = (event: Event) => {
+      const room = (event as CustomEvent<LiveRoom>).detail;
+      if (room?.id) void resetLiveRoom(room);
+    };
+    window.addEventListener('gyopo-master-room-terminate', handleMasterTerminate);
+    return () => window.removeEventListener('gyopo-master-room-terminate', handleMasterTerminate);
+  }, []);
+  useEffect(() => {
+    if (entryRoom?.status !== 'live') return;
+    const room = entryRoom;
+    setEntryRoom(null);
+    enterRoom(room, 'watch');
+  }, [entryRoom?.id, entryRoom?.status]);
   const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => { event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = { startX: event.clientX, startY: event.clientY, originX: roomOffset.x, originY: roomOffset.y }; };
   const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => { if (!dragRef.current) return; setRoomOffset({ x: dragRef.current.originX + event.clientX - dragRef.current.startX, y: dragRef.current.originY + event.clientY - dragRef.current.startY }); };
   const stopDrag = () => { dragRef.current = null; };
@@ -202,7 +247,7 @@ export default function LiveRoomPage() {
     const token = getSessionToken();
     if (!token || !Number.isFinite(amount) || amount <= 0) return setGiftMessage('올바른 USDT 금액을 입력해주세요.');
     if (amount > user.usdtBalance) return setGiftMessage('현재 USDT 잔고보다 큰 금액은 선물할 수 없습니다.');
-    try { await sendUserTransfer(user.id, selectedRoom.hostId, amount, 0, token, { kind: 'LIVE_GIFT', roomId: selectedRoom.id, memo: `${selectedRoom.title} 방송 USDT 선물` }); setUser({ ...user, usdtBalance: user.usdtBalance - amount }); setGiftMessage(`${amount} USDT 선물을 즉시 보냈습니다.`); } catch { setGiftMessage('선물 요청을 저장하지 못했습니다. Firebase 권한을 확인해주세요.'); }
+    try { await sendUserTransfer(user.id, selectedRoom.hostId, amount, 0, token, { kind: 'LIVE_GIFT', roomId: selectedRoom.id, memo: `${selectedRoom.title} 방송 USDT 선물` }); const refreshed = await refreshStoredUser().catch(() => null); setUser(refreshed || { ...user, usdtBalance: user.usdtBalance - amount }); setGiftMessage(`${amount} USDT 선물을 방송인에게 보냈습니다. 잔고에 반영되었습니다.`); } catch { setGiftMessage('선물 요청을 저장하지 못했습니다. Firebase Rules와 잔고를 확인해주세요.'); }
   };
 
   const requestHelper = async () => {
@@ -215,6 +260,7 @@ export default function LiveRoomPage() {
   };
 
   return <div className="live-room-page min-h-[calc(100vh-7rem)] px-3 py-6 text-white sm:px-5 lg:px-8"><div className="mx-auto max-w-[1500px]">
+    {roomError && <div role="status" className="mb-4 bg-emerald-300/[.08] px-3 py-2 text-xs font-bold text-emerald-100">{roomError}</div>}
     <header className="mb-5 flex flex-wrap items-end justify-between gap-4"><div><div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.28em] text-rose-400"><Radio size={15} /> LIVE BROADCAST</div><h1 className="text-3xl font-black tracking-[-0.04em] text-rose-400 sm:text-4xl">LIVE ROOM</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">방송하기와 시청하기를 선택하고, 방 안에서 방송인과 실시간으로 소통하세요.</p></div><div className="flex items-center gap-3 text-xs font-bold text-slate-300"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-400 shadow-[0_0_14px_rgba(251,113,133,.9)]" />30개 방 · 페이지당 10개</div></header>
     <section className="live-room-frame grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]"><div className="min-w-0"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-black"><Sparkles size={16} className="text-rose-300" />방송방 목록</div><div className="flex items-center gap-1"><button type="button" aria-label="이전 방" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))} className="live-room-icon-button"><ChevronLeft size={16} /></button><span className="px-2 text-[11px] font-black text-slate-400">{page + 1} / {maxPage + 1}</span><button type="button" aria-label="다음 방" disabled={page >= maxPage} onClick={() => setPage((value) => Math.min(maxPage, value + 1))} className="live-room-icon-button"><ChevronRight size={16} /></button></div></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">{visibleRooms.map((room) => <LiveRoomCard key={room.id} room={room} user={user} onOpen={() => setEntryRoom(room)} />)}</div></div><aside className="live-room-side space-y-3"><div className="live-room-side-panel"><div className="flex items-center gap-2 text-sm font-black"><MessageCircle size={16} className="text-rose-300" />개별 방 채팅</div><p className="mt-3 text-xs leading-5 text-slate-500">방송방에 입장하면 해당 방의 방송인과 시청자만 보는 채팅이 열립니다.</p></div><div className="live-room-side-panel"><div className="flex items-center gap-2 text-sm font-black"><Gift size={16} className="text-pink-300" />방송 USDT 선물</div><p className="mt-2 text-xs leading-5 text-slate-500">방 안에서 방송자에게 USDT를 즉시 보낼 수 있습니다.</p></div><div className="live-room-side-panel"><div className="flex items-center gap-2 text-sm font-black"><ShieldCheck size={16} className="text-amber-300" />도우미 요청</div><p className="mt-2 text-xs leading-5 text-slate-500">방송 세팅, 번역, 채팅 관리 요청 금액은 먼저 홀딩됩니다.</p><div className="mt-3 grid gap-2">{['방송 세팅 도우미', '번역·채팅 도우미', '화면 모니터링 도우미'].map((label) => <button key={label} type="button" onClick={() => setHelperText(label)} className="live-room-helper-card"><span>{label}</span><b>요청</b></button>)}</div></div></aside></section>
     {entryRoom && <div className="fixed inset-0 z-[90] grid place-items-center bg-black/75 p-4" onMouseDown={(event) => event.target === event.currentTarget && setEntryRoom(null)}><section className="live-room-modal w-full max-w-md p-5"><div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-300">ROOM {String(roomNumber(entryRoom.id, entryRoom.roomNumber)).padStart(2, '0')}</div><h2 className="mt-1 text-2xl font-black">{entryRoom.title}</h2><p className="mt-2 text-sm text-slate-400">입장 방식을 선택하세요.</p></div><button type="button" onClick={() => setEntryRoom(null)} className="live-room-icon-button"><X size={16} /></button></div><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => enterRoom(entryRoom, 'broadcast')} className="flex items-center justify-center gap-2 bg-rose-400 px-3 py-3 text-sm font-black text-slate-950"><Camera size={16} />방송하기</button><button type="button" onClick={() => enterRoom(entryRoom, 'watch')} className="flex items-center justify-center gap-2 border border-white/10 bg-white/5 px-3 py-3 text-sm font-black text-white"><Eye size={16} />시청하기</button></div></section></div>}
