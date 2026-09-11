@@ -33,6 +33,7 @@ export type PortalUser = {
   walletNetwork?: string;
   walletPublic?: boolean;
   walletPinHash?: string;
+  walletPinSalt?: string;
   transferPinHash?: string;
   transferPinSalt?: string;
   musicFavorites?: Array<{ id: string; title: string; artist: string; videoId: string; keywords: string[]; views?: string; published?: string; thumbnail?: string }>;
@@ -1464,6 +1465,7 @@ function privateProfileData(user: PortalUser): Record<string, unknown> {
     ...(user.walletNetwork ? { walletNetwork: user.walletNetwork.trim() } : {}),
     ...(user.walletPublic && user.walletAddress ? { walletPublic: true } : {}),
     ...(user.walletPinHash ? { walletPinHash: user.walletPinHash } : {}),
+    ...(user.walletPinSalt ? { walletPinSalt: user.walletPinSalt } : {}),
     ...(user.transferPinHash ? { transferPinHash: user.transferPinHash } : {}),
     ...(user.transferPinSalt ? { transferPinSalt: user.transferPinSalt } : {}),
     musicFavorites: user.musicFavorites || [],
@@ -1602,6 +1604,7 @@ export async function signInWithGoogleCredential(credential: string): Promise<Po
     walletNetwork: savedProfile?.walletNetwork,
     walletPublic: Boolean(savedProfile?.walletPublic),
     walletPinHash: savedProfile?.walletPinHash,
+    walletPinSalt: savedProfile?.walletPinSalt,
     transferPinHash: savedProfile?.transferPinHash,
     transferPinSalt: savedProfile?.transferPinSalt,
   };
@@ -1625,6 +1628,7 @@ export async function saveProfile(user: PortalUser, token = getSessionToken()): 
     country: isCountry(user.country) ? user.country.trim() : isCountry(savedCountry) ? savedCountry.trim() : String(user.country ?? '').trim(),
     walletPublic: Boolean(user.walletPublic && user.walletAddress),
     walletPinHash: user.walletPinHash,
+    walletPinSalt: user.walletPinSalt,
     transferPinHash: user.transferPinHash,
     transferPinSalt: user.transferPinSalt,
   };
