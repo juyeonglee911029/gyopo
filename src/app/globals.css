@@ -61,6 +61,10 @@ body { padding-top: 7rem !important; }
 .portal-text-link { display: block; border: 0; border-radius: 0; padding: .43rem .5rem; color: rgba(255, 255, 255, .62); font-size: .7rem; font-weight: 500; line-height: 1.35; text-decoration: none; transition: background-color .16s ease, color .16s ease; }
 .portal-text-link:hover, .portal-text-link-active { border: 0; color: #fff; background: rgba(255, 255, 255, .1); transform: none; }
 .portal-text-link-active { text-shadow: none; }
+.portal-text-link-home { color: #fff; }
+.portal-text-link-music { color: #fb7185; }
+.portal-text-link-music:hover, .portal-text-link-music.portal-text-link-active { color: #fda4af; }
+.portal-friends-link { font-size: .7rem; font-weight: 500; }
 .portal-text-link-button { width: 100%; background: transparent; text-align: left; font: inherit; }
 .site-background-video { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #050914; pointer-events: none; }
 .site-background-video iframe { position: absolute; top: 50%; left: 50%; width: max(100vw, 177.78vh); height: max(100vh, 56.25vw); transform: translate(-50%, -50%) scale(1.08); border: 0; opacity: .7; filter: brightness(1) saturate(1.08) contrast(1.02); }
@@ -175,6 +179,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .header-profile-button:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(45, 212, 191, .45); }
 .header-mobile-menu { position: absolute; top: 4rem; right: .75rem; left: .75rem; display: grid; gap: .75rem; border: 1px solid rgba(148, 163, 184, .16); border-radius: 1rem; background: rgba(7, 11, 23, .97); padding: .75rem; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); backdrop-filter: blur(20px); }
 .header-mobile-menu a { border-radius: .75rem; padding: .7rem .75rem; background: rgba(255, 255, 255, .05); }
+.wallet-page, .wallet-history-page { min-width: 0; overflow-x: hidden; }
+.wallet-history-shell { border: 1px solid rgba(148, 163, 184, .16); background: rgba(8, 16, 31, .62); box-shadow: 0 22px 70px rgba(0, 0, 0, .18); }
+.wallet-history-row { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(170px, 1fr) minmax(170px, 1fr) auto auto; align-items: center; gap: 1rem; padding: 1rem 1.2rem; }
+.wallet-history-mobile { display: none; }
 .market-bar { position: static !important; width: 100% !important; overflow: hidden; border: 0 !important; border-radius: 0 !important; background: rgba(8, 16, 31, .3) !important; box-shadow: none !important; backdrop-filter: blur(18px); }
 .market-bar-heading { display: flex; align-items: center; justify-content: space-between; gap: .4rem; border-bottom: 1px solid rgba(165, 243, 252, .1); padding: .62rem .65rem; }
 .market-bar-heading .market-detail-label { display: inline-flex; align-items: center; gap: .35rem; font-size: .5rem; font-weight: 500; }
@@ -298,6 +306,15 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   .game-stage .grid.grid-cols-10 { gap: 2px; padding: .3rem; }
   .game-stage .grid.grid-cols-10 > div { border-radius: 2px; }
   .games-page { padding: .55rem !important; }
+  .usdt-balance { min-height: 2.35rem; gap: .3rem; padding: .45rem .55rem; font-size: .65rem; }
+  .usdt-balance small { display: block; font-size: .48rem; }
+  .usdt-mark { height: 1.05rem; width: 1.05rem; font-size: .72rem; }
+  .wallet-page { padding-inline: .65rem !important; }
+  .wallet-page > div:first-child { padding: 1rem !important; }
+  .wallet-page > div:first-child .text-5xl { font-size: 2.25rem; }
+  .wallet-page .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+  .wallet-history-row { display: none; }
+  .wallet-history-mobile { display: block; }
   .tetris-modern-shell, .tetris-modern-shell > *, .tetris-arena-card, .tetris-panel { min-width: 0; }
   .tetris-modern-shell > header { margin-bottom: .65rem !important; }
   .tetris-modern-shell > header h1 { font-size: 1.85rem; }
