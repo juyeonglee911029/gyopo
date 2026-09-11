@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { createDocument, getDocument, getSessionToken, isMasterUser, MASTER_DEPOSIT_ADDRESS, queryDocuments, queryDocumentsWhere, saveProfile, sendUserTransfer, USDT_NETWORK, type WalletLedgerEntry } from '@/lib/firebase';
+import { createDocument, getDocument, getSessionToken, isMasterUser, MASTER_DEPOSIT_ADDRESS, queryDocuments, queryDocumentsWhere, refreshStoredUser, saveProfile, sendUserTransfer, USDT_NETWORK, type WalletLedgerEntry } from '@/lib/firebase';
 import { isValidTronAddress, sendUsdtWithTronLink } from '@/lib/tron';
 import { Wallet, Copy, History, Send, AlertCircle, Download, LockKeyhole, ShieldCheck, RefreshCw, Sparkles } from 'lucide-react';
 
@@ -13,6 +13,10 @@ type LedgerRow = WalletLedgerEntry & { id: string };
 
 function formatUsdt(value: number, maximumFractionDigits = 6) {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits });
+}
+
+function formatUsd(value: number) {
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 async function hashPin(pin: string, salt = ''): Promise<string> {
@@ -53,6 +57,38 @@ export default function WalletPage() {
   const [onchainAmount, setOnchainAmount] = useState('');
   const [onchainPin, setOnchainPin] = useState('');
   const [isOnchainSending, setIsOnchainSending] = useState(false);
+  const [usdTopupAmount, setUsdTopupAmount] = useState('10');
+  const [usdTopupBusy, setUsdTopupBusy] = useState(false);
+  const [usdTopupMessage, setUsdTopupMessage] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const transactionId = params.get('_ptxn') || params.get('transaction_id') || params.get('transactionId');
+    if (!transactionId) return;
+    const claimKey = `gyopo-paddle-claim:${transactionId}`;
+    if (window.sessionStorage.getItem(claimKey)) return;
+    window.sessionStorage.setItem(claimKey, '1');
+    setUsdTopupMessage('카드 결제를 확인하고 USD 잔액에 반영하는 중입니다...');
+    void fetch('/api/paddle/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${getSessionToken() || ''}` },
+      body: JSON.stringify({ transactionId }),
+    }).then(async (response) => {
+      const result = await response.json().catch(() => ({})) as { amountUsd?: number; status?: string; error?: string };
+      if (!response.ok && response.status !== 202) throw new Error(result.error || '결제 확인에 실패했습니다.');
+      if (result.status && result.status !== 'completed') {
+        setUsdTopupMessage('결제 확인이 아직 진행 중입니다. 잠시 후 잔액이 갱신됩니다.');
+        return;
+      }
+      const refreshed = await refreshStoredUser().catch(() => null);
+      if (refreshed) setUser(refreshed);
+      setUsdTopupMessage(`${formatUsd(Number(result.amountUsd || 0))} USD가 서비스 잔액에 반영되었습니다.`);
+      window.history.replaceState({}, '', '/wallet');
+    }).catch((error) => {
+      setUsdTopupMessage(error instanceof Error ? error.message : '결제 확인에 실패했습니다.');
+    });
+  }, [user?.id, setUser]);
 
   useEffect(() => {
     const token = getSessionToken();
@@ -135,6 +171,35 @@ export default function WalletPage() {
     const row = { ...entry, userId: user.id, createdAt: new Date() };
     await createDocument('walletLedger', id, row, token);
     setLedger((current) => [{ ...row, id }, ...current]);
+  };
+
+  const beginUsdTopup = async () => {
+    const value = Math.round(Number(usdTopupAmount) * 100) / 100;
+    if (!Number.isFinite(value) || value < 0.1 || value > 1_000) {
+      setUsdTopupMessage('충전 금액은 0.10 USD 이상 1,000 USD 이하로 입력해주세요.');
+      return;
+    }
+    const token = getSessionToken();
+    if (!token) {
+      setUsdTopupMessage('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+      return;
+    }
+    setUsdTopupBusy(true);
+    setUsdTopupMessage('안전한 카드 결제창을 준비하는 중입니다...');
+    try {
+      const response = await fetch('/api/paddle/checkout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount: value }),
+      });
+      const result = await response.json().catch(() => ({})) as { checkoutUrl?: string; error?: string };
+      if (!response.ok || !result.checkoutUrl) throw new Error(result.error || '카드 결제창을 열지 못했습니다.');
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      setUsdTopupMessage(error instanceof Error ? error.message : '카드 결제창을 열지 못했습니다.');
+    } finally {
+      setUsdTopupBusy(false);
+    }
   };
 
   const verifyPin = async (value: string) => {
@@ -313,7 +378,7 @@ export default function WalletPage() {
         <div>
             <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-black mb-2 flex items-center gap-3">
-              <Wallet size={32} className="text-green-400"/> 내 지갑 (USDT)
+              <Wallet size={32} className="text-green-400"/> 내 지갑 · USD 서비스 / USDT 지갑
             </h1>
              <Link href="/wallet/history" className="mb-2 inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100 hover:bg-cyan-300/20"><History size={14} /> 거래 내역서</Link>
             </div>
@@ -321,8 +386,8 @@ export default function WalletPage() {
             {user.walletAddress ? <div className="mt-4 flex max-w-xl items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2"><LockKeyhole size={15} className="shrink-0 text-emerald-300" /><span className="min-w-0 flex-1 truncate font-mono text-xs text-emerald-100">{user.walletAddress}</span><button type="button" onClick={() => void navigator.clipboard?.writeText(user.walletAddress || '')} className="rounded-lg bg-white/10 p-2 text-slate-300 hover:bg-white/20" aria-label="잠긴 지갑 주소 복사"><Copy size={14} /></button></div> : <button type="button" onClick={requestWalletGeneration} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-2 text-sm font-black text-slate-950 hover:bg-emerald-200"><Sparkles size={16} /> Wallet 생성</button>}
         </div>
          <div className="text-right">
-             <div className="text-sm text-gray-400 font-bold mb-1">서비스 잔액 (가상)</div>
-              <div className="text-5xl font-black text-green-400">{formatUsdt(user.usdtBalance, 2)}</div>
+              <div className="text-sm text-gray-400 font-bold mb-1">서비스 잔액 (USD)</div>
+               <div className="text-5xl font-black text-green-400">${formatUsd(Number(user.usdBalance || 0))}</div>
               <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-left"><div className="text-[10px] font-black uppercase tracking-wider text-emerald-200">실제 TRON 체인 잔고 · USDT TRC20</div><div className="mt-1 text-2xl font-black text-emerald-300">{chainLoading && chainBalance === null ? '조회 중...' : chainAddress ? `${formatUsdt(chainBalance ?? 0)} USDT` : 'Wallet 생성 대기'}</div><div className="mt-1 break-all text-[10px] text-emerald-100/60">{chainError || chainAddress || (chainSyncedAt ? `15초 주기 동기화 · ${new Date(chainSyncedAt).toLocaleTimeString()}` : '동기화 대기')}</div></div>
            </div>
         </div>
@@ -331,8 +396,21 @@ export default function WalletPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
         {/* Actions */}
-        <div className="md:col-span-5 space-y-6">
-           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+         <div className="md:col-span-5 space-y-6">
+            <section className="rounded-2xl border border-cyan-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-black text-slate-800"><Wallet size={18} className="text-cyan-600" /> USD 서비스 잔액 충전</div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">카드로 결제하면 결제 완료 금액만 GYOPO 서비스 잔액에 반영됩니다. 기존 USDT 지갑은 그대로 유지됩니다.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[1, 5, 10, 25].map((value) => <button type="button" key={value} onClick={() => setUsdTopupAmount(String(value))} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-700 hover:bg-cyan-100">${value}</button>)}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <input type="number" min="0.1" max="1000" step="0.01" value={usdTopupAmount} onChange={(event) => setUsdTopupAmount(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm font-black outline-none focus:border-cyan-500" placeholder="10.00" />
+                <button type="button" onClick={() => void beginUsdTopup()} disabled={usdTopupBusy} className="rounded-xl bg-cyan-600 px-4 py-3 text-xs font-black text-white hover:bg-cyan-700 disabled:opacity-50">{usdTopupBusy ? '준비 중...' : '카드로 충전'}</button>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-400">최소 0.10 USD · Paddle 카드 결제</p>
+              {usdTopupMessage && <p className="mt-3 rounded-xl bg-cyan-50 p-3 text-xs font-bold text-cyan-800">{usdTopupMessage}</p>}
+            </section>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="grid grid-cols-4 border-b border-gray-200">
                 <button onClick={() => setActiveTab('DEPOSIT')} className={`py-4 font-bold text-xs ${activeTab === 'DEPOSIT' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>입금</button>
                 <button onClick={() => setActiveTab('WITHDRAWAL')} className={`py-4 font-bold text-xs ${activeTab === 'WITHDRAWAL' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>가상 출금</button>
@@ -449,14 +527,14 @@ export default function WalletPage() {
                              <span className={`text-xs font-bold px-2 py-0.5 rounded ${tx.direction === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{tx.type === 'ONCHAIN_SEND' ? '실제 송금' : tx.type === 'INTERNAL_TRANSFER' ? '내부 송금' : tx.type === 'WITHDRAWAL' ? '출금' : '입금'}</span>
                              <span className="text-sm font-medium text-gray-800">{tx.memo || tx.type}</span>
                           </div>
-                           <div className={`font-black ${tx.direction === 'IN' ? 'text-green-600' : 'text-red-500'}`}>{tx.direction === 'IN' ? '+' : '-'}{formatUsdt(Number(tx.amount || 0))} USDT</div>
+                            <div className={`font-black ${tx.direction === 'IN' ? 'text-green-600' : 'text-red-500'}`}>{tx.direction === 'IN' ? '+' : '-'}{formatUsdt(Number(tx.amount || 0))} {tx.symbol || 'USDT'}</div>
                         </div>
                         <div className="flex justify-between items-center text-xs text-gray-500">
                           <span>{String(tx.createdAt)} · ID: {tx.id}</span><span className={`font-bold ${tx.status === 'PENDING' || tx.status === 'SUBMITTED' ? 'text-orange-500' : tx.status === 'COMPLETED' ? 'text-green-500' : 'text-gray-500'}`}>{tx.status}</span>
                         </div>
                         {tx.txHash && <a href={`https://tronscan.org/#/transaction/${tx.txHash}`} target="_blank" rel="noreferrer" className="mt-2 block break-all font-mono text-[10px] text-blue-600 hover:underline">TXID: {tx.txHash}</a>}
                       </li>
-                    )) : transactions.map((tx) => (<li key={tx.id} className="p-4 text-sm"><div className="flex justify-between"><span>{tx.details}</span><b>{tx.amount} USDT</b></div><div className="mt-1 text-xs text-gray-500">{tx.date} · {tx.status}</div></li>))}
+                     )) : transactions.map((tx) => (<li key={tx.id} className="p-4 text-sm"><div className="flex justify-between"><span>{tx.details}</span><b>{tx.amount} {tx.type === 'DEPOSIT' ? 'USDT' : 'USDT'}</b></div><div className="mt-1 text-xs text-gray-500">{tx.date} · {tx.status}</div></li>))}
                    </ul>
                )}
              </div>
