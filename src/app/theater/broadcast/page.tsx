@@ -316,6 +316,15 @@ export default function LiveBroadcastPage() {
   };
   const updateFilter = (key: keyof FilterState, value: number) => setFilters((current) => ({ ...current, [key]: value }));
   const resetFilters = () => setFilters(defaultFilters);
+  useEffect(() => {
+    const settings = document.querySelector('.live-studio-settings');
+    if (!settings) return;
+    const walker = document.createTreeWalker(settings, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if (node.nodeValue?.includes('30fps')) node.nodeValue = node.nodeValue.replace('30fps', '최대 60fps');
+    }
+  }, []);
 
   return <main className="live-broadcast-page min-h-screen bg-[#050812] px-3 py-5 text-white sm:px-6 lg:px-10"><div className="mx-auto max-w-[1500px]">
     <header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><Link href="/theater" className="mb-3 inline-flex items-center gap-2 text-xs font-black text-rose-200 hover:text-white"><ArrowLeft size={14} /> LIVE ROOM으로 돌아가기</Link><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-rose-300"><Radio size={15} /> Broadcaster studio</div><h1 className="mt-1 text-2xl font-black text-white">LIVE ROOM · 방송 설정</h1><p className="mt-1 text-xs text-slate-500">{roomId} · 송출 화면 미리보기</p></div><span className={`live-indicator ${live ? 'is-live' : ''}`}><span />{live ? 'LIVE' : 'READY'}</span></header>
