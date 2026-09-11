@@ -19,6 +19,9 @@ function subscribeToPlayerState(frame: HTMLIFrameElement | null) {
 }
 
 export default function MusicPlayer() {
+  const isCompactCall = typeof window !== 'undefined'
+    && window.location.pathname === '/webrtc'
+    && new URLSearchParams(window.location.search).get('compact') === '1';
   const user = useGlobalStore((state) => state.user);
   const setUser = useGlobalStore((state) => state.setUser);
   const [track, setTrack] = useState<MusicTrack>(MUSIC_TRACKS[0]);
@@ -274,6 +277,8 @@ export default function MusicPlayer() {
   useEffect(() => {
     sendPlayerCommand(frameRef.current, 'setVolume', [volume]);
   }, [volume]);
+
+  if (isCompactCall) return null;
 
   return (
     <section ref={searchShellRef} className="music-player-shell border-b border-white/10 bg-[#0b1222] px-3 py-2 text-white shadow-[0_8px_30px_rgba(0,0,0,.18)] sm:px-5">
