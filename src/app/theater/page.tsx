@@ -15,9 +15,9 @@ const iceServers = [
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject', credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject' },
 ];
 
-type LiveRoom = { id: string; roomNumber: number; title?: string; category?: string; hostId?: string | null; hostName?: string | null; hostImage?: string | null; status?: 'offline' | 'live'; viewers?: number; thumbnail?: string | null; updatedAt?: string };
-type LiveMessage = { id: string; roomId: string; authorId: string; user: string; text: string; createdAt: string };
-type ViewerSignal = { id: string; roomId: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
+type LiveRoom = { id: string; roomNumber: number; title?: string; category?: string; hostId?: string | null; hostName?: string | null; hostImage?: string | null; status?: 'offline' | 'live'; viewers?: number; thumbnail?: string | null; sessionId?: string | null; updatedAt?: string };
+type LiveMessage = { id: string; roomId: string; sessionId?: string; authorId: string; user: string; text: string; createdAt: string };
+type ViewerSignal = { id: string; roomId: string; sessionId?: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
 
 const waitForIce = (peer: RTCPeerConnection) => new Promise<void>((resolve) => {
   if (peer.iceGatheringState === 'complete') return resolve();
@@ -67,12 +67,12 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
       if (peer.connectionState === 'connected') setStatus('방송 연결 완료');
       if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') setStatus('재연결 중');
     };
-    const touchPresence = (nextStatus: ViewerSignal['status']) => mergeDocument('liveRoomViewers', viewerIdRef.current, { roomId: room.id, viewerId: user.id, hostId: room.hostId, status: nextStatus, updatedAt: new Date() }, token).catch(() => undefined);
+    const touchPresence = (nextStatus: ViewerSignal['status']) => mergeDocument('liveRoomViewers', viewerIdRef.current, { roomId: room.id, sessionId: room.sessionId, viewerId: user.id, hostId: room.hostId, status: nextStatus, updatedAt: new Date() }, token).catch(() => undefined);
     const signal = async () => {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       await waitForIce(peer);
-      const created = await mergeDocument('liveRoomViewers', viewerIdRef.current, { roomId: room.id, viewerId: user.id, hostId: room.hostId, status: 'offer', offer: JSON.stringify(peer.localDescription), updatedAt: new Date() }, token).then(() => true).catch(() => false);
+      const created = await mergeDocument('liveRoomViewers', viewerIdRef.current, { roomId: room.id, sessionId: room.sessionId, viewerId: user.id, hostId: room.hostId, status: 'offer', offer: JSON.stringify(peer.localDescription), updatedAt: new Date() }, token).then(() => true).catch(() => false);
       if (!created) { setStatus('라이브 권한을 확인하는 중'); return; }
       for (let attempt = 0; active && attempt < 40; attempt += 1) {
         const current = await getDocument<ViewerSignal>('liveRoomViewers', viewerIdRef.current, token).catch(() => null);
@@ -91,9 +91,9 @@ function LiveRoomPlayer({ room, user, compact = false }: { room: LiveRoom; user:
       active = false;
       window.clearInterval(presenceTimer);
       peer.close();
-      void mergeDocument('liveRoomViewers', viewerIdRef.current, { status: 'ended', updatedAt: new Date() }, token).catch(() => undefined);
+      void mergeDocument('liveRoomViewers', viewerIdRef.current, { sessionId: room.sessionId, status: 'ended', updatedAt: new Date() }, token).catch(() => undefined);
     };
-  }, [room.id, room.hostId, room.status, user?.id]);
+  }, [room.id, room.hostId, room.sessionId, room.status, user?.id]);
 
   if (!user) return <div className={`live-room-player live-room-player-empty ${compact ? 'live-room-player-compact' : ''}`}>로그인 후 방송을 시청할 수 있습니다.</div>;
   if (room.status !== 'live' || !room.hostId) return <div className={`live-room-player live-room-player-empty ${compact ? 'live-room-player-compact' : ''}`}>방송 상태를 확인하는 중입니다.<br />방송이 시작되면 자동으로 연결됩니다.</div>;
@@ -155,7 +155,8 @@ export default function LiveRoomPage() {
   useEffect(() => {
     if (!selectedRoom) return;
     const load = async () => {
-      const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: selectedRoom.id }], getSessionToken(), 100).catch(() => []);
+      if (!selectedRoom.sessionId) { setMessages([]); return; }
+      const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: selectedRoom.id }, { field: 'sessionId', op: 'EQUAL', value: selectedRoom.sessionId }], getSessionToken(), 100).catch(() => []);
       setMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
     };
     void load();
@@ -188,11 +189,11 @@ export default function LiveRoomPage() {
 
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!user || !selectedRoom || !message.trim()) return;
+    if (!user || !selectedRoom?.sessionId || !message.trim()) return;
     const token = getSessionToken();
     if (!token) return;
     const text = message.trim();
-    try { await createDocument('liveRoomMessages', crypto.randomUUID(), { roomId: selectedRoom.id, authorId: user.id, user: user.name, text, createdAt: new Date() }, token); setMessage(''); } catch { setHelperMessage('채팅 서버에 연결하지 못했습니다.'); }
+    try { await createDocument('liveRoomMessages', crypto.randomUUID(), { roomId: selectedRoom.id, sessionId: selectedRoom.sessionId, authorId: user.id, user: user.name, text, createdAt: new Date() }, token); setMessage(''); } catch { setHelperMessage('채팅 서버에 연결하지 못했습니다.'); }
   };
 
   const sendGift = async () => {
