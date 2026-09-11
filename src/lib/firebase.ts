@@ -563,13 +563,17 @@ export async function sendUserTransfer(
   if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(fee) || fee < 0) throw new Error('송금 금액이 올바르지 않습니다.');
   const senderDocument = await getRawDocument('profiles', senderId, token);
   if (!senderDocument?.name || !senderDocument.updateTime) throw new Error('보내는 회원 지갑을 찾을 수 없습니다.');
+  const recipientDocument = await getRawDocument('profiles', recipientId, token);
+  if (!recipientDocument?.name || !recipientDocument.updateTime) throw new Error('받는 회원 지갑을 찾을 수 없습니다.');
   const senderBalance = Number(fromFirestoreValue(senderDocument.fields?.usdtBalance) || 0);
+  const recipientBalance = Number(fromFirestoreValue(recipientDocument.fields?.usdtBalance) || 0);
   if (senderBalance < amount + fee) throw new Error(`잔고가 부족합니다. ${amount + fee} USDT가 필요합니다.`);
 
   const requestId = `transfer-${senderId}-${crypto.randomUUID()}`;
   const now = new Date();
   const transferFields = encodeFields({ senderId, recipientId, amount, fee, status: 'COMPLETED', kind: options.kind || 'P2P', roomId: options.roomId, memo: options.memo || '회원 간 USDT 즉시 송금', createdAt: now, completedAt: now });
   const senderFields = { ...(senderDocument.fields || {}), ...encodeFields({ usdtBalance: senderBalance - amount - fee, lastTransferId: requestId, updatedAt: now }) };
+  const recipientFields = encodeFields({ usdtBalance: recipientBalance + amount, lastTransferId: requestId, updatedAt: now });
   const ledgerBase = { amount, fee, status: 'COMPLETED', symbol: 'USDT', requestId, createdAt: now };
   const response = await authenticatedFetch(`${firestoreBase}:commit`, {
     method: 'POST',
@@ -577,7 +581,7 @@ export async function sendUserTransfer(
     body: JSON.stringify({
       writes: [
         { update: { name: senderDocument.name, fields: senderFields }, updateMask: { fieldPaths: [...Object.keys(senderFields)] }, currentDocument: { updateTime: senderDocument.updateTime } },
-        { update: { name: firestoreDocumentName('profiles', recipientId), fields: encodeFields({ lastTransferId: requestId, updatedAt: now }) }, updateMask: { fieldPaths: ['lastTransferId', 'updatedAt'] }, updateTransforms: [{ fieldPath: 'usdtBalance', increment: toFirestoreValue(amount) }] },
+        { update: { name: recipientDocument.name, fields: recipientFields }, updateMask: { fieldPaths: ['usdtBalance', 'lastTransferId', 'updatedAt'] }, currentDocument: { updateTime: recipientDocument.updateTime } },
         { update: { name: firestoreDocumentName('transferRequests', requestId), fields: transferFields }, currentDocument: { exists: false } },
         { update: { name: firestoreDocumentName('walletLedger', `send-${requestId}`), fields: encodeFields({ ...ledgerBase, userId: senderId, type: 'INTERNAL_TRANSFER', direction: 'OUT', counterpartyId: recipientId, memo: options.memo || '회원 간 USDT 즉시 송금' }) }, currentDocument: { exists: false } },
         { update: { name: firestoreDocumentName('walletLedger', `receive-${requestId}`), fields: encodeFields({ ...ledgerBase, userId: recipientId, type: 'INTERNAL_TRANSFER', direction: 'IN', counterpartyId: senderId, memo: options.memo || '회원 간 USDT 수신' }) }, currentDocument: { exists: false } },
