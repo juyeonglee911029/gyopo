@@ -1368,8 +1368,9 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
 }
 
 @media (min-width: 900px) {
-  .tetris-call-workspace { grid-template-columns: max-content minmax(0, 1fr); gap: 0; }
-  .tetris-local-panel { width: max-content; padding-right: 0; }
+  .tetris-call-workspace { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 0; }
+  .tetris-local-panel { width: 560px; padding-right: 0; }
+  .tetris-local-controls { width: 100%; min-width: 0; }
   .tetris-video-pane { max-width: none; }
 }
 
