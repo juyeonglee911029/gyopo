@@ -1267,8 +1267,8 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .portal-chrome > header .local-clock,
   .portal-chrome > header .usdt-balance > span:not(.usdt-mark) { display: none !important; }
   .portal-chrome > header .header-action,
-  .portal-chrome > header .translate-control,
-  .portal-chrome > header .usdt-balance { min-width: 2rem; justify-content: center; padding: .38rem !important; }
+  .portal-chrome > header .translate-control { min-width: 2rem; justify-content: center; padding: .38rem !important; }
+  .portal-chrome > header .usdt-balance { min-width: 3rem; min-height: 2.2rem; justify-content: center; padding: .5rem !important; }
   .portal-chrome > header .header-action svg,
   .portal-chrome > header .translate-control svg { width: 14px; height: 14px; }
   .portal-chrome > section { top: 3.25rem !important; left: .25rem !important; right: .25rem !important; height: 2.15rem !important; }
