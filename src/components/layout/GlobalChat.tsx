@@ -33,6 +33,13 @@ export default function GlobalChat() {
   const [desktopMaximized, setDesktopMaximized] = useState(false);
   const [imageData, setImageData] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const desktopEndRef = useRef<HTMLDivElement>(null);
+  const mobileEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    desktopEndRef.current?.scrollIntoView({ block: 'end' });
+    mobileEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages.length]);
 
   const setDesktopLounge = (open: boolean) => {
     setDesktopOpen(open);
@@ -131,7 +138,7 @@ export default function GlobalChat() {
   return (
     <>
       <aside id="global-lounge" className={`global-lounge fixed bottom-4 right-4 top-24 z-[240] hidden w-[22rem] flex-col overflow-hidden rounded-3xl border border-cyan-200/15 bg-[#0a1120]/46 shadow-[0_24px_90px_rgba(0,0,0,.35)] backdrop-blur-xl transition-transform duration-300 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'} ${desktopMaximized ? 'global-lounge-fullscreen' : ''}`}>
-          <div className="border-b border-white/8 bg-transparent p-4">
+         <div className="border-b border-white/8 bg-[#0d1628]/45 p-4">
           <div className="flex items-center justify-between gap-3">
             <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> {language === 'ko' ? '실시간 라운지' : 'Live Lounge'}</div><p className="mt-1 text-[11px] text-slate-500">{language === 'ko' ? '지역에 관계없이 연결된 교민들' : 'Connect with the global Korean community'}</p></div>
              <div className="flex items-center gap-1">
@@ -154,15 +161,16 @@ export default function GlobalChat() {
                <span className="rounded bg-teal-300/10 px-1.5 text-[10px] font-bold text-teal-200">{message.country || 'Global'}</span>
                <span className="text-xs text-slate-600">{formatTime(message.createdAt)}</span>
              </div>
-               <div className="break-words rounded-xl rounded-tl-none border border-white/8 bg-white/[.06] px-2.5 py-1.5 text-slate-300">
+                <div className={`break-words rounded-xl rounded-tl-none border border-white/8 bg-white/[.06] px-2.5 py-1.5 ${message.authorId === user?.id ? 'global-chat-own' : 'global-chat-other'}`}>
                 {message.imageData && <a href={message.imageData} target="_blank" rel="noreferrer" className="mb-2 block overflow-hidden rounded-lg"><img src={message.imageData} alt="채팅 첨부 이미지" loading="lazy" className="max-h-64 w-full object-contain" /></a>}
                 {message.text && <span>{message.text}</span>}
               </div>
           </div>
-        ))}
+           ))}
+           <div ref={desktopEndRef} />
       </div>
 
-          <div className="border-t border-white/8 bg-transparent p-3">
+         <div className="border-t border-white/8 bg-[#0d1628]/45 p-3">
          {user ? (
            <form onSubmit={handleSend} className="space-y-2">
              {imageData && <div className="relative w-fit overflow-hidden rounded-lg border border-white/10"><img src={imageData} alt="첨부 미리보기" className="h-16 w-24 object-cover" /><button type="button" onClick={() => setImageData('')} aria-label="사진 첨부 취소" className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"><X size={11} /></button></div>}
@@ -193,11 +201,12 @@ export default function GlobalChat() {
        {mobileOpen && <div className="mb-2 overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-[#10182b]/48">
         <div className="flex max-h-56 flex-col gap-2 overflow-y-auto p-3">
            {messages.length === 0 && <div className="lounge-empty-mark" aria-hidden="true"><MessageCircle size={16} /></div>}
-           {messages.slice(-8).map((message) => <div key={message.id} className="rounded-xl bg-slate-50 p-2 text-xs dark:bg-white/5"><b>{message.user}</b><span className="ml-2 text-[10px] text-slate-400">{message.country || 'Global'}</span>{message.imageData && <img src={message.imageData} alt="채팅 첨부 이미지" loading="lazy" className="mt-2 max-h-40 w-full rounded-lg object-contain" />}{message.text && <p className="mt-1 break-words text-slate-600 dark:text-slate-300">{message.text}</p>}</div>)}
+            {messages.slice(-8).map((message) => <div key={message.id} className={`rounded-xl bg-slate-50 p-2 text-xs dark:bg-white/5 ${message.authorId === user?.id ? 'global-chat-own' : 'global-chat-other'}`}><b>{message.user}</b><span className="ml-2 text-[10px] text-slate-400">{message.country || 'Global'}</span>{message.imageData && <img src={message.imageData} alt="채팅 첨부 이미지" loading="lazy" className="mt-2 max-h-40 w-full rounded-lg object-contain" />}{message.text && <p className="mt-1 break-words">{message.text}</p>}</div>)}
+            <div ref={mobileEndRef} />
          </div>
          {user ? <form onSubmit={handleSend} className="flex gap-2 border-t border-slate-200 p-2 dark:border-white/10"><input value={input} onChange={(event) => setInput(event.target.value)} placeholder="라운지에 메시지..." className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none dark:border-white/10 dark:bg-black/20" /><button type="button" onClick={() => fileInputRef.current?.click()} aria-label="사진 첨부" className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-800 text-white"><ImagePlus size={14} /></button><button className="rounded-xl bg-blue-600 px-3 text-xs font-black text-white">전송</button></form> : <p className="border-t border-slate-200 p-3 text-center text-xs text-slate-500 dark:border-white/10">로그인 후 채팅에 참여하세요.</p>}
       </div>}
-         <button onClick={() => setMobileOpen((open) => !open)} aria-label={mobileOpen ? '실시간 라운지 최소화' : '실시간 라운지 최대화'} className="global-lounge-mobile-toggle ml-auto"><span className="sr-only">{mobileOpen ? '최소화' : '최대화'}</span>{mobileOpen ? <PanelRightClose size={19} className="text-teal-300" /> : <MessageCircle size={19} className="text-teal-300" />}</button>
+         <button onClick={() => setMobileOpen((open) => !open)} aria-label={mobileOpen ? '실시간 라운지 최소화' : '실시간 라운지 최대화'} className="ml-auto grid h-10 w-10 place-items-center rounded-xl border border-cyan-200/15 bg-[#10182b]/52 text-white shadow-xl backdrop-blur"><MessageCircle size={17} className="text-teal-300" /></button>
     </div>
     </>
   );
