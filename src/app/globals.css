@@ -1180,12 +1180,12 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-icon-button { display: inline-grid; height: 2rem; width: 2rem; place-items: center; border: 0; background: rgba(255, 255, 255, .06); color: #cbd5e1; }
 .live-room-icon-button:disabled { cursor: not-allowed; opacity: .3; }
 .live-room-side { min-width: 0; }
-.live-room-player { position: relative; min-height: 12rem; overflow: hidden; background: #020617; }
+.live-room-player { position: relative; min-height: clamp(14rem, 40vw, 32rem); aspect-ratio: 16 / 9; overflow: hidden; background: #020617; }
 .live-room-player-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; color: #94a3b8; font-size: .72rem; text-align: center; }
 .live-room-player-compact { position: absolute; inset: 0; min-height: 0; z-index: 1; }
 .live-room-player-status { position: absolute; right: .65rem; bottom: .65rem; display: inline-flex; align-items: center; gap: .35rem; background: rgba(2, 6, 23, .72); padding: .35rem .5rem; color: #fecdd3; font-size: .62rem; font-weight: 800; }
 .live-room-player-status span { height: .4rem; width: .4rem; background: #fb7185; box-shadow: 0 0 10px rgba(251, 113, 133, .9); }
-.live-room-play-button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1px solid rgba(255, 255, 255, .25); background: #fb7185; padding: .65rem .9rem; color: #1f0710; font-size: .7rem; font-weight: 900; box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
+.live-room-play-button { position: absolute; left: 50%; top: 50%; z-index: 20; pointer-events: auto; transform: translate(-50%, -50%); border: 1px solid rgba(255, 255, 255, .25); background: #fb7185; padding: .65rem .9rem; color: #1f0710; font-size: .7rem; font-weight: 900; box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
 .live-room-chat-panel { min-width: 0; border: 0 !important; background: rgba(8, 16, 31, .2); padding: 1rem; box-shadow: none !important; backdrop-filter: blur(18px); }
 .live-room-gift-panel, .live-room-helper-panel { border: 0 !important; background: rgba(8, 16, 31, .2); padding: .85rem; box-shadow: none !important; backdrop-filter: blur(18px); }
 .live-room-gift-button { flex: 0 0 auto; background: #f9a8d4; padding: .65rem .8rem; color: #3b102b; font-size: .7rem; font-weight: 900; }
@@ -1197,9 +1197,12 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-helper-card span { color: #94a3b8; font-size: .62rem; font-weight: 500; }
 .live-room-modal { max-height: min(90vh, 40rem); overflow-y: auto; }
 .live-room-window-layer { position: fixed; inset: 0; z-index: 88; display: flex; align-items: center; justify-content: center; overflow-y: auto; background: rgba(0, 0, 0, .78); padding: .75rem; }
-.live-room-window { animation: live-room-window-in .2s ease-out both; will-change: transform; }
+.live-room-window { max-height: min(92vh, 56rem); animation: live-room-window-in .2s ease-out both; will-change: transform; }
 .live-room-drag-handle { cursor: grab; touch-action: none; user-select: none; }
 .live-room-drag-handle:active { cursor: grabbing; }
+.live-room-mini-window { position: fixed; right: 1rem; bottom: 1rem; z-index: 96; width: min(21rem, calc(100vw - 2rem)); overflow: hidden; border: 0; background: rgba(8, 16, 31, .86); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); backdrop-filter: blur(18px); }
+.live-room-mini-header { display: flex; align-items: center; gap: .35rem; padding: .35rem .45rem .35rem .65rem; color: #f8fafc; }
+.live-room-mini-video { display: block; width: 100%; border: 0; padding: 0; background: #020617; text-align: left; }
 @keyframes live-room-window-in { from { opacity: 0; filter: blur(8px) saturate(.7); } to { opacity: 1; filter: blur(0) saturate(1); } }
 .live-studio-preview { overflow: hidden; }
 .live-studio-settings { padding: 1rem; }
@@ -1208,6 +1211,13 @@ html[data-theme="light"] .portal-chrome > header {
 .live-studio-start { background: #fb7185; color: #1f0710; }
 .live-studio-stop { background: rgba(244, 63, 94, .15); color: #fecdd3; }
 .live-studio-select { display: block; width: 100%; margin-top: .45rem; border: 0; border-radius: 0; background: rgba(255, 255, 255, .06); padding: .65rem .7rem; color: #fff; font-size: .72rem; outline: none; }
+.live-studio-tab { display: inline-flex; align-items: center; gap: .35rem; border: 0; background: transparent; padding: .5rem .65rem; color: #64748b; font-size: .68rem; font-weight: 900; }
+.live-studio-tab.is-active { background: rgba(251, 113, 133, .14); color: #fecdd3; }
+.live-studio-tab span { color: #94a3b8; font-size: .58rem; }
+.live-studio-chat { padding-top: 1rem; }
+.live-studio-chat-list { display: grid; gap: .5rem; min-height: 20rem; max-height: 34rem; margin-top: .8rem; overflow-y: auto; padding: .2rem; }
+.live-studio-chat-row { display: grid; gap: .16rem; background: rgba(255, 255, 255, .045); padding: .55rem .65rem; color: #cbd5e1; font-size: .72rem; line-height: 1.4; }
+.live-studio-chat-row b { color: #fda4af; font-size: .64rem; }
 .live-broadcast-chat-overlay { position: absolute; right: .85rem; bottom: .85rem; left: .85rem; z-index: 4; display: grid; gap: .35rem; max-height: 42%; overflow: hidden; pointer-events: none; mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 100%); }
 .live-broadcast-chat-overlay div { display: flex; align-items: baseline; gap: .45rem; width: fit-content; max-width: 92%; background: rgba(2, 6, 23, .42); padding: .35rem .5rem; color: #f8fafc; font-size: .7rem; line-height: 1.35; text-shadow: 0 1px 8px rgba(0, 0, 0, .75); backdrop-filter: blur(8px); }
 .live-broadcast-chat-overlay b { color: #fda4af; font-size: .64rem; }
@@ -1229,6 +1239,11 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
   .live-room-frame { padding: .65rem; }
   .live-room-preview { min-height: 7rem; }
   .live-studio-button, .live-studio-start, .live-studio-stop { flex: 1 1 calc(50% - .5rem); justify-content: center; }
+  .live-room-window-layer { align-items: stretch; padding: 0; }
+  .live-room-window { width: 100%; height: 100dvh; max-height: none; overflow-y: auto; padding: .75rem; transform: none !important; }
+  .live-room-window .live-room-player { min-height: calc((100vw - 1.5rem) * .5625); }
+  .live-room-window .live-room-chat-panel { min-height: 17rem; }
+  .live-room-mini-window { right: .6rem; bottom: .6rem; width: min(88vw, 22rem); }
 }
 .assistant-page,
 .assistant-page > div,
