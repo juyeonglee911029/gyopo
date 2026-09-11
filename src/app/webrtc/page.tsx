@@ -2,15 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, CheckCircle2, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, Users, VideoOff } from 'lucide-react';
+import { Ban, Camera, CheckCircle2, Flag, LoaderCircle, Mic, MicOff, MonitorUp, PhoneCall, RefreshCcw, ShieldAlert, Users, VideoOff } from 'lucide-react';
 import {
   deleteDocument,
   claimWebrtcMatch,
   createDocument,
   deleteExpiredChatMessages,
+  createSafetyAuditLog,
+  createSafetyReport,
+  createUserBlock,
+  getAccountModeration,
   getDocument,
   getSessionToken,
   mergeDocument,
+  listBlockedUserIds,
   OnlineUser,
   queryDocumentsWhere,
   refreshStoredUser,
@@ -21,6 +26,7 @@ import {
   type TetrisQueueProfile,
 } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { allowClientAction, getVideoAlias, inspectSafetyText, RANDOM_VIDEO_MIN_AGE } from '@/lib/safety';
 import '@/styles/call-ui.css';
 
 type QueueEntry = OnlineUser & {
@@ -127,6 +133,12 @@ export default function WebRTCPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [hasEnded, setHasEnded] = useState(false);
   const [callElapsed, setCallElapsed] = useState(0);
+  const [adultConsent, setAdultConsent] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportCategory, setReportCategory] = useState<'sexual_content' | 'minor_safety' | 'harassment' | 'privacy' | 'spam' | 'other'>('harassment');
+  const [reportDetails, setReportDetails] = useState('');
+  const [safetyActionError, setSafetyActionError] = useState('');
+  const [safetyActionBusy, setSafetyActionBusy] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const sidebarVideoRef = useRef<HTMLVideoElement>(null);
@@ -159,6 +171,7 @@ export default function WebRTCPage() {
   const startingRef = useRef(false);
   const terminalRef = useRef(false);
   const mountedRef = useRef(true);
+  const blockedUserIdsRef = useRef<string[]>([]);
   const pollTimerRef = useRef<number | null>(null);
   const callIdentityRef = useRef({ id: '', kind: 'random', targetUserId: '' });
   const targetedCall = Boolean(targetUserId) || callKind !== 'random';
@@ -404,6 +417,7 @@ export default function WebRTCPage() {
     screenTrackRef.current = null;
     videoSenderRef.current = null;
     callRef.current = null;
+    blockedUserIdsRef.current = [];
     resetSignalingState();
     connectedRef.current = false;
     connectionStartedAt.current = null;
@@ -420,6 +434,57 @@ export default function WebRTCPage() {
     }
   };
 
+  const requestSafetyGuard = async (action: 'match' | 'message' | 'report' | 'block') => {
+    const response = await fetch('/api/safety/guard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, automated: Boolean(navigator.webdriver) }),
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    if (!response.ok) throw new Error(result.error || '안전 확인에 실패했습니다.');
+  };
+
+  const blockPeer = async () => {
+    if (!peer || !user || safetyActionBusy) return;
+    if (!window.confirm('이 상대를 차단하고 현재 연결을 종료할까요?')) return;
+    const token = getSessionToken();
+    if (!token) return;
+    setSafetyActionBusy(true);
+    setSafetyActionError('');
+    try {
+      if (!allowClientAction(`${user.id}:block`, 30, 60 * 60_000)) throw new Error('차단 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
+      await requestSafetyGuard('block');
+      await createUserBlock(user.id, peer.userId, peer.name, activeCallId || undefined, token);
+      await createSafetyAuditLog({ actorId: user.id, action: 'block', targetUserId: peer.userId, callId: activeCallId || undefined }, token);
+      endMatch('상대를 차단했습니다. 해당 상대와 다시 연결되지 않습니다.');
+    } catch (error) {
+      setSafetyActionError(error instanceof Error ? error.message : '차단하지 못했습니다.');
+    } finally {
+      setSafetyActionBusy(false);
+    }
+  };
+
+  const submitReport = async () => {
+    if (!peer || !user || !activeCallId || safetyActionBusy) return;
+    const token = getSessionToken();
+    if (!token) return;
+    setSafetyActionBusy(true);
+    setSafetyActionError('');
+    try {
+      if (!allowClientAction(`${user.id}:report`, 10, 60 * 60_000)) throw new Error('신고 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
+      await requestSafetyGuard('report');
+      await createSafetyReport({ reporterId: user.id, reportedUserId: peer.userId, callId: activeCallId, category: reportCategory, details: reportDetails, createdAt: new Date(), status: 'open' }, token);
+      await createSafetyAuditLog({ actorId: user.id, action: 'report', targetUserId: peer.userId, callId: activeCallId, metadata: reportCategory }, token);
+      setShowReport(false);
+      setReportDetails('');
+      endMatch('신고가 접수되었습니다. 안전을 위해 연결을 종료했습니다.');
+    } catch (error) {
+      setSafetyActionError(error instanceof Error ? error.message : '신고를 접수하지 못했습니다.');
+    } finally {
+      setSafetyActionBusy(false);
+    }
+  };
+
   const startMatch = async () => {
     if (startingRef.current || active || (terminalRef.current && targetedCall)) return;
     if (!user) {
@@ -431,6 +496,31 @@ export default function WebRTCPage() {
       window.alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
       return;
     }
+    if (!Number.isInteger(user.age) || user.age < RANDOM_VIDEO_MIN_AGE) {
+      setPermissionError('영상채팅은 만 18세 이상 인증 회원만 이용할 수 있습니다.');
+      setStatus('18세 이상 이용 가능');
+      return;
+    }
+    if (callKind === 'random' && !adultConsent) {
+      setPermissionError('랜덤 화상채팅은 만 18세 이상이며 안전수칙에 동의해야 시작할 수 있습니다.');
+      setStatus('안전수칙 동의 필요');
+      return;
+    }
+    const moderation = await getAccountModeration(user.id, token);
+    if (moderation?.status === 'banned' || (moderation?.status === 'suspended' && (!moderation.until || new Date(moderation.until).getTime() > Date.now()))) {
+      setPermissionError(moderation.reason || '안전 정책 위반으로 영상채팅 이용이 제한된 계정입니다.');
+      setStatus('이용 제한');
+      return;
+    }
+    try {
+      if (!allowClientAction(`${user.id}:match`, 3, 5 * 60_000)) throw new Error('매칭 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
+      await requestSafetyGuard('match');
+    } catch (error) {
+      setPermissionError(error instanceof Error ? error.message : '안전 확인에 실패했습니다.');
+      return;
+    }
+    const blockedUserIds = await listBlockedUserIds(user.id, token);
+    blockedUserIdsRef.current = blockedUserIds;
     if (!targetedCall && ageMin > ageMax) {
       setPermissionError('최소 나이는 최대 나이보다 작거나 같아야 합니다.');
       return;
@@ -445,6 +535,7 @@ export default function WebRTCPage() {
     setStatus('카메라와 마이크 권한을 확인하는 중');
     setPermissionError('');
     const profile = targetedCall ? user : { ...user, genderPreference };
+    const videoAlias = getVideoAlias(user.id, user.name, callKind !== 'random');
     const profileChanged = profile.genderPreference !== user.genderPreference;
     if (profileChanged) {
       try {
@@ -484,8 +575,7 @@ export default function WebRTCPage() {
     setIsMatching(true);
     const queued = await mergeDocument('webrtcQueue', user.id, {
       userId: user.id,
-      name: user.name,
-      email: user.email,
+      name: videoAlias,
       image: user.image,
        age: user.age || 0,
       country: user.country || 'Global',
@@ -496,7 +586,7 @@ export default function WebRTCPage() {
         targetUserId: targetUserId || undefined,
        queueKind: callKind,
        isSubscribed: Boolean(user.isSubscribed),
-      status: 'waiting',
+       status: 'waiting',
       lastSeenAt: new Date(),
     }, token).then(() => true).catch((error) => {
       if (cancelled()) return false;
@@ -546,6 +636,9 @@ export default function WebRTCPage() {
     setPeer(null);
     setActiveCallId(null);
     setChatMessages([]);
+    setShowReport(false);
+    setReportDetails('');
+    setSafetyActionError('');
     setStatus(message);
     if (connectionRef.current) {
       connectionRef.current.onconnectionstatechange = null;
@@ -733,7 +826,7 @@ export default function WebRTCPage() {
               if (terminalRef.current) void deleteDocument('webrtcQueue', user.id, token).catch(() => undefined);
               return;
             }
-             const claimed = await claimWebrtcMatch({ id: user.id, name: user.name, image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference: matchGenderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined, queueKind: callKind }, token).catch(() => null);
+             const claimed = await claimWebrtcMatch({ id: user.id, name: getVideoAlias(user.id, user.name, callKind !== 'random'), image: user.image, country: user.country || 'Global', age: user.age, gender: user.gender || '', genderPreference: matchGenderPreference, ageMin, ageMax, isSubscribed: Boolean(user.isSubscribed), targetUserId: targetUserId || undefined, queueKind: callKind }, token, blockedUserIdsRef.current).catch(() => null);
             if (claimed) nextCall = { callId: claimed.callId, peer: makePeer(claimed.opponent), initiator: claimed.initiator };
           }
           if (stale()) {
@@ -899,8 +992,18 @@ export default function WebRTCPage() {
     const token = getSessionToken();
     if (!token) return;
     setChatError('');
-    const message = { callId: activeCallId, authorId: user.id, user: user.name, text: chatInput.trim(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000) };
+    const safety = inspectSafetyText(chatInput);
+    if (!safety.allowed) {
+      setChatError(safety.message || '안전 정책에 따라 보낼 수 없는 메시지입니다.');
+      return;
+    }
+    if (!allowClientAction(`${user.id}:message`, 20, 60_000)) {
+      setChatError('메시지를 너무 빠르게 보내고 있습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    const message = { callId: activeCallId, authorId: user.id, user: getVideoAlias(user.id, user.name, callKind !== 'random'), text: chatInput.trim(), createdAt: new Date(), expiresAt: new Date(Date.now() + 60_000) };
     try {
+      await requestSafetyGuard('message');
       await createDocument('webrtcChatMessages', crypto.randomUUID(), message, token);
       if (terminalRef.current || callRef.current?.callId !== activeCallId) return;
       setChatInput('');
@@ -914,6 +1017,11 @@ export default function WebRTCPage() {
     const question = chatInput.trim();
     if (!question) {
       setChatError('AI에게 물어볼 내용을 먼저 입력해주세요.');
+      return;
+    }
+    const safety = inspectSafetyText(question);
+    if (!safety.allowed) {
+      setChatError(safety.message || '안전 정책에 따라 보낼 수 없는 질문입니다.');
       return;
     }
     const token = getSessionToken();
@@ -930,7 +1038,8 @@ export default function WebRTCPage() {
       const result = await response.json() as { answer?: string; error?: string };
       if (terminalRef.current || callRef.current?.callId !== activeCallId) return;
       if (!response.ok || !result.answer) throw new Error(result.error || 'AI 답변을 가져오지 못했습니다.');
-      await createDocument('webrtcChatMessages', crypto.randomUUID(), { callId: activeCallId, authorId: user.id, user: 'GYOPO AI', text: result.answer, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000) }, token);
+      const aiText = inspectSafetyText(result.answer).allowed ? result.answer : '안전 정책에 따라 외부 연락처나 링크가 포함된 AI 답변은 표시하지 않았습니다.';
+      await createDocument('webrtcChatMessages', crypto.randomUUID(), { callId: activeCallId, authorId: user.id, user: 'GYOPO AI', text: aiText, createdAt: new Date(), expiresAt: new Date(Date.now() + 60_000) }, token);
       if (terminalRef.current || callRef.current?.callId !== activeCallId) return;
       setChatInput('');
       setChatError('');
@@ -975,11 +1084,22 @@ export default function WebRTCPage() {
   return (
     <div className="webrtc-page min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
       <div className="webrtc-shell mx-auto max-w-6xl">
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-           <div className="webrtc-title-stack"><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">LIVE CHAT</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">LIVE CHAT</h1><p className="mt-2 text-sm text-slate-400">현재 접속 중인 인증 회원과 자동으로 연결됩니다.</p></div>
-        </header>
+         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+            <div className="webrtc-title-stack"><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">LIVE CHAT</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">LIVE CHAT</h1><p className="mt-2 text-sm text-slate-400">현재 접속 중인 인증 회원과 자동으로 연결됩니다.</p></div>
+         </header>
 
-        <div className="webrtc-grid grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+         <section className="mb-5 grid gap-3 border border-amber-300/20 bg-amber-300/[.06] p-4 text-sm text-amber-50 lg:grid-cols-[1fr_auto] lg:items-center">
+           <div><div className="flex items-center gap-2 font-black"><ShieldAlert size={17} className="text-amber-200" /> 랜덤 화상채팅 안전정책</div><p className="mt-1 text-xs leading-5 text-amber-100/70">만 18세 이상만 이용할 수 있습니다. 실명·전화번호·주소·외부 연락처·링크 공유는 차단되며, 신고·차단·계정 정지와 운영자 검토가 적용됩니다.</p></div>
+           {callKind === 'random' && <label className="flex min-w-0 items-start gap-2 text-xs font-bold text-amber-100"><input type="checkbox" checked={adultConsent} onChange={(event) => setAdultConsent(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-amber-300" />안전수칙을 읽었고 만 18세 이상입니다.</label>}
+         </section>
+
+         {peer && <section className="mb-5 border border-rose-300/20 bg-rose-300/[.05] p-4">
+           <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-black uppercase tracking-[.18em] text-rose-200">상대방 안전 도구</div><p className="mt-1 text-xs text-slate-400">불쾌하거나 위험한 상황이면 즉시 종료하고 신고 또는 차단하세요.</p></div><div className="flex gap-2"><button type="button" onClick={() => setShowReport((value) => !value)} disabled={safetyActionBusy} className="inline-flex items-center gap-1.5 border border-rose-300/25 px-3 py-2 text-xs font-black text-rose-100 disabled:opacity-50"><Flag size={14} /> 신고</button><button type="button" onClick={() => void blockPeer()} disabled={safetyActionBusy} className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-2 text-xs font-black text-slate-200 disabled:opacity-50"><Ban size={14} /> 차단</button></div></div>
+           {showReport && <div className="mt-3 grid gap-2 sm:grid-cols-[180px_1fr_auto]"><select value={reportCategory} onChange={(event) => setReportCategory(event.target.value as typeof reportCategory)} className="border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none"><option value="sexual_content">성적·불법 콘텐츠</option><option value="minor_safety">미성년자 안전 우려</option><option value="harassment">괴롭힘·위협</option><option value="privacy">개인정보 노출</option><option value="spam">도배·사기·악성 링크</option><option value="other">기타</option></select><input value={reportDetails} onChange={(event) => setReportDetails(event.target.value.slice(0, 500))} maxLength={500} placeholder="상황을 간단히 설명해주세요 (선택)" className="min-w-0 border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none" /><button type="button" onClick={() => void submitReport()} disabled={safetyActionBusy} className="bg-rose-500 px-3 py-2 text-xs font-black text-white disabled:opacity-50">{safetyActionBusy ? '처리 중...' : '신고 접수'}</button></div>}
+           {safetyActionError && <p className="mt-2 text-xs font-bold text-rose-200">{safetyActionError}</p>}
+         </section>}
+
+         <div className="webrtc-grid grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <section className="relative aspect-video overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-2xl">
              <video ref={remoteVideoRef} autoPlay playsInline className={`h-full w-full object-contain bg-[#030611] transition-opacity ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`} />
             {!hasRemoteVideo && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(circle_at_center,#172b50,#050914_70%)] text-center"><div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 p-5">{isMatching || active ? <LoaderCircle size={42} className="animate-spin text-cyan-300" /> : <Camera size={42} className="text-slate-500" />}</div><div><p className="text-xl font-black">{active ? status : '연결 대기 중'}</p><p className="mt-2 text-sm text-slate-400">{active ? '상대방의 카메라 연결을 기다리고 있습니다.' : '시작 버튼을 누르면 카메라와 마이크를 준비합니다.'}</p></div></div>}
