@@ -15,6 +15,8 @@ type ContentSourceSettings = { disabledSourceIds?: string[]; updatedAt?: string 
 type SourceItem = { title: string; url: string; description?: string; body?: string; image?: string; images?: string[]; publishedAt?: string; category?: string; company?: string; location?: string; country?: string; salary?: string; tag?: string; author?: string };
 type SourceSection = { category: ContentCategory; label: string; url: string; items: SourceItem[] };
 type SourcePayload = { error?: string; warning?: string; status?: string; sourceId?: string; sourceName?: string; region?: string; url?: string; title?: string; description?: string; image?: string; images?: string[]; fetchedAt?: string; verified?: boolean; items?: SourceItem[]; sections?: SourceSection[] };
+type SafetyReportRow = { id: string; reporterId: string; reportedUserId: string; callId?: string; category: string; details?: string; createdAt?: string; status: 'open' | 'resolved' };
+type ModerationRow = { id: string; userId: string; status: 'active' | 'suspended' | 'banned'; reason?: string; until?: string; updatedAt?: string; updatedBy?: string };
 
 const categoryLabels: Record<ContentCategory, string> = { news: '뉴스', directory: '업소록', jobs: '구인구직', market: '장터', events: '행사', community: '커뮤니티' };
 
@@ -55,13 +57,15 @@ export default function MasterPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, { balance: number; syncedAt: string }>>({});
   const [walletBalanceErrors, setWalletBalanceErrors] = useState<Record<string, string>>({});
   const [walletBalanceLoading, setWalletBalanceLoading] = useState<Record<string, boolean>>({});
+  const [safetyReports, setSafetyReports] = useState<SafetyReportRow[]>([]);
+  const [moderationRows, setModerationRows] = useState<ModerationRow[]>([]);
   const masterUserId = user?.id && isMasterUser(user) ? user.id : undefined;
 
   const load = async () => {
     const token = getSessionToken();
     if (!token || !isMasterUser(user)) return;
     setLoading(true);
-    const [nextProfiles, nextDeposits, nextWithdrawals, nextTransfers, nextSettings, nextSiteStats, nextOnlineCount] = await Promise.all([
+    const [nextProfiles, nextDeposits, nextWithdrawals, nextTransfers, nextSettings, nextSiteStats, nextOnlineCount, nextSafetyReports, nextModerationRows] = await Promise.all([
       listDocuments<PortalUser>('profiles', token).catch(() => []),
       listDocuments<RequestRow>('depositRequests', token).catch(() => []),
       listDocuments<RequestRow>('withdrawalRequests', token).catch(() => []),
@@ -69,6 +73,8 @@ export default function MasterPage() {
       listDocuments<WalletSettings>('adminSettings', token).catch(() => []),
       getSiteStats().catch(() => ({ today: 0, month: 0, total: 0 })),
       getOnlineCount().catch(() => 0),
+      listDocuments<SafetyReportRow>('safetyReports', token).catch(() => []),
+      listDocuments<ModerationRow>('accountModeration', token).catch(() => []),
     ]);
     const wallet: WalletSettings = nextSettings.find((item) => item.id === 'wallet') || { depositAddress: MASTER_DEPOSIT_ADDRESS, network: USDT_NETWORK };
     setProfiles(nextProfiles);
@@ -78,6 +84,8 @@ export default function MasterPage() {
     setSettings({ ...wallet, network: USDT_NETWORK });
     setSiteStats(nextSiteStats);
     setOnlineCount(nextOnlineCount);
+    setSafetyReports(nextSafetyReports.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
+    setModerationRows(nextModerationRows);
     setAddress(wallet.depositAddress || MASTER_DEPOSIT_ADDRESS);
     const contentSettings = await getDocument<ContentSourceSettings>('adminSettings', 'contentSources', token).catch(() => null);
     setDisabledSourceIds(contentSettings?.disabledSourceIds || []);
@@ -365,6 +373,22 @@ export default function MasterPage() {
     }
   };
 
+  const updateSafetyModeration = async (report: SafetyReportRow, status: ModerationRow['status']) => {
+    if (!token || !user) return;
+    setSavingAction(`safety-${report.id}`);
+    try {
+      const until = status === 'suspended' ? new Date(Date.now() + 7 * 24 * 60 * 60_000) : null;
+      await mergeDocument('accountModeration', report.reportedUserId, { userId: report.reportedUserId, status, reason: `신고 ${report.id} 검토 결과`, until, updatedAt: new Date(), updatedBy: user.email }, token);
+      await mergeDocument('safetyReports', report.id, { status: 'resolved', reviewedAt: new Date(), reviewedBy: user.email }, token);
+      setMessage(`${report.reportedUserId.slice(0, 10)} 계정에 ${status === 'banned' ? '영구 정지' : status === 'suspended' ? '7일 정지' : '정상화'}를 적용했습니다.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? `안전 조치 실패: ${error.message.slice(0, 140)}` : '안전 조치에 실패했습니다.');
+    } finally {
+      setSavingAction(null);
+    }
+  };
+
   if (!isMasterUser(user)) return <div className="mx-auto max-w-xl px-4 py-24 text-center"><ShieldAlert className="mx-auto mb-4 text-rose-400" size={42} /><h1 className="text-2xl font-black">마스터 전용 페이지</h1><p className="mt-3 text-sm text-slate-500">관리자 계정으로 로그인해야 접근할 수 있습니다.</p></div>;
 
   return (
@@ -390,7 +414,8 @@ export default function MasterPage() {
          )}
         <aside className="space-y-6"><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 flex items-center gap-2 font-black"><LockKeyhole size={17} className="text-amber-400" /> TRON 입금 지갑</h2><p className="mb-3 text-xs leading-5 text-slate-500">회원은 이 서버 주소를 읽기만 합니다. 브라우저 localStorage 주소는 사용하지 않습니다.</p><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="T... 마스터 지갑 주소" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-black/20" /><button onClick={() => void saveSettings()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 py-2.5 text-sm font-black text-slate-950"><Save size={16} /> 설정 저장</button>{message && <p className="mt-3 text-xs font-bold text-emerald-500">{message}</p>}</section><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 flex items-center gap-2 font-black"><CheckCircle2 size={17} className="text-emerald-400" /> 입금 신청</h2><div className="space-y-2">{deposits.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5"><div className="flex justify-between font-bold"><span>{request.userId.slice(0, 10)}...</span><span>{request.amount} USDT</span></div><p className="mt-1 break-all text-[10px] text-slate-500">{request.network || 'USDT-TRC20'} · {request.depositAddress || '서버 주소'}</p><div className="mt-2 flex gap-2"><button onClick={() => void approveDeposit(request)} className="flex-1 rounded-lg bg-emerald-500 py-2 text-xs font-black text-white">승인</button><button onClick={() => void updateRequest('depositRequests', request, 'REJECTED')} className="flex-1 rounded-lg border border-red-200 py-2 text-xs font-black text-red-500">거절</button></div></div>)}{deposits.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 입금 신청이 없습니다.</p>}</div></section><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#10182b]"><h2 className="mb-3 font-black">출금 승인</h2><div className="space-y-2">{withdrawals.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5"><div className="flex justify-between font-bold"><span>{request.userId.slice(0, 10)}...</span><span>{request.amount} USDT</span></div><p className="mt-1 break-all text-[10px] text-slate-500">{request.targetAddress || '주소 없음'}</p><button onClick={() => void updateRequest('withdrawalRequests', request, 'APPROVED')} className="mt-2 w-full rounded-lg bg-cyan-500 py-2 text-xs font-black text-white">승인 처리</button></div>)}{withdrawals.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 출금 신청이 없습니다.</p>}</div></section></aside>
        </div>
-       <section className="mt-6 rounded-3xl border border-orange-200 bg-white p-5 shadow-sm dark:border-orange-300/20 dark:bg-[#10182b]"><div className="mb-4 flex items-center justify-between"><h2 className="font-black">회원 송금 신청</h2><span className="text-xs text-slate-500">{transfers.filter((item) => item.status === 'PENDING').length}건 대기</span></div><div className="grid gap-3 md:grid-cols-2">{transfers.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-orange-50 p-4 text-sm dark:bg-orange-300/10"><div className="flex items-center justify-between font-black"><span>{request.amount} USDT</span><span className="text-xs text-orange-600">수수료 {request.fee || 0} USDT</span></div><p className="mt-2 break-all text-xs text-slate-500">보내는 회원: {request.senderId}</p><p className="break-all text-xs text-slate-500">받는 회원: {request.recipientId}</p><div className="mt-3 flex gap-2"><button disabled={savingAction === request.id} onClick={() => void approveTransfer(request)} className="flex-1 rounded-xl bg-emerald-500 py-2 text-xs font-black text-white disabled:opacity-50">승인</button><button disabled={savingAction === request.id} onClick={() => void rejectTransfer(request)} className="flex-1 rounded-xl border border-rose-200 py-2 text-xs font-black text-rose-600 disabled:opacity-50">거절</button></div></div>)}{transfers.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 송금 신청이 없습니다.</p>}</div></section>
+        <section className="mt-6 rounded-3xl border border-rose-300/20 bg-[#10182b] p-5"><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black text-rose-100">안전 신고·제재 센터</h2><p className="mt-1 text-xs text-slate-500">신고 원문은 최소한으로만 확인하고, 조치 사유와 운영자 작업은 감사 대상으로 남깁니다.</p></div><span className="text-xs font-black text-rose-200">미처리 {safetyReports.filter((item) => item.status === 'open').length}건</span></div><div className="space-y-3">{safetyReports.filter((item) => item.status === 'open').map((report) => <article key={report.id} className="border border-white/10 bg-white/[.04] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-black text-rose-200">{report.category} · 신고자 {report.reporterId.slice(0, 10)}...</div><p className="mt-1 break-all text-sm font-bold">대상 {report.reportedUserId}</p><p className="mt-2 text-xs leading-5 text-slate-400">{report.details || '상세 내용 없음'}</p></div><div className="flex shrink-0 gap-2"><button type="button" disabled={savingAction === `safety-${report.id}`} onClick={() => void updateSafetyModeration(report, 'suspended')} className="border border-amber-300/30 px-3 py-2 text-[11px] font-black text-amber-100 disabled:opacity-50">7일 정지</button><button type="button" disabled={savingAction === `safety-${report.id}`} onClick={() => void updateSafetyModeration(report, 'banned')} className="bg-rose-500 px-3 py-2 text-[11px] font-black text-white disabled:opacity-50">영구 정지</button><button type="button" disabled={savingAction === `safety-${report.id}`} onClick={() => void updateSafetyModeration(report, 'active')} className="border border-emerald-300/30 px-3 py-2 text-[11px] font-black text-emerald-100 disabled:opacity-50">정상화</button></div></div></article>)}{safetyReports.filter((item) => item.status === 'open').length === 0 && <p className="text-sm text-slate-500">처리할 안전 신고가 없습니다.</p>}</div><div className="mt-5 border-t border-white/10 pt-4"><div className="mb-2 text-xs font-black uppercase tracking-[.18em] text-slate-500">현재 제재 계정</div><div className="flex flex-wrap gap-2">{moderationRows.filter((item) => item.status !== 'active').map((item) => <span key={item.id} className="border border-rose-300/20 px-2 py-1 text-[10px] font-bold text-rose-100">{item.userId.slice(0, 10)} · {item.status}</span>)}{moderationRows.filter((item) => item.status !== 'active').length === 0 && <span className="text-xs text-slate-500">현재 제재 계정 없음</span>}</div></div></section>
+        <section className="mt-6 rounded-3xl border border-orange-200 bg-white p-5 shadow-sm dark:border-orange-300/20 dark:bg-[#10182b]"><div className="mb-4 flex items-center justify-between"><h2 className="font-black">회원 송금 신청</h2><span className="text-xs text-slate-500">{transfers.filter((item) => item.status === 'PENDING').length}건 대기</span></div><div className="grid gap-3 md:grid-cols-2">{transfers.filter((item) => item.status === 'PENDING').map((request) => <div key={request.id} className="rounded-2xl bg-orange-50 p-4 text-sm dark:bg-orange-300/10"><div className="flex items-center justify-between font-black"><span>{request.amount} USDT</span><span className="text-xs text-orange-600">수수료 {request.fee || 0} USDT</span></div><p className="mt-2 break-all text-xs text-slate-500">보내는 회원: {request.senderId}</p><p className="break-all text-xs text-slate-500">받는 회원: {request.recipientId}</p><div className="mt-3 flex gap-2"><button disabled={savingAction === request.id} onClick={() => void approveTransfer(request)} className="flex-1 rounded-xl bg-emerald-500 py-2 text-xs font-black text-white disabled:opacity-50">승인</button><button disabled={savingAction === request.id} onClick={() => void rejectTransfer(request)} className="flex-1 rounded-xl border border-rose-200 py-2 text-xs font-black text-rose-600 disabled:opacity-50">거절</button></div></div>)}{transfers.filter((item) => item.status === 'PENDING').length === 0 && <p className="text-sm text-slate-500">대기 중인 송금 신청이 없습니다.</p>}</div></section>
      </div>
   );
 }
