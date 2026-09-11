@@ -129,6 +129,13 @@
   animation: friend-call-slide-out .28s ease-in both;
 }
 
+/* Keep the desktop random-chat video from stretching to the far right edge. */
+@media (min-width: 1024px) {
+  .webrtc-page .webrtc-shell { max-width: 50rem !important; }
+  .webrtc-page .webrtc-grid { max-width: 50rem; grid-template-columns: minmax(0, 1fr) 260px !important; }
+  .webrtc-page .webrtc-grid > section:first-child { max-width: 32rem; }
+}
+
 @keyframes call-logo-pulse {
   0%, 100% { opacity: .28; transform: translateY(.12rem) scale(.92); }
   50% { opacity: 1; transform: translateY(-.12rem) scale(1.08); }
