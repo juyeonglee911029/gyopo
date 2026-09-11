@@ -48,7 +48,7 @@ service cloud.firestore {
         && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age);
     }
     function hasNoWalletBalanceChange() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['usdtBalance', 'lastTransferId']);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['usdtBalance', 'usdBalance', 'lastTransferId', 'lastUsdOperationId']);
     }
     function isDirectTransferProfileUpdate(userId) {
       return request.auth != null
@@ -83,6 +83,51 @@ service cloud.firestore {
         && data.amount == getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.amount
         && ((data.userId == request.auth.uid && data.direction == 'OUT')
           || (data.userId == getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.recipientId && data.direction == 'IN'));
+    }
+    function isUsdServiceBalanceUpdate(userId) {
+      return request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usdBalance', 'lastUsdOperationId', 'updatedAt'])
+        && request.resource.data.lastUsdOperationId is string
+        && request.resource.data.usdBalance is number
+        && resource.data.usdBalance is number
+        && (
+          (existsAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId))
+            && getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.userId == userId
+            && getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.amount is number
+            && getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
+            && (
+              (getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.status == 'RESERVED'
+                && request.resource.data.usdBalance == resource.data.usdBalance - getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.amount)
+              || (getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.status == 'REFUNDED'
+                && request.resource.data.usdBalance == resource.data.usdBalance + getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.amount)
+            ))
+          || (existsAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId))
+            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.userId == userId
+            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.amount is number
+            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
+            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.status == 'RESERVED'
+            && request.resource.data.usdBalance == resource.data.usdBalance - getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.amount)
+          || (existsAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId))
+            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.winnerId == userId
+            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
+            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.payoutAmount is number
+            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.status == 'PAID'
+            && request.resource.data.usdBalance == resource.data.usdBalance + getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.payoutAmount)
+          || (existsAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId))
+            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.userId == userId
+            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
+            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.amount is number
+            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.status == 'ACTIVE'
+            && request.resource.data.usdBalance == resource.data.usdBalance - getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.amount)
+        );
+    }
+    function canInitializeUsdBalance(userId) {
+      return request.auth != null
+        && request.auth.uid == userId
+        && !resource.data.keys().hasAny(['usdBalance'])
+        && request.resource.data.usdBalance == 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usdBalance', 'updatedAt']);
     }
      function isSafePublicProfile(data) {
        return data.keys().hasOnly(['name', 'image', 'gender', 'country', 'age', 'isSubscribed', 'isPublic', 'updatedAt', 'walletAddress', 'walletNetwork', 'walletPublic'])
@@ -284,6 +329,8 @@ service cloud.firestore {
       allow create: if isMaster() || (request.auth != null && request.auth.uid == userId && hasValidProfileState(request.resource.data));
       allow update: if isMaster()
         || isDirectTransferProfileUpdate(userId)
+        || isUsdServiceBalanceUpdate(userId)
+        || canInitializeUsdBalance(userId)
         || (request.auth != null && request.auth.uid == userId && hasImmutableOnboardingFields() && hasNoWalletBalanceChange());
       allow delete: if isMaster();
     }
@@ -317,7 +364,7 @@ service cloud.firestore {
       allow update: if isMaster();
       allow delete: if false;
     }
-    match /walletLedger/{entryId} {
+      match /walletLedger/{entryId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
        allow create: if request.auth != null
           && request.resource.data.type is string
@@ -328,9 +375,13 @@ service cloud.firestore {
           && request.resource.data.createdAt is timestamp
           && request.resource.data.keys().hasOnly(['userId', 'type', 'direction', 'amount', 'fee', 'status', 'network', 'symbol', 'txHash', 'fromAddress', 'toAddress', 'counterpartyId', 'requestId', 'memo', 'createdAt'])
           && (request.resource.data.userId == request.auth.uid || isDirectTransferLedger(request.resource.data));
-      allow update, delete: if false;
-    }
-    match /escrowOrders/{orderId} {
+       allow update, delete: if false;
+      }
+      match /paddlePayments/{paymentId} {
+        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+        allow create, update, delete: if false;
+      }
+      match /escrowOrders/{orderId} {
       allow read: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
       allow create: if request.auth != null
         && request.resource.data.buyerId == request.auth.uid
@@ -570,7 +621,7 @@ service cloud.firestore {
     }
     match /gameStakes/{stakeId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0;
+       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0 && request.resource.data.currency == 'USD';
       allow update: if request.auth != null
         && resource.data.userId == request.auth.uid
         && resource.data.status == 'RESERVED'
@@ -580,17 +631,17 @@ service cloud.firestore {
     }
     match /gamePayouts/{payoutId} {
       allow read: if request.auth != null && (resource.data.winnerId == request.auth.uid || resource.data.loserId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.winnerId == request.auth.uid && request.resource.data.payoutAmount == request.resource.data.amount * 2;
+       allow create: if request.auth != null && request.resource.data.winnerId == request.auth.uid && request.resource.data.payoutAmount == request.resource.data.amount * 2 && request.resource.data.currency == 'USD';
       allow update, delete: if false;
     }
     match /genderMatchStakes/{stakeId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0;
+       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0 && request.resource.data.currency == 'USD';
       allow update, delete: if false;
     }
     match /premiumSubscriptions/{subscriptionId} {
       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount == 30;
+       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount == 30 && request.resource.data.currency == 'USD';
       allow update, delete: if false;
     }
     match /tetrisInvites/{inviteId} {
