@@ -8,7 +8,6 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUp, Camera, Game
 import { claimTetrisLobbyRoom, claimTetrisMatch, createDocument, deleteDocument, deleteExpiredChatMessages, getDocument, getSessionToken, getSessionUserId, heartbeatTetrisLobbyRoom, joinTetrisLobbyRoom, listDocuments, listOnlineUsers, mergeDocument, OnlineUser, queryDocuments, queryDocumentsWhere, refreshStoredUser, refundGameStake, releaseTetrisLobbyRoom, reserveGameStake, reserveTetrisLobbyRoom, settleTetrisMatch, startTetrisCountdown, upsertDocument, type TetrisLobbyRoom, type TetrisQueueProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import '@/styles/call-ui.css';
-import '@/styles/call-ui.css';
 
 function formatUsdt(value: number | string) {
   return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1566,7 +1565,7 @@ export default function GamesPage() {
 
                   <div className="tetris-adjacent-boards grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5">
                     <div className="rounded-xl border border-amber-300/20 bg-[#10182b] p-1.5 text-center"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-500">Next</div><div className="mx-auto w-fit"><NextBlock piece={game.nextPiece} compact /></div></div>
-                     <div className="rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5"><div className="mb-1 text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div><BattleMetrics state={opponentState} elapsed={elapsedLabel} /></div>
+                      <div className="tetris-vs-card rounded-xl border border-violet-300/20 bg-[#10182b] p-1.5"><div className="tetris-vs-title mb-1 text-center text-[9px] font-black uppercase tracking-widest text-violet-200">VS</div>{opponent ? <div className="mb-1 truncate text-center text-[10px] font-black text-white">{opponent.name}</div> : <div className="text-center text-[10px] text-slate-500">상대 대기</div>}<div className="overflow-hidden rounded-lg"><BoardGrid cells={opponentVisual} compact /></div><BattleMetrics state={opponentState} elapsed={elapsedLabel} /></div>
                   </div>
                 </div>
 
