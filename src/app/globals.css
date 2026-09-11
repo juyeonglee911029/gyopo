@@ -1180,6 +1180,7 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-player-empty { display: grid; min-height: 12rem; place-items: center; padding: 1rem; color: #94a3b8; font-size: .72rem; text-align: center; }
 .live-room-player-status { position: absolute; right: .65rem; bottom: .65rem; display: inline-flex; align-items: center; gap: .35rem; background: rgba(2, 6, 23, .72); padding: .35rem .5rem; color: #fecdd3; font-size: .62rem; font-weight: 800; }
 .live-room-player-status span { height: .4rem; width: .4rem; background: #fb7185; box-shadow: 0 0 10px rgba(251, 113, 133, .9); }
+.live-room-chat-panel { min-width: 0; border: 0; background: rgba(8, 16, 31, .34); padding: 1rem; }
 .live-room-side-panel { padding: 1rem; }
 .live-room-input { min-width: 0; width: 100%; border: 0; border-radius: 0; background: rgba(255, 255, 255, .06); padding: .65rem .7rem; color: #fff; font-size: .72rem; outline: none; }
 .live-room-input:focus { box-shadow: 0 0 0 2px rgba(251, 113, 133, .35); }
