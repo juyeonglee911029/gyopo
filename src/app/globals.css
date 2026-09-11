@@ -1186,8 +1186,8 @@ html[data-theme="light"] .portal-chrome > header {
 .live-room-player-status { position: absolute; right: .65rem; bottom: .65rem; display: inline-flex; align-items: center; gap: .35rem; background: rgba(2, 6, 23, .72); padding: .35rem .5rem; color: #fecdd3; font-size: .62rem; font-weight: 800; }
 .live-room-player-status span { height: .4rem; width: .4rem; background: #fb7185; box-shadow: 0 0 10px rgba(251, 113, 133, .9); }
 .live-room-play-button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1px solid rgba(255, 255, 255, .25); background: #fb7185; padding: .65rem .9rem; color: #1f0710; font-size: .7rem; font-weight: 900; box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
-.live-room-chat-panel { min-width: 0; border: 0; background: rgba(8, 16, 31, .34); padding: 1rem; }
-.live-room-gift-panel, .live-room-helper-panel { border: 0; background: rgba(8, 16, 31, .34); padding: .85rem; }
+.live-room-chat-panel { min-width: 0; border: 0 !important; background: rgba(8, 16, 31, .2); padding: 1rem; box-shadow: none !important; backdrop-filter: blur(18px); }
+.live-room-gift-panel, .live-room-helper-panel { border: 0 !important; background: rgba(8, 16, 31, .2); padding: .85rem; box-shadow: none !important; backdrop-filter: blur(18px); }
 .live-room-gift-button { flex: 0 0 auto; background: #f9a8d4; padding: .65rem .8rem; color: #3b102b; font-size: .7rem; font-weight: 900; }
 .live-room-side-panel { padding: 1rem; }
 .live-room-input { min-width: 0; width: 100%; border: 0; border-radius: 0; background: rgba(255, 255, 255, .06); padding: .65rem .7rem; color: #fff; font-size: .72rem; outline: none; }
@@ -1208,6 +1208,10 @@ html[data-theme="light"] .portal-chrome > header {
 .live-studio-start { background: #fb7185; color: #1f0710; }
 .live-studio-stop { background: rgba(244, 63, 94, .15); color: #fecdd3; }
 .live-studio-select { display: block; width: 100%; margin-top: .45rem; border: 0; border-radius: 0; background: rgba(255, 255, 255, .06); padding: .65rem .7rem; color: #fff; font-size: .72rem; outline: none; }
+.live-broadcast-chat-overlay { position: absolute; right: .85rem; bottom: .85rem; left: .85rem; z-index: 4; display: grid; gap: .35rem; max-height: 42%; overflow: hidden; pointer-events: none; mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 100%); }
+.live-broadcast-chat-overlay div { display: flex; align-items: baseline; gap: .45rem; width: fit-content; max-width: 92%; background: rgba(2, 6, 23, .42); padding: .35rem .5rem; color: #f8fafc; font-size: .7rem; line-height: 1.35; text-shadow: 0 1px 8px rgba(0, 0, 0, .75); backdrop-filter: blur(8px); }
+.live-broadcast-chat-overlay b { color: #fda4af; font-size: .64rem; }
+.live-broadcast-chat-overlay span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live-indicator { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid rgba(148, 163, 184, .2); padding: .4rem .55rem; color: #94a3b8; font-size: .62rem; font-weight: 900; letter-spacing: .14em; }
 .live-indicator span { height: .45rem; width: .45rem; background: #64748b; }
 .live-indicator.is-live { border-color: rgba(251, 113, 133, .55); color: #fecdd3; }
