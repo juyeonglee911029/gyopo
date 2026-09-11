@@ -62,9 +62,9 @@ export default function LiveBroadcastPage() {
   };
 
   const publishRoom = async (status: 'live' | 'offline', thumbnail?: string, resetViewers = false) => {
-    if (!user) return;
+    if (!user) { setMessage('방송하려면 먼저 로그인해주세요.'); return false; }
     const token = getSessionToken();
-    if (!token) return;
+    if (!token) { setMessage('로그인 세션이 만료되었습니다. 다시 로그인해주세요.'); return false; }
     const roomData = {
       roomNumber: Number(roomRef.current.match(/\d+$/)?.[0] || 1),
       title: `LIVE ROOM ${roomRef.current.match(/\d+$/)?.[0] || '01'}`,
@@ -79,7 +79,13 @@ export default function LiveBroadcastPage() {
       ...(resetViewers || status === 'offline' ? { viewers: 0 } : {}),
       ...(status === 'offline' ? { thumbnail: null } : {}),
     };
-    await mergeDocument('liveRooms', roomRef.current, roomData, token).catch(() => undefined);
+    try {
+      await mergeDocument('liveRooms', roomRef.current, roomData, token);
+      return true;
+    } catch {
+      setMessage('라이브 서버에 연결하지 못했습니다. Firebase 로그인과 방송 권한을 확인해주세요.');
+      return false;
+    }
   };
 
   const startCamera = async () => {
@@ -159,7 +165,8 @@ export default function LiveBroadcastPage() {
     setLive(true);
     setEndingIn(null);
     await new Promise((resolve) => window.setTimeout(resolve, 250));
-    await publishRoom('live', captureThumbnail(), true);
+    const published = await publishRoom('live', captureThumbnail(), true);
+    if (!published) { setLive(false); return; }
     setMessage('LIVE 방송 중 · 설정값은 송출 미리보기에 적용됩니다.');
   };
 
