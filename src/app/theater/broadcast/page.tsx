@@ -7,8 +7,8 @@ import { createDocument, getDocument, getSessionToken, mergeDocument, queryDocum
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type FilterState = { brightness: number; contrast: number; saturation: number; softness: number; beauty: number };
-type ViewerSignal = { id: string; roomId: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
-type LiveMessage = { id: string; roomId: string; authorId: string; user: string; text: string; createdAt: string };
+type ViewerSignal = { id: string; roomId: string; sessionId?: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
+type LiveMessage = { id: string; roomId: string; sessionId?: string; authorId: string; user: string; text: string; createdAt: string };
 const defaultFilters: FilterState = { brightness: 100, contrast: 100, saturation: 100, softness: 0, beauty: 0 };
 const iceServers = [
   { urls: 'stun:stun.cloudflare.com:3478' },
@@ -40,6 +40,7 @@ export default function LiveBroadcastPage() {
   const viewerPeersRef = useRef(new Map<string, RTCPeerConnection>());
   const viewerOffersRef = useRef(new Map<string, string>());
   const roomRef = useRef('live-room-01');
+  const sessionRef = useRef<string | null>(null);
   const [roomId, setRoomId] = useState('live-room-01');
   const [filters, setFilters] = useState(defaultFilters);
   const [live, setLive] = useState(false);
@@ -78,7 +79,7 @@ export default function LiveBroadcastPage() {
     if (!token) { setMessage('로그인 세션이 만료되었습니다. 다시 로그인해주세요.'); return false; }
     const roomNumber = Number(roomRef.current.match(/\d+$/)?.[0] || 1);
     const offline = status === 'offline';
-    const roomData = { roomNumber, title: `LIVE ROOM ${String(roomNumber).padStart(2, '0')}`, category: '교민 라이브', hostId: offline ? null : user.id, hostName: offline ? null : user.name, hostImage: offline ? null : user.image, status, updatedAt: new Date(), quality, ...(resetViewers || offline ? { viewers: 0 } : {}), ...(offline ? { thumbnail: null } : thumbnail !== undefined ? { thumbnail } : {}) };
+    const roomData = { roomNumber, title: `LIVE ROOM ${String(roomNumber).padStart(2, '0')}`, category: '교민 라이브', hostId: offline ? null : user.id, hostName: offline ? null : user.name, hostImage: offline ? null : user.image, sessionId: offline ? null : sessionRef.current, status, updatedAt: new Date(), quality, ...(resetViewers || offline ? { viewers: 0 } : {}), ...(offline ? { thumbnail: null } : thumbnail !== undefined ? { thumbnail } : {}) };
     try { await mergeDocument('liveRooms', roomRef.current, roomData, token); return true; } catch { setMessage('라이브 서버에 연결하지 못했습니다. Firebase 로그인과 방송 권한을 확인해주세요.'); return false; }
   };
 
@@ -152,6 +153,7 @@ export default function LiveBroadcastPage() {
     if (!(await checkRoomAvailability())) return;
     if (!streamRef.current) await startCamera();
     if (!streamRef.current) return;
+    sessionRef.current = `${roomRef.current}-${crypto.randomUUID()}`;
     setLive(true);
     setEndingIn(null);
     await new Promise((resolve) => window.setTimeout(resolve, 250));
@@ -170,6 +172,7 @@ export default function LiveBroadcastPage() {
     setLive(false);
     setEndingIn(null);
     await publishRoom('offline');
+    sessionRef.current = null;
     setMessage('방송이 종료되었습니다. 방이 초기화되어 다른 회원이 다시 사용할 수 있습니다.');
   };
   const scheduleStop = () => { setEndingIn(20); const timer = window.setInterval(() => setEndingIn((value) => value && value > 1 ? value - 1 : null), 1_000); window.setTimeout(() => { window.clearInterval(timer); void stopBroadcast(); }, 20_000); };
@@ -180,7 +183,7 @@ export default function LiveBroadcastPage() {
     return () => window.clearInterval(timer);
   }, [live, quality, user?.id, uploadedThumbnail]);
   useEffect(() => {
-    const loadChat = async () => { const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: roomId }], getSessionToken(), 40).catch(() => []); setChatMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-20)); };
+    const loadChat = async () => { if (!sessionRef.current) { setChatMessages([]); return; } const rows = await queryDocumentsWhere<LiveMessage>('liveRoomMessages', [{ field: 'roomId', op: 'EQUAL', value: roomId }, { field: 'sessionId', op: 'EQUAL', value: sessionRef.current }], getSessionToken(), 40).catch(() => []); setChatMessages(rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-20)); };
     void loadChat();
     const timer = window.setInterval(() => void loadChat(), 1_000);
     return () => window.clearInterval(timer);
@@ -200,7 +203,7 @@ export default function LiveBroadcastPage() {
     if (!token) return;
     let active = true;
     const acceptViewers = async () => {
-      const rows = await queryDocumentsWhere<ViewerSignal>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: roomRef.current }, { field: 'hostId', op: 'EQUAL', value: user.id }], token, 50).catch(() => []);
+      const rows = await queryDocumentsWhere<ViewerSignal>('liveRoomViewers', [{ field: 'roomId', op: 'EQUAL', value: roomRef.current }, { field: 'sessionId', op: 'EQUAL', value: sessionRef.current }, { field: 'hostId', op: 'EQUAL', value: user.id }], token, 50).catch(() => []);
       const now = Date.now();
       const activeViewers = rows.filter((viewer) => viewer.status !== 'ended' && viewer.updatedAt && now - new Date(viewer.updatedAt).getTime() < 15_000);
       await mergeDocument('liveRooms', roomRef.current, { viewers: activeViewers.length }, token).catch(() => undefined);
@@ -218,7 +221,7 @@ export default function LiveBroadcastPage() {
         stream.getTracks().forEach((track) => { track.contentHint = track.kind === 'video' ? 'motion' : ''; peer.addTrack(track, stream); });
         await Promise.all(peer.getSenders().filter((sender) => sender.track?.kind === 'video').map(async (sender) => { const parameters = sender.getParameters(); parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}]; parameters.encodings[0].maxBitrate = 3_000_000; parameters.encodings[0].maxFramerate = 30; parameters.degradationPreference = 'maintain-resolution'; await sender.setParameters(parameters).catch(() => undefined); }));
         peer.onconnectionstatechange = () => { if (peer.connectionState === 'failed' || peer.connectionState === 'closed') { peer.close(); viewerPeersRef.current.delete(viewer.id); viewerOffersRef.current.delete(viewer.id); } };
-        try { await peer.setRemoteDescription(JSON.parse(viewer.offer) as RTCSessionDescriptionInit); const answer = await peer.createAnswer(); await peer.setLocalDescription(answer); await waitForIce(peer); await mergeDocument('liveRoomViewers', viewer.id, { status: 'answer', answer: JSON.stringify(peer.localDescription), updatedAt: new Date() }, token); } catch { peer.close(); viewerPeersRef.current.delete(viewer.id); }
+        try { await peer.setRemoteDescription(JSON.parse(viewer.offer) as RTCSessionDescriptionInit); const answer = await peer.createAnswer(); await peer.setLocalDescription(answer); await waitForIce(peer); await mergeDocument('liveRoomViewers', viewer.id, { sessionId: sessionRef.current, status: 'answer', answer: JSON.stringify(peer.localDescription), updatedAt: new Date() }, token); } catch { peer.close(); viewerPeersRef.current.delete(viewer.id); }
       }
     };
     void acceptViewers();
@@ -229,10 +232,10 @@ export default function LiveBroadcastPage() {
 
   const sendBroadcasterMessage = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!user || !chatInput.trim()) return;
+    if (!user || !live || !sessionRef.current || !chatInput.trim()) return;
     const token = getSessionToken();
     if (!token) return;
-    try { await createDocument('liveRoomMessages', crypto.randomUUID(), { roomId: roomRef.current, authorId: user.id, user: user.name, text: chatInput.trim(), createdAt: new Date() }, token); setChatInput(''); } catch { setMessage('채팅을 보내지 못했습니다. 잠시 후 다시 시도해주세요.'); }
+    try { await createDocument('liveRoomMessages', crypto.randomUUID(), { roomId: roomRef.current, sessionId: sessionRef.current, authorId: user.id, user: user.name, text: chatInput.trim(), createdAt: new Date() }, token); setChatInput(''); } catch { setMessage('채팅을 보내지 못했습니다. 잠시 후 다시 시도해주세요.'); }
   };
   const updateFilter = (key: keyof FilterState, value: number) => setFilters((current) => ({ ...current, [key]: value }));
   const resetFilters = () => setFilters(defaultFilters);
