@@ -339,7 +339,7 @@ export default function FriendDock() {
 
   return (
     <>
-       <button id="friend-dock-launch" type="button" onClick={() => setOpen(true)} aria-label="친구 채팅 열기" style={{ bottom: '8.25rem', right: '.75rem' }} className="fixed bottom-20 right-3 z-[65] grid h-12 w-12 place-items-center rounded-2xl border border-cyan-200/20 bg-[#10182b] text-cyan-200 shadow-2xl lg:hidden">
+       <button id="friend-dock-launch" type="button" onClick={() => setOpen(true)} aria-label="친구 채팅 열기" style={{ bottom: '8.25rem', right: '.75rem', transform: 'translateY(-6rem)' }} className="fixed bottom-20 right-3 z-[65] grid h-12 w-12 place-items-center rounded-2xl border border-cyan-200/20 bg-[#10182b] text-cyan-200 shadow-2xl lg:hidden">
         <UserRoundCheck size={21} />
       </button>
 
