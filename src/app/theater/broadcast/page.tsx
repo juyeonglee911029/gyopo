@@ -6,7 +6,7 @@ import { getSessionToken, mergeDocument, queryDocumentsWhere, type PortalUser } 
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type FilterState = { brightness: number; contrast: number; saturation: number; softness: number; beauty: number };
-type ViewerSignal = { id: string; roomId: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string };
+type ViewerSignal = { id: string; roomId: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
 
 const defaultFilters: FilterState = { brightness: 100, contrast: 100, saturation: 100, softness: 0, beauty: 0 };
 const iceServers = [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }];
