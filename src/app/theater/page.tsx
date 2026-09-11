@@ -106,7 +106,7 @@ export default function LiveRoomPage() {
   const [helperAmount, setHelperAmount] = useState('5');
   const [helperText, setHelperText] = useState('방송 세팅과 채팅을 도와주세요.');
   const [helperMessage, setHelperMessage] = useState('');
-  const [roomError, setRoomError] = useState('');
+  const [, setRoomError] = useState('');
   const [busy, setBusy] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
 
@@ -118,7 +118,7 @@ export default function LiveRoomPage() {
         const remote = rows.find((row) => row.id === room.id);
         const lastSeen = remote?.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
         const fresh = remote?.status === 'live' && (Number.isNaN(lastSeen) || now - lastSeen < 20_000);
-        return { ...room, ...remote, status: fresh ? 'live' : 'offline' };
+        return { ...room, ...remote, status: fresh ? ('live' as const) : ('offline' as const) };
       });
       setRooms(nextRooms);
       setSelectedRoom((current) => current ? nextRooms.find((room) => room.id === current.id) || current : current);
