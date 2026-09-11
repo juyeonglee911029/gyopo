@@ -18,12 +18,14 @@ export default function MarketPage() {
   const [form, setForm] = useState({ title: '', price: '', location: '', image: '' });
   const [orders, setOrders] = useState<EscrowOrder[]>([]);
   const [orderNotice, setOrderNotice] = useState('');
+  const [marketError, setMarketError] = useState('');
 
   const loadProducts = async () => {
     try {
-      const data = await listDocuments<Omit<Product, 'id'>>('marketItems', getSessionToken());
-        setProducts(data.filter((item) => item.authorId && isNativeProduct(item)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-     } catch { setProducts([]); }
+     const data = await listDocuments<Omit<Product, 'id'>>('marketItems', getSessionToken());
+      setProducts(data.filter((item) => item.authorId && isNativeProduct(item)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      setMarketError('');
+    } catch { setProducts([]); setMarketError('장터 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.'); }
   };
 
   useEffect(() => { void loadProducts(); }, [selectedCountry]);
@@ -108,7 +110,8 @@ export default function MarketPage() {
      <div className="market-page container mx-auto max-w-6xl px-4 py-8 text-slate-100">
        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4"><div><h1 className="text-3xl font-black text-gray-800">에스크로 중고장터</h1><p className="text-gray-500 mt-2">실제 등록 물품과 공식 출처 제품 정보를 확인하고 판매자에게 문의하세요.</p></div><div className="flex gap-2 w-full md:w-auto"><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="물품 검색..." className="flex-1 md:w-64 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:outline-none" /><button onClick={() => setIsWriting(true)} className="bg-orange-500 text-white px-5 py-2 rounded-lg font-bold hover:bg-orange-600 transition whitespace-nowrap shadow-md">내 물건 팔기</button></div></div>
        {orderNotice && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">{orderNotice}</div>}
-        {filteredProducts.length === 0 && <div className="text-center py-20 bg-gray-50 rounded-xl border border-gray-100"><span className="text-4xl block mb-4">🛒</span><p className="text-gray-500">등록된 매물이 없습니다.</p></div>}
+         {marketError && <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700"><span>{marketError}</span><button type="button" onClick={() => void loadProducts()} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-black text-white">다시 불러오기</button></div>}
+         {filteredProducts.length === 0 && !marketError && <div className="text-center py-20 bg-gray-50 rounded-xl border border-gray-100"><span className="text-4xl block mb-4">🛒</span><p className="text-gray-500">등록된 매물이 없습니다.</p><p className="mt-2 text-xs text-gray-400">로그인 후 내 물건 팔기에서 첫 매물을 등록해보세요.</p></div>}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 md:gap-6">
               {filteredProducts.map((item) => (
                 <div key={item.id} className="group relative overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-lg">
