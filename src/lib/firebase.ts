@@ -642,6 +642,53 @@ export type TetrisLobbyRoom = {
 export type TetrisLobbyClaim = { roomNumber: number; matchId: string; role: 'A' | 'B'; opponent?: TetrisQueueProfile };
 export type WebrtcMatchClaim = { callId: string; opponent: TetrisQueueProfile; initiator: boolean };
 
+export type AccountModeration = {
+  userId: string;
+  status: 'active' | 'suspended' | 'banned';
+  reason?: string;
+  until?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+export type SafetyReport = {
+  reporterId: string;
+  reportedUserId: string;
+  callId?: string;
+  category: 'sexual_content' | 'minor_safety' | 'harassment' | 'privacy' | 'spam' | 'other';
+  details?: string;
+  createdAt: Date;
+  status: 'open';
+};
+
+export async function getAccountModeration(userId: string, token = getSessionToken()): Promise<AccountModeration | null> {
+  if (!token || !userId) return null;
+  return getDocument<AccountModeration>('accountModeration', userId, token).catch(() => null);
+}
+
+export async function listBlockedUserIds(userId: string, token = getSessionToken()): Promise<string[]> {
+  if (!token || !userId) return [];
+  const rows = await queryDocumentsWhere<{ ownerId: string; blockedUserId: string }>('userBlocks', [{ field: 'ownerId', op: 'EQUAL', value: userId }], token, 500).catch(() => []);
+  return rows.map((row) => row.blockedUserId).filter((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
+export async function createUserBlock(ownerId: string, blockedUserId: string, blockedName: string, callId?: string, token = getSessionToken()): Promise<void> {
+  if (!token || !ownerId || !blockedUserId || ownerId === blockedUserId) throw new Error('차단할 상대를 확인해주세요.');
+  await createDocument('userBlocks', `${ownerId}-${blockedUserId}`, { ownerId, blockedUserId, blockedName: blockedName.slice(0, 80), callId: callId || null, createdAt: new Date() }, token);
+}
+
+export async function createSafetyReport(report: SafetyReport, token = getSessionToken()): Promise<string> {
+  if (!token || !report.reporterId || !report.reportedUserId || report.reporterId === report.reportedUserId) throw new Error('신고 대상을 확인해주세요.');
+  const id = `safety-report-${crypto.randomUUID()}`;
+  await createDocument('safetyReports', id, { ...report, details: report.details?.slice(0, 500) || '' }, token);
+  return id;
+}
+
+export async function createSafetyAuditLog(data: { actorId: string; action: 'report' | 'block' | 'call_start' | 'call_end'; targetUserId?: string; callId?: string; metadata?: string }, token = getSessionToken()): Promise<void> {
+  if (!token || !data.actorId) return;
+  await createDocument('safetyAuditLogs', `audit-${crypto.randomUUID()}`, { ...data, metadata: data.metadata?.slice(0, 500) || '', createdAt: new Date() }, token).catch(() => undefined);
+}
+
 const TETRIS_LOBBY_ROOM_COUNT = 10;
 const TETRIS_LOBBY_STALE_MS = 30_000;
 const TETRIS_COUNTDOWN_MS = 3_000;
@@ -930,8 +977,9 @@ export async function claimTetrisMatch(profile: TetrisQueueProfile, token?: stri
   return { matchId, role: 'A', opponent };
 }
 
-export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: string): Promise<WebrtcMatchClaim | null> {
+export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: string, blockedUserIds: string[] = []): Promise<WebrtcMatchClaim | null> {
   const waiting = await getWaitingQueueDocuments('webrtcQueue', token);
+  const blocked = new Set(blockedUserIds);
   const candidateRow = waiting.find((row) => {
     const candidate = decodeDocument<TetrisQueueProfile & { userId?: string }>(row);
     const candidateId = candidate.userId || candidate.id;
@@ -949,7 +997,7 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
       || (candidateAge >= (profile.ageMin || 18) && candidateAge <= (profile.ageMax || 60)));
     const candidateAgeMatches = directCall || ((!candidate.ageMin && !candidate.ageMax)
       || (Number(profile.age || 0) >= (candidate.ageMin || 18) && Number(profile.age || 0) <= (candidate.ageMax || 60)));
-    return candidateId !== profile.id && candidateKind === requesterKind && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && requesterAgeMatches && candidateAgeMatches && targetMatches;
+    return candidateId !== profile.id && !blocked.has(candidateId) && candidateKind === requesterKind && isFreshQueueDocument(row, 120_000) && requesterMatches && candidateMatches && requesterAgeMatches && candidateAgeMatches && targetMatches;
   });
   if (!candidateRow?.name || !candidateRow.updateTime) return null;
   const candidate = decodeDocument<TetrisQueueProfile & { userId: string }>(candidateRow);
