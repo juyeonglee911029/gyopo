@@ -39,7 +39,7 @@ export default function AssistantDock() {
 
   useEffect(() => {
     const openAssistant = () => {
-      setOpen(true);
+      setOpen((value) => !value);
       setMinimized(false);
     };
     window.addEventListener('gyopo-assistant-open', openAssistant);
