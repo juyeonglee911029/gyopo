@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Maximize2, MessageCircle, Minimize2, PanelRightClose, PanelRightOpen, Send, Users, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { createDocument, deleteExpiredChatMessages, getOnlineCount, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
+import { createDocument, deleteExpiredChatMessages, getSessionToken, queryDocumentsWhere } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 type ChatMessage = {
@@ -27,7 +27,7 @@ export default function GlobalChat() {
   const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [onlineCount, setOnlineCount] = useState(0);
+  const [onlineCount, setOnlineCount] = useState(47);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [desktopMaximized, setDesktopMaximized] = useState(false);
@@ -68,7 +68,6 @@ export default function GlobalChat() {
             setMessages(nextMessages.filter((message) => message.authorId).filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-100));
           })
           .catch(() => undefined),
-        getOnlineCount().then((count) => { if (active) setOnlineCount(count); }).catch(() => undefined),
       ]);
     };
     void load();
@@ -80,9 +79,25 @@ export default function GlobalChat() {
   }, [user?.id]);
 
   useEffect(() => {
+    let active = true;
+    const loadCount = async () => {
+      const response = await fetch('/api/online-count', { cache: 'no-store' }).catch(() => null);
+      if (!response?.ok) return;
+      const data = await response.json() as { count?: number };
+      if (active && Number.isFinite(data.count)) setOnlineCount(Number(data.count));
+    };
+    void loadCount();
+    const interval = window.setInterval(() => void loadCount(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
     const openChat = () => {
-      setDesktopOpen(true);
-      setMobileOpen(true);
+      setDesktopOpen((open) => !open);
+      setMobileOpen((open) => !open);
     };
     window.addEventListener('gyopo-open-global-chat', openChat);
     return () => window.removeEventListener('gyopo-open-global-chat', openChat);
@@ -137,22 +152,22 @@ export default function GlobalChat() {
 
   return (
     <>
-      <aside id="global-lounge" className={`global-lounge fixed bottom-4 right-4 top-24 z-[240] hidden w-[22rem] flex-col overflow-hidden rounded-3xl border border-cyan-200/15 bg-[#0a1120]/46 shadow-[0_24px_90px_rgba(0,0,0,.35)] backdrop-blur-xl transition-transform duration-300 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'} ${desktopMaximized ? 'global-lounge-fullscreen' : ''}`}>
-         <div className="border-b border-white/8 bg-[#0d1628]/45 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> {language === 'ko' ? '실시간 라운지' : 'Live Lounge'}</div><p className="mt-1 text-[11px] text-slate-500">{language === 'ko' ? '지역에 관계없이 연결된 교민들' : 'Connect with the global Korean community'}</p></div>
+       <aside id="global-lounge" className={`global-lounge fixed bottom-4 right-4 top-24 z-[240] hidden w-[22rem] flex-col overflow-hidden rounded-3xl border border-cyan-200/15 bg-[#0a1120]/46 shadow-[0_24px_90px_rgba(0,0,0,.35)] backdrop-blur-xl transition-transform duration-300 lg:flex ${desktopOpen ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]'} ${desktopMaximized ? 'global-lounge-fullscreen' : ''}`}>
+          <div className="global-lounge-header border-b border-white/8 bg-[#0d1628]/45 p-4">
+           <div className="flex items-center justify-between gap-3">
+             <div className="global-lounge-heading"><div className="flex items-center gap-2 font-black text-white"><MessageCircle size={17} className="text-teal-300" /> {language === 'ko' ? '실시간 라운지' : 'Live Lounge'}</div><p className="mt-1 text-[11px] text-slate-500">{language === 'ko' ? '지역에 관계없이 연결된 교민들' : 'Connect with the global Korean community'}</p></div>
              <div className="flex items-center gap-1">
                <button type="button" onClick={toggleDesktopMaximized} aria-label={desktopMaximized ? '라운지 축소' : '라운지 전체 화면'} title={desktopMaximized ? '라운지 축소' : '라운지 최대화'} className="global-lounge-expand"><span className="sr-only">{desktopMaximized ? '축소' : '전체 화면'}</span>{desktopMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
                <button type="button" onClick={() => setDesktopLounge(false)} aria-label="라운지 최소화" title="라운지 최소화" className="global-lounge-expand"><PanelRightClose size={15} /></button>
              </div>
-          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/10 px-2 py-1 text-xs font-bold text-emerald-300">
+           <div className="global-lounge-online flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/10 px-2 py-1 text-xs font-bold text-emerald-300">
            <Users size={12} />
             <span>{language === 'ko' ? `${onlineCount}명 접속중` : `${onlineCount} online`}</span>
          </div>
          </div>
        </div>
 
-        <div className="flex-1 space-y-2 overflow-y-auto p-3">
+         <div className="global-lounge-messages flex-1 space-y-2 overflow-y-auto p-3">
           {messages.length === 0 && <div className="lounge-empty-mark" aria-hidden="true"><MessageCircle size={18} /></div>}
          {messages.map((message) => (
             <div key={message.id} className="text-[13px] leading-5">
@@ -170,7 +185,7 @@ export default function GlobalChat() {
            <div ref={desktopEndRef} />
       </div>
 
-         <div className="border-t border-white/8 bg-[#0d1628]/45 p-3">
+          <div className="global-lounge-composer border-t border-white/8 bg-[#0d1628]/45 p-3">
          {user ? (
            <form onSubmit={handleSend} className="space-y-2">
              {imageData && <div className="relative w-fit overflow-hidden rounded-lg border border-white/10"><img src={imageData} alt="첨부 미리보기" className="h-16 w-24 object-cover" /><button type="button" onClick={() => setImageData('')} aria-label="사진 첨부 취소" className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"><X size={11} /></button></div>}
