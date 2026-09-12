@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCountryOverview, isIndexableRegionalPost } from '@/lib/regionalContent';
-import { COUNTRY_ROUTES, getCountryRoute } from '@/lib/regionRoutes';
+import { getCountryRoute } from '@/lib/regionRoutes';
 import { pageMetadata } from '@/lib/seo';
 import RegionalNavigation from './RegionalNavigation';
 import RegionalPostList from './RegionalPostList';
@@ -9,10 +9,6 @@ import RegionalPostList from './RegionalPostList';
 export const runtime = 'edge';
 
 type Props = { params: Promise<{ country: string }> };
-
-export function generateStaticParams() {
-  return COUNTRY_ROUTES.map((country) => ({ country: country.slug }));
-}
 
 export async function generateMetadata({ params }: Props) {
   const country = getCountryRoute((await params).country);
