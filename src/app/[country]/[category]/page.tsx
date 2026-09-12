@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getRegionalListing, isIndexableRegionalPost } from '@/lib/regionalContent';
-import { getCountryRoute, getRegionalCategory, isRegionalPostId } from '@/lib/regionRoutes';
+import { COUNTRY_ROUTES, REGIONAL_CATEGORIES, getCountryRoute, getRegionalCategory, isRegionalPostId } from '@/lib/regionRoutes';
 import { canonicalUrl, pageMetadata, serializeJsonLd } from '@/lib/seo';
 import { regionalPostHref } from '@/lib/regionRoutes';
 import RegionalNavigation from '../RegionalNavigation';
 import RegionalPostList from '../RegionalPostList';
+import RegionalPostComposer from '../RegionalPostComposer';
 
 export const runtime = 'edge';
 
@@ -13,6 +14,10 @@ type Props = {
   params: Promise<{ country: string; category: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
+
+export function generateStaticParams() {
+  return COUNTRY_ROUTES.flatMap((country) => REGIONAL_CATEGORIES.map((category) => ({ country: country.slug, category: category.slug })));
+}
 
 async function resolveListing({ params, searchParams }: Props) {
   const route = await params;
@@ -43,7 +48,7 @@ export default async function CountryCategoryPage(props: Props) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 text-slate-100 sm:px-6">
       <Link href={`/${country.slug}`} className="text-sm font-bold text-teal-200">{country.label} 한인 커뮤니티</Link>
-      <h1 className="mt-6 text-3xl font-black sm:text-4xl">{country.label} {category.label}</h1>
+       <div className="mt-6 flex flex-wrap items-end justify-between gap-4"><h1 className="text-3xl font-black sm:text-4xl">{country.label} {category.label}</h1><RegionalPostComposer country={country} category={category.slug} label={category.label} /></div>
       <p className="mt-4 text-sm leading-7 text-slate-300">{country.label} 지역의 {category.description}를 확인하세요. 게시글 제목을 누르면 등록된 전체 내용과 출처를 볼 수 있습니다.</p>
       <RegionalNavigation country={country} current={category.slug} />
       {listing.status === 'unavailable' ? (
