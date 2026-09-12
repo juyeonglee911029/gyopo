@@ -24,9 +24,10 @@ const utilityLinks = [
 ];
 
 function LinkRow({ href, label, english, icon: Icon, active, language }: { href: string; label: string; english: string; icon: typeof Home; active: boolean; language: 'ko' | 'en' }) {
+  const accent = href === '/music' ? 'text-rose-400' : href === '/' ? 'text-white' : active ? 'text-white' : 'text-slate-400';
   return (
-    <Link href={href} className={`group flex items-center gap-3 rounded-none px-3 py-2.5 text-[12px] font-medium transition ${active ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/7 hover:text-white'}`}>
-      <Icon size={17} className={active ? 'text-slate-950' : 'text-slate-500 transition group-hover:text-teal-300'} />
+    <Link href={href} onClick={(event) => { if (href === '/assistant' && active) { event.preventDefault(); window.dispatchEvent(new CustomEvent('gyopo-assistant-open')); } }} className={`group flex items-center gap-3 rounded-none px-3 py-2.5 text-[12px] font-medium transition ${active ? 'bg-white/10' : 'text-slate-400 hover:bg-white/7 hover:text-white'} ${accent}`}>
+      <Icon size={17} className={active ? 'text-cyan-200' : 'text-slate-500 transition group-hover:text-teal-300'} />
        <span>{language === 'ko' ? label : english}<small className="ml-1.5 text-[10px] font-semibold opacity-45">/ {language === 'ko' ? english : label}</small></span>
     </Link>
   );
