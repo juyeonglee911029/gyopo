@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { countryForRegion, getCountryRoute, isRegionalPostId, REGIONAL_CATEGORIES, type CountryRoute, type RegionalCategory } from './regionRoutes';
+import { countryForRegion, getCountryRoute, isRegionalPostId, COUNTRY_LIFE_CATEGORIES, type CountryRoute, type RegionalCategory } from './regionRoutes';
 
 // The same public project as firebase.ts; no user token or admin credentials are used.
 const DOCUMENT_ROOT = 'projects/gyopo-live-portal-506019/databases/(default)/documents';
@@ -71,10 +71,17 @@ export function regionalPostFromRecord(collection: PublicCollection, id: string,
   if (['draft', 'private', 'deleted', 'hidden', 'pending'].includes(text(record.status).toLowerCase())) return null;
   let category: RegionalCategory;
   if (collection === 'jobs') category = 'jobs';
-  else if (collection === 'directories') category = 'directory';
+  else if (collection === 'directories') category = record.type === 'food' || record.sourceCategory === 'food' ? 'food' : 'directory';
   else if (collection === 'marketItems') category = 'market';
   else if (record.type === 'housing') category = 'housing';
   else if (record.type === 'news' || record.sourceCategory === 'news') category = 'news';
+  else if (record.type === 'immigration' || record.sourceCategory === 'immigration') category = 'immigration';
+  else if (record.type === 'education' || record.sourceCategory === 'education') category = 'education';
+  else if (record.type === 'cars' || record.sourceCategory === 'cars') category = 'cars';
+  else if (record.type === 'tax-finance' || record.sourceCategory === 'tax-finance') category = 'tax-finance';
+  else if (record.type === 'food' || record.sourceCategory === 'food') category = 'food';
+  else if (record.type === 'safety' || record.sourceCategory === 'safety') category = 'safety';
+  else if (record.type === 'freeboard' || record.sourceCategory === 'freeboard') category = 'freeboard';
   else if (['general', 'notice', 'community'].includes(text(record.type)) || record.sourceCategory === 'community') category = 'community';
   else return null;
   if (text(record.sourceCategory) && record.sourceCategory !== category) return null;
@@ -124,6 +131,19 @@ function collectionFor(category: RegionalCategory): PublicCollection {
   return category === 'jobs' ? 'jobs' : category === 'directory' ? 'directories' : category === 'market' ? 'marketItems' : 'posts';
 }
 
+const POST_TYPES: Partial<Record<RegionalCategory, string[]>> = {
+  housing: ['housing'],
+  immigration: ['immigration'],
+  education: ['education'],
+  cars: ['cars'],
+  'tax-finance': ['tax-finance'],
+  food: ['food'],
+  safety: ['safety'],
+  freeboard: ['freeboard'],
+  community: ['general', 'notice', 'community'],
+  news: ['news'],
+};
+
 function fieldFilter(fieldPath: string, values: readonly string[]) {
   return { fieldFilter: { field: { fieldPath }, op: values.length === 1 ? 'EQUAL' : 'IN', value: values.length === 1 ? { stringValue: values[0] } : { arrayValue: { values: values.map((stringValue) => ({ stringValue })) } } } };
 }
@@ -131,8 +151,8 @@ function fieldFilter(fieldPath: string, values: readonly string[]) {
 async function readBatch(collection: PublicCollection, country?: CountryRoute, category?: RegionalCategory, cursor = '') {
   const filters: unknown[] = country ? [fieldFilter('country', country.aliases)] : [];
   if (collection === 'posts' && category) {
-    if (category === 'housing') filters.push(fieldFilter('type', ['housing']));
-    else filters.push({ compositeFilter: { op: 'OR', filters: [fieldFilter('type', category === 'news' ? ['news'] : ['general', 'notice', 'community']), fieldFilter('sourceCategory', [category])] } });
+    const types = POST_TYPES[category] || [category];
+    filters.push({ compositeFilter: { op: 'OR', filters: [fieldFilter('type', types), fieldFilter('sourceCategory', [category])] } });
   }
   const response = await fetch(`${FIRESTORE_URL}:runQuery`, {
     method: 'POST',
@@ -158,13 +178,14 @@ async function readBatch(collection: PublicCollection, country?: CountryRoute, c
 export const getRegionalListing = cache(async (slug: string, category: RegionalCategory, cursor = ''): Promise<RegionalListing> => {
   const country = getCountryRoute(slug);
   if (!country || (cursor && !isRegionalPostId(cursor))) return { status: 'ok', posts: [] };
+  const canonicalSlug = country.slug;
   const collection = collectionFor(category);
   try {
     const batch = await readBatch(collection, country, category, cursor);
     const seen = new Set<string>();
     const posts = batch.documents.flatMap((document) => {
       const post = fromDocument(collection, document);
-      if (!post || post.country.slug !== slug || post.category !== category) return [];
+      if (!post || post.country.slug !== canonicalSlug || post.category !== category) return [];
       const key = post.sourceUrl || post.id;
       if (seen.has(key)) return [];
       seen.add(key);
@@ -179,18 +200,19 @@ export const getRegionalListing = cache(async (slug: string, category: RegionalC
 });
 
 export const getCountryOverview = cache(async (slug: string) => Promise.all(
-  REGIONAL_CATEGORIES.map(async (category) => ({ category, listing: await getRegionalListing(slug, category.slug) })),
+  COUNTRY_LIFE_CATEGORIES.map(async (category) => ({ category, listing: await getRegionalListing(slug, category.slug) })),
 ));
 
 export const getRegionalPost = cache(async (slug: string, category: RegionalCategory, id: string): Promise<RegionalDetail> => {
-  if (!getCountryRoute(slug) || !isRegionalPostId(id)) return { status: 'not-found' };
+  const country = getCountryRoute(slug);
+  if (!country || !isRegionalPostId(id)) return { status: 'not-found' };
   const collection = collectionFor(category);
   try {
     const response = await fetch(`${FIRESTORE_URL}/${collection}/${encodeURIComponent(id)}`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
     if (response.status === 404) return { status: 'not-found' };
     if (!response.ok) throw new Error(`Public content read failed (${response.status})`);
     const post = fromDocument(collection, await response.json() as FirestoreDocument);
-    return post && post.country.slug === slug && post.category === category ? { status: 'ok', post } : { status: 'not-found' };
+    return post && post.country.slug === country.slug && post.category === category ? { status: 'ok', post } : { status: 'not-found' };
   } catch (error) {
     console.warn('[regional-content]', collection, error instanceof Error ? error.message : 'Read unavailable');
     return { status: 'unavailable' };
