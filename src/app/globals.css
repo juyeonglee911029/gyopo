@@ -39,9 +39,7 @@ body { background-image: none; }
 body { padding-top: 7rem !important; }
 .portal-chrome { position: relative; z-index: 100; }
 .portal-frame, .portal-frame > main { background: transparent; transition: margin-right .28s ease, width .28s ease; }
-.page-transition { position: relative; isolation: isolate; min-width: 0; animation: gyopo-page-enter .54s cubic-bezier(.22, 1, .36, 1) both; }
-.page-transition::before { content: ''; position: absolute; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: linear-gradient(105deg, transparent 0 36%, rgba(255, 255, 255, .1) 46%, rgba(103, 232, 249, .16) 50%, transparent 61% 100%); mix-blend-mode: screen; filter: blur(16px); animation: gyopo-art-wash .62s cubic-bezier(.22, 1, .36, 1) both; }
-.page-transition::after { content: ''; position: absolute; inset: 0; z-index: 9; pointer-events: none; opacity: 0; border: 1px solid rgba(255, 255, 255, .1); background: linear-gradient(115deg, rgba(255, 255, 255, .035), transparent 24% 76%, rgba(34, 211, 238, .04)); mix-blend-mode: screen; animation: gyopo-art-scan .54s ease-out both; }
+.page-transition { position: relative; min-width: 0; }
 .startup-experience { position: fixed; inset: 0; z-index: 120; overflow: hidden; background: #02040b; }
 .startup-experience::before, .startup-experience::after { content: ''; position: absolute; inset: -20%; pointer-events: none; }
 .startup-experience::before { background: radial-gradient(circle at 48% 42%, rgba(34, 211, 238, .14), transparent 28%), conic-gradient(from 160deg at 50% 50%, transparent 0 22%, rgba(244, 114, 182, .08) 30%, transparent 40% 63%, rgba(250, 204, 21, .08) 72%, transparent 82%); filter: blur(40px); opacity: .18; }
@@ -49,9 +47,6 @@ body { padding-top: 7rem !important; }
 .startup-experience-reveal { animation: startup-home-reveal 1.4s cubic-bezier(.76, 0, .24, 1) forwards; transform-origin: 0 50%; }
 @keyframes startup-home-reveal { 0% { opacity: 1; transform: translateX(0) skewX(0); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); } 35% { transform: translateX(-3%) skewX(-2deg); clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%); } 100% { opacity: 0; transform: translateX(-105%) skewX(-8deg); clip-path: polygon(0 0, 100% 0, 82% 100%, 0 100%); } }
 .webrtc-title-stack { background: transparent !important; background-color: transparent !important; box-shadow: none !important; }
-@keyframes gyopo-page-enter { from { opacity: 0; transform: translate3d(14px, 8px, 0) scale(.992); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
-@keyframes gyopo-art-wash { 0% { opacity: 0; transform: translateX(-110%); } 20% { opacity: .8; } 100% { opacity: 0; transform: translateX(110%); } }
-@keyframes gyopo-art-scan { 0% { opacity: 0; transform: translateX(-2%); } 18% { opacity: .35; } 100% { opacity: 0; transform: translateX(2%); } }
 .portal-frame > main > div, .portal-frame > main > section { background-color: transparent !important; }
 .portal-text-rail { position: fixed; top: 7.5rem; bottom: 1rem; left: 1rem; z-index: 220; display: none; width: 9rem; overflow-y: auto; background: transparent; pointer-events: auto; scrollbar-width: none; }
 .portal-text-rail::-webkit-scrollbar { display: none; }
@@ -244,6 +239,9 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .tetris-stat-card b { font-size: 1.1rem; }
 .tetris-battle-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; text-align: center; }
 .tetris-battle-time { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: .3rem; padding-top: .1rem; color: #94a3b8; font-size: .58rem; font-weight: 900; letter-spacing: .13em; }
+.tetris-game-header { min-height: 2.6rem; }
+.tetris-head-readout { color: #cbd5e1; letter-spacing: .08em; }
+.tetris-ready-readout { background: radial-gradient(circle, rgba(34, 211, 238, .1), transparent 62%); text-align: center; }
 .lounge-empty-mark { display: grid; min-height: 10rem; place-items: center; color: rgba(45, 212, 191, .36); }
 .tetris-action-primary, .tetris-action-secondary, .tetris-action-start, .tetris-action-danger { display: inline-flex; min-height: 2.85rem; align-items: center; justify-content: center; gap: .45rem; border-radius: .9rem; padding: .7rem .85rem; font-size: .75rem; font-weight: 900; transition: transform .2s ease, filter .2s ease, opacity .2s ease; }
 .tetris-action-primary:hover, .tetris-action-secondary:hover, .tetris-action-start:hover, .tetris-action-danger:hover { transform: translateY(-1px); filter: brightness(1.08); }
@@ -1425,10 +1423,10 @@ body:has(.live-room-page) .portal-chrome > header > div { background: transparen
 }
 
 @media (min-width: 900px) {
-  .tetris-call-workspace { grid-template-columns: minmax(0, 560px) minmax(0, 1fr) !important; gap: 0 !important; }
-  .tetris-local-panel { width: 560px !important; padding-right: 0 !important; }
+  .tetris-call-workspace { grid-template-columns: minmax(0, 1fr) minmax(17rem, 24rem) !important; gap: .5rem !important; }
+  .tetris-local-panel { min-width: 0 !important; padding-right: 0 !important; }
   .tetris-local-controls { width: 100% !important; min-width: 0 !important; }
-  .tetris-video-pane { max-width: none !important; }
+  .tetris-video-pane { width: 100% !important; max-width: 24rem !important; justify-self: end; }
 }
 
 /* Auth and first-visit motion stay quiet, centered, and non-blocking once the app is ready. */
@@ -1561,7 +1559,9 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .tetris-modern-shell > .grid > section { padding-right: 0 !important; padding-left: 0 !important; border-right: 0 !important; border-left: 0 !important; }
   .tetris-modern-shell .tetris-board-stage { padding-right: 0 !important; padding-left: 0 !important; border-right: 0 !important; border-left: 0 !important; }
   .tetris-modern-shell .tetris-board-shell { width: min(68vw, 19rem) !important; max-width: none !important; }
-  .tetris-call-workspace { display: flex !important; flex-direction: column; overflow-y: auto; }
+  .tetris-call-workspace { display: block !important; overflow: hidden !important; }
+  .tetris-local-panel { height: 100% !important; width: 100% !important; }
+  .tetris-video-pane { display: none !important; }
   .tetris-local-boards { grid-template-columns: minmax(0, 1fr) 5.8rem; }
   .tetris-board-shell { width: min(68vw, 19rem) !important; aspect-ratio: 1 / 2; }
   #friend-dock.friend-dock-call-active { right: .25rem !important; bottom: .25rem !important; left: .25rem !important; width: auto !important; max-height: calc(100dvh - .5rem); }
@@ -1573,3 +1573,37 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .portal-text-rail .portal-rail-card { min-width: 0 !important; max-width: 100% !important; }
   .portal-text-rail-nav { max-width: 100% !important; }
 }
+
+/* The online lounge follows the same quiet, flat rail language as the left sidebar. */
+#global-lounge {
+  top: 7.5rem !important;
+  right: 1rem !important;
+  bottom: 1rem !important;
+  width: 21rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: rgba(8, 16, 31, .32) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(18px);
+}
+
+#global-lounge .global-lounge-header,
+#global-lounge .global-lounge-composer {
+  border-color: rgba(255, 255, 255, .08) !important;
+  background: transparent !important;
+}
+
+#global-lounge .global-lounge-header { padding: .8rem .7rem !important; }
+#global-lounge .global-lounge-heading { min-width: 0; }
+#global-lounge .global-lounge-heading > div { font-size: .72rem; letter-spacing: .02em; }
+#global-lounge .global-lounge-heading p { color: rgba(148, 163, 184, .72) !important; font-size: .58rem; }
+#global-lounge .global-lounge-online { border: 0 !important; border-radius: 0 !important; background: rgba(45, 212, 191, .08) !important; padding: .35rem .45rem !important; font-size: .58rem; }
+#global-lounge .global-lounge-messages { padding: .4rem !important; }
+#global-lounge .global-lounge-messages > div { border-radius: 0 !important; background: transparent !important; }
+#global-lounge .global-lounge-messages > div > div:last-child { border: 0 !important; border-left: 2px solid rgba(45, 212, 191, .24) !important; border-radius: 0 !important; background: rgba(255, 255, 255, .045) !important; }
+#global-lounge .global-lounge-composer { padding: .6rem .4rem !important; }
+
+/* Route changes stay on the current page surface instead of showing a black logo curtain. */
+.navigation-experience { display: none !important; }
+.navigation-minimized .portal-frame > main,
+.navigation-minimized .portal-frame > footer { visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; }
