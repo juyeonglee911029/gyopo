@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getRegionalListing, isIndexableRegionalPost } from '@/lib/regionalContent';
-import { COUNTRY_ROUTES, REGIONAL_CATEGORIES, getCountryRoute, getRegionalCategory, isRegionalPostId } from '@/lib/regionRoutes';
+import { getCountryRoute, getRegionalCategory, isRegionalPostId } from '@/lib/regionRoutes';
 import { canonicalUrl, pageMetadata, serializeJsonLd } from '@/lib/seo';
 import { regionalPostHref } from '@/lib/regionRoutes';
 import RegionalNavigation from '../RegionalNavigation';
@@ -14,10 +14,6 @@ type Props = {
   params: Promise<{ country: string; category: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
-
-export function generateStaticParams() {
-  return COUNTRY_ROUTES.flatMap((country) => REGIONAL_CATEGORIES.map((category) => ({ country: country.slug, category: category.slug })));
-}
 
 async function resolveListing({ params, searchParams }: Props) {
   const route = await params;
