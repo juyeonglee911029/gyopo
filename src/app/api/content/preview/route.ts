@@ -2,6 +2,7 @@ import { CONTENT_SOURCES } from '@/lib/contentSources';
 import type { ContentCategory, ContentSource } from '@/lib/contentSources';
 import { curateSourceItems, normalizeSourceBody, normalizeSourceText, normalizeSourceTitle, normalizeSourceUrl } from '@/lib/sourcepreview';
 import type { LiveSourceItem } from '@/lib/sourcepreview';
+import { SITE_URL } from '@/lib/seo';
 
 export const runtime = 'edge';
 
@@ -26,7 +27,7 @@ const marketAssets: MarketAsset[] = [
 ];
 
 async function marketJson<T>(url: string) {
-  const response = await fetch(url, { cache: 'no-store', headers: { 'User-Agent': 'GYOPO-Market/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+  const response = await fetch(url, { cache: 'no-store', headers: { 'User-Agent': `GYOPO-Market/1.0 (+${SITE_URL})` }, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) throw new Error(`시세 출처 응답 ${response.status}`);
   return response.json() as Promise<T>;
 }
@@ -146,7 +147,7 @@ type StructuredData = { headline?: string; description?: string; articleBody?: s
 
 async function fetchHtml(url: string) {
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' },
+    headers: { 'User-Agent': `GYOPO-Content-Crawler/1.0 (+${SITE_URL})` },
     signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error(`출처 응답 ${response.status}`);
@@ -328,7 +329,7 @@ async function fetchHanasiaSource(source: ContentSource, requestedCategory: Cont
 }
 
 async function fetchHaninCommunity(source: ContentSource) {
-  const response = await fetch('https://hanintoday.com.br/api/community/posts', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+      const response = await fetch('https://hanintoday.com.br/api/community/posts', { headers: { 'User-Agent': `GYOPO-Content-Crawler/1.0 (+${SITE_URL})` }, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) throw new Error(`한인광장 API 응답 ${response.status}`);
   const payload = await response.json() as { posts?: Array<{ id?: string; slug?: string; title?: string; body?: string; imageUrls?: string[]; status?: string; moderationReason?: string | null; createdAt?: string; authorName?: string; category?: { slug?: string; nameKo?: string } }> };
   const candidates = (payload.posts || []).filter((post) => post.id && post.slug && post.title && post.status === 'published' && !post.moderationReason).map((post) => {
@@ -688,7 +689,7 @@ export async function GET(request: Request) {
      if (source.id === 'gutentag-korea') return Response.json(await fetchDiscoveredSource(source, requestedCategory));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'community') return Response.json(await fetchHaninCommunity(source));
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'jobs') {
-      const response = await fetch('https://hanintoday.com.br/api/jobs', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+      const response = await fetch('https://hanintoday.com.br/api/jobs', { headers: { 'User-Agent': `GYOPO-Content-Crawler/1.0 (+${SITE_URL})` }, signal: AbortSignal.timeout(8_000) });
       if (!response.ok) throw new Error(`구인 API 응답 ${response.status}`);
       const payload = await response.json() as { jobs?: Array<{ id?: string; title?: string; company?: string; area?: string; category?: string; employmentType?: string; salaryType?: string; salary?: number; description?: string; requirements?: string; contact?: string; createdAt?: string; details?: { workplaceAddress?: string; salaryConditions?: string } }> };
       const items = curateSourceItems((payload.jobs || []).filter((job) => job.id && job.title).slice(0, 50).map((job) => ({
@@ -707,7 +708,7 @@ export async function GET(request: Request) {
       return Response.json({ sourceId: source.id, sourceName: source.name, region: source.region, url: 'https://hanintoday.com.br/jobs', title: '한인투데이 구인구직', description: '한인투데이에서 확인된 최신 구인구직 공고입니다.', items, sections: [{ category: 'jobs', label: '구인구직', url: 'https://hanintoday.com.br/jobs', items }], status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['구인구직 공고가 없습니다.'], fetchedAt: new Date().toISOString(), verified: true });
     }
     if (source.id === 'hanintoday-brazil' && requestedCategory === 'directory') {
-      const response = await fetch('https://hanintoday.com.br/api/businesses', { headers: { 'User-Agent': 'GYOPO-Content-Crawler/1.0 (+https://gyopo.pages.dev)' }, signal: AbortSignal.timeout(8_000) });
+      const response = await fetch('https://hanintoday.com.br/api/businesses', { headers: { 'User-Agent': `GYOPO-Content-Crawler/1.0 (+${SITE_URL})` }, signal: AbortSignal.timeout(8_000) });
       if (!response.ok) throw new Error(`업소 API 응답 ${response.status}`);
       const payload = await response.json() as { businesses?: Array<{ id?: string; tradeName?: string; entityType?: string; category?: string; phone?: string; whatsapp?: string; area?: string; address?: string; description?: string; logoUrl?: string; coverImageUrl?: string; latitude?: number; longitude?: number }> };
       const categoryLabels: Record<string, string> = { health_clinic: '병원·의료', grocery_market: '마트·식품', restaurant_cafe: '음식점·카페', it_services: 'IT·서비스', buddhist_temple: '종교·단체', consulate_organization: '공공기관·단체' };
