@@ -1,4 +1,5 @@
 import { amountFromTransaction, paddleRequest, requirePaddleUser, type PaddleTransaction } from '@/lib/paddle';
+import { SITE_URL } from '@/lib/seo';
 
 export const runtime = 'edge';
 
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
     if (!Number.isFinite(amount) || amount < 0.1 || amount > 1_000) {
       return Response.json({ error: '충전 금액은 $0.10 이상 $1,000 이하로 입력해주세요.' }, { status: 400 });
     }
-    const origin = 'https://gyopo.pages.dev';
+    const origin = SITE_URL;
     const response = await paddleRequest('/transactions', {
       method: 'POST',
       body: JSON.stringify({
