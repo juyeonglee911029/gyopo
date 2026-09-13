@@ -8,11 +8,14 @@ import { handleNavigationClick } from '@/lib/navigation';
 
 const links = [
   ['/', '홈', 'Home'],
-  ['/news', '오늘의 뉴스', 'News'],
-  ['/jobs', '구인구직', 'Jobs'],
-  ['/directory', '업소록', 'Directory'],
-   ['/market', '중고장터', 'Market'],
+  ['/regions', '지역', 'Regions'],
+  ['/jobs', '구인', 'Jobs'],
+  ['/life', '생활', 'Life'],
   ['/community', '커뮤니티', 'Community'],
+  ['/apps', '앱', 'Apps'],
+  ['/news', '오늘의 뉴스', 'News'],
+  ['/directory', '업소록', 'Directory'],
+  ['/market', '중고장터', 'Market'],
   ['/users', '유저 목록', 'Members'],
   ['/games', '테트리스', 'Tetris'],
   ['/webrtc', '화상채팅', 'Video'],
@@ -43,4 +46,3 @@ export default function PortalTextRail() {
     </aside>
   );
 }
-
