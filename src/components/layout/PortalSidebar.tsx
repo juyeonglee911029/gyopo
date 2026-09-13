@@ -2,19 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, Film, Gamepad2, Home, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
+import { AppWindow, BriefcaseBusiness, Film, Gamepad2, Home, Map, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
 import { useGlobalStore } from '@/store/useGlobalStore';
 
 const primaryLinks = [
   { href: '/', label: '홈', english: 'Home', icon: Home },
-  { href: '/news', label: '오늘의 뉴스', english: 'News', icon: Newspaper },
-  { href: '/jobs', label: '구인구직', english: 'Jobs', icon: BriefcaseBusiness },
-  { href: '/directory', label: '업소록', english: 'Directory', icon: Store },
-  { href: '/market', label: '장터', english: 'Market', icon: ShoppingBag },
+  { href: '/regions', label: '지역', english: 'Regions', icon: Map },
+  { href: '/jobs', label: '구인', english: 'Jobs', icon: BriefcaseBusiness },
+  { href: '/life', label: '생활', english: 'Life', icon: Store },
   { href: '/community', label: '커뮤니티', english: 'Community', icon: MessageCircle },
+  { href: '/apps', label: '앱', english: 'Apps', icon: AppWindow },
 ];
 
 const utilityLinks = [
+  { href: '/news', label: '오늘의 뉴스', english: 'News', icon: Newspaper },
+  { href: '/directory', label: '업소록', english: 'Directory', icon: Store },
+  { href: '/market', label: '장터', english: 'Market', icon: ShoppingBag },
   { href: '/users', label: '유저 목록', english: 'Members', icon: Users },
   { href: '/games', label: '테트리스', english: 'Tetris', icon: Gamepad2 },
   { href: '/webrtc', label: '화상채팅', english: 'Video', icon: Video },
