@@ -1,4 +1,5 @@
-import { REGIONS, type RegionId } from './regions';
+import { COUNTRY_LOCATIONS, type CityLocation } from './locations';
+import { REGIONS } from './regions';
 
 export const REGIONAL_CATEGORIES = [
   { slug: 'jobs', label: '구인구직', description: '현지 채용 공고와 구직 정보' },
@@ -25,35 +26,33 @@ export const COUNTRY_LIFE_CATEGORIES = COUNTRY_LIFE_CATEGORY_ORDER.flatMap((slug
 export type RegionalCategory = (typeof REGIONAL_CATEGORIES)[number]['slug'];
 export type CountryRoute = {
   slug: string;
-  id: RegionId;
+  id: string;
   label: string;
+  english: string;
   flag: string;
-  regionIds: readonly RegionId[];
+  regionIds: readonly string[];
   aliases: readonly string[];
+  cities: readonly CityLocation[];
 };
 
-export const COUNTRY_ROUTES: readonly CountryRoute[] = REGIONS
-  .filter((region) => region.id !== 'Global' && region.id !== 'USA-LA')
-  .map((region) => {
-    const slugs: Record<string, string> = {
-      SouthKorea: 'korea', USA: 'usa', Canada: 'canada', Australia: 'australia', Japan: 'japan',
-      UnitedKingdom: 'uk', NewZealand: 'new-zealand', Singapore: 'singapore', Germany: 'germany',
-      France: 'france', Spain: 'spain', Italy: 'italy', UnitedArabEmirates: 'uae',
-      Thailand: 'thailand', Vietnam: 'vietnam', Philippines: 'philippines', Indonesia: 'indonesia', India: 'india',
-    };
-    const slug = slugs[region.id] || region.id.toLowerCase();
-    const members = REGIONS.filter((item) => item.id === region.id || (region.id === 'USA' && item.id === 'USA-LA'));
-    const aliases = members.flatMap((item) => [item.id, item.id.toLowerCase(), item.label, item.short]);
-    if (region.id === 'USA') aliases.push('usa', 'us');
-    return {
-      slug,
-      id: region.id,
-      label: region.short,
-      flag: region.flag,
-      regionIds: members.map((item) => item.id),
-      aliases: [...new Set([...aliases, slug])],
-    };
-  });
+export type CityRoute = CityLocation & { country: CountryRoute };
+
+export const COUNTRY_ROUTES: readonly CountryRoute[] = COUNTRY_LOCATIONS.map((location) => {
+  const members = REGIONS.filter((region) => region.id === location.id || (location.id === 'USA' && region.id === 'USA-LA'));
+  const aliases = members.flatMap((region) => [region.id, region.id.toLowerCase(), region.label, region.short]);
+  aliases.push(location.slug, location.label, location.english, location.english.toLowerCase());
+  if (location.id === 'USA') aliases.push('us', 'united states', '미국 전체', 'la', 'los angeles', '로스앤젤레스');
+  return {
+    slug: location.slug,
+    id: location.id,
+    label: location.label,
+    english: location.english,
+    flag: location.flag,
+    regionIds: members.map((region) => region.id),
+    aliases: [...new Set(aliases)],
+    cities: location.cities,
+  };
+});
 
 export function getCountryRoute(slug: string): CountryRoute | undefined {
   const value = slug.trim().toLowerCase();
@@ -62,6 +61,14 @@ export function getCountryRoute(slug: string): CountryRoute | undefined {
 
 export function getRegionalCategory(slug: string) {
   return REGIONAL_CATEGORIES.find((category) => category.slug === slug);
+}
+
+export function getCityRoute(countrySlug: string, citySlug: string): CityRoute | undefined {
+  const country = getCountryRoute(countrySlug);
+  if (!country) return undefined;
+  const value = citySlug.trim().toLowerCase();
+  const city = country.cities.find((item) => item.slug === value || item.label.toLowerCase() === value || item.english.toLowerCase() === value);
+  return city ? { ...city, country } : undefined;
 }
 
 export function countryForRegion(region: string): CountryRoute | undefined {
@@ -79,6 +86,10 @@ export function countryHref(region: string, category?: RegionalCategory): string
   return `/${country.slug}${category ? `/${category}` : ''}`;
 }
 
+export function cityHref(city: CityRoute, category?: RegionalCategory): string {
+  return `/${city.country.slug}/${city.slug}${category ? `/${category}` : ''}`;
+}
+
 export function isRegionalPostId(id: string): boolean {
   return /^[a-zA-Z0-9_-]{1,200}$/.test(id);
 }
@@ -86,4 +97,9 @@ export function isRegionalPostId(id: string): boolean {
 export function regionalPostHref(country: CountryRoute, category: RegionalCategory, id: string): string {
   if (!isRegionalPostId(id)) throw new Error('Invalid regional post ID');
   return `/${country.slug}/${category}/${encodeURIComponent(id)}`;
+}
+
+export function cityRegionalPostHref(city: CityRoute, category: RegionalCategory, id: string): string {
+  if (!isRegionalPostId(id)) throw new Error('Invalid regional post ID');
+  return `${cityHref(city, category)}/${encodeURIComponent(id)}`;
 }
