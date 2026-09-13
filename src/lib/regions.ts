@@ -21,6 +21,16 @@ export const REGIONS = [
   { id: 'Malta', label: '몰타', short: '몰타', flag: '🇲🇹' },
   { id: 'Thailand', label: '태국', short: '태국', flag: '🇹🇭' },
   { id: 'Vietnam', label: '베트남', short: '베트남', flag: '🇻🇳' },
+  { id: 'Canada', label: '캐나다', short: '캐나다', flag: '🇨🇦' },
+  { id: 'Australia', label: '호주', short: '호주', flag: '🇦🇺' },
+  { id: 'Japan', label: '일본', short: '일본', flag: '🇯🇵' },
+  { id: 'China', label: '중국', short: '중국', flag: '🇨🇳' },
+  { id: 'NewZealand', label: '뉴질랜드', short: '뉴질랜드', flag: '🇳🇿' },
+  { id: 'Singapore', label: '싱가포르', short: '싱가포르', flag: '🇸🇬' },
+  { id: 'UnitedKingdom', label: '영국', short: '영국', flag: '🇬🇧' },
+  { id: 'France', label: '프랑스', short: '프랑스', flag: '🇫🇷' },
+  { id: 'Italy', label: '이탈리아', short: '이탈리아', flag: '🇮🇹' },
+  { id: 'Philippines', label: '필리핀', short: '필리핀', flag: '🇵🇭' },
 ] as const;
 
 export type RegionId = (typeof REGIONS)[number]['id'];
@@ -48,6 +58,16 @@ export const REGION_TIME_ZONES: Record<RegionId, string> = {
   Malta: 'Europe/Malta',
   Thailand: 'Asia/Bangkok',
   Vietnam: 'Asia/Ho_Chi_Minh',
+  Canada: 'America/Toronto',
+  Australia: 'Australia/Sydney',
+  Japan: 'Asia/Tokyo',
+  China: 'Asia/Shanghai',
+  NewZealand: 'Pacific/Auckland',
+  Singapore: 'Asia/Singapore',
+  UnitedKingdom: 'Europe/London',
+  France: 'Europe/Paris',
+  Italy: 'Europe/Rome',
+  Philippines: 'Asia/Manila',
 };
 
 export function regionLabel(id: string) {
