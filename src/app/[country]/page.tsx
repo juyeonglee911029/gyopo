@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCountryOverview, isIndexableRegionalPost } from '@/lib/regionalContent';
 import { getCountryRoute } from '@/lib/regionRoutes';
+import { cityHref } from '@/lib/regionRoutes';
 import { pageMetadata } from '@/lib/seo';
 import RegionalNavigation from './RegionalNavigation';
 import RegionalPostList from './RegionalPostList';
@@ -32,6 +33,9 @@ export default async function CountryPage({ params }: Props) {
         <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">{country.label} 교민의 생활 이야기와 공개 게시글을 분야별로 살펴보세요. 구인구직, 주거, 뉴스, 업소록과 장터에서 필요한 정보를 찾을 수 있습니다.</p>
       </header>
       <RegionalNavigation country={country} />
+      <nav aria-label={`${country.label} 도시`} className="mb-8 flex flex-wrap gap-2">
+        {country.cities.map((city) => <Link key={city.slug} href={cityHref({ ...city, country })} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-xs font-bold text-slate-300 hover:border-teal-300/30 hover:text-teal-100">{city.label}</Link>)}
+      </nav>
       <div className="space-y-10">
         {overview.map(({ category, listing }) => (
           <section key={category.slug} aria-labelledby={`heading-${category.slug}`}>
