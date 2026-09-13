@@ -14,7 +14,7 @@ export function resolveSiteUrl(value?: string): string {
   return url.origin;
 }
 
-export const SITE_URL = resolveSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
+export const SITE_URL = resolveSiteUrl(process.env.NEXT_PUBLIC_SITE_URL || process.env.PUBLIC_SITE_ORIGIN);
 export const NOINDEX_FOLLOW: Metadata['robots'] = {
   index: false,
   follow: true,
