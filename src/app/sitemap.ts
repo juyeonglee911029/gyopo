@@ -5,7 +5,7 @@ import { regionalPostHref } from '@/lib/regionRoutes';
 
 export const runtime = 'edge';
 
-const routes = ['/', '/news', '/jobs', '/directory', '/market', '/community', '/ads', '/privacy', '/terms'];
+const routes = ['/', '/regions', '/jobs', '/life', '/community', '/apps', '/apps/ai-search', '/apps/random-chat', '/games', '/music', '/webrtc', '/theater', '/news', '/directory', '/market', '/ads', '/privacy', '/terms'];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const rows = await getRegionalSitemapPosts();
@@ -21,6 +21,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [...routes.map((route) => ({
     url: canonicalUrl(route),
     changeFrequency: route === '/' || route === '/news' ? 'daily' as const : 'weekly' as const,
-    priority: route === '/' ? 1 : route === '/news' || route === '/jobs' || route === '/directory' ? 0.8 : 0.6,
+     priority: route === '/' ? 1 : ['/regions', '/jobs', '/life', '/community', '/apps', '/news', '/directory'].includes(route) ? 0.8 : 0.6,
   })), ...regional.values()];
 }
