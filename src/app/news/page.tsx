@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Clock3, Newspaper, Radio, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { Clock3, Newspaper, Radio, ShieldCheck } from 'lucide-react';
 import { listDocuments } from '@/lib/firebase';
 import { regionLabel } from '@/lib/regions';
 import { CONTENT_SOURCES, sourceItemId } from '@/lib/contentSources';
@@ -117,7 +117,6 @@ export default function NewsPage() {
             <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">오늘의 뉴스</h1>
             <p className="mt-2 text-sm text-slate-400">카테고리 선택 없이 최신 소식을 목록에서 바로 확인하세요.</p>
           </div>
-          <button onClick={() => void load()} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[.05] px-3 text-xs font-black text-slate-200 transition hover:border-teal-300/30 hover:text-teal-200"><RefreshCcw size={14} /> 새로고침</button>
       </header>
 
       <main className="category-shell mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
