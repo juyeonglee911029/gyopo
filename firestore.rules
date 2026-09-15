@@ -515,7 +515,8 @@ service cloud.firestore {
      }
        match /liveRooms/{roomId} {
          allow read: if true;
-         allow create: if request.auth != null && request.resource.data.hostId == request.auth.uid;
+          allow create: if request.auth != null && request.resource.data.hostId == request.auth.uid
+            && request.resource.data.title is string && request.resource.data.title.size() <= 10;
            allow update: if request.auth != null && (isMaster() ||
            (request.resource.data.status == 'offline'
              && resource.data.hostId == request.auth.uid
@@ -526,10 +527,22 @@ service cloud.firestore {
                || resource.data.status == 'offline'
                || (resource.data.updatedAt is timestamp
                  && request.time > resource.data.updatedAt + duration.value(20, 's'))))
-          );
+           )
+           || (request.auth != null
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+             && request.resource.data.likes is number
+             && request.resource.data.likes >= 0);
           allow delete: if request.auth != null && (resource.data.hostId == request.auth.uid || isMaster());
-       }
-     match /liveRoomMessages/{messageId} {
+      }
+      match /liveRoomLikes/{likeId} {
+        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+        allow create: if request.auth != null
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.roomId is string;
+        allow update: if false;
+        allow delete: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+      }
+      match /liveRoomMessages/{messageId} {
        allow read: if true;
        allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
         allow update: if request.auth != null && resource.data.authorId == request.auth.uid;
