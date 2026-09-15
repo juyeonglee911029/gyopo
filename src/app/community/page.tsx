@@ -10,6 +10,7 @@ import { REGIONS } from '@/lib/regions';
 import { COMMUNITY_FILTERS, communityTopic, createFilterLocations, listingLocation, matchesCommunityFilters, paginateListings, type CommunityFilterFields, type CommunityTopic } from '@/lib/listingFilters';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import WriterComposer from '@/components/posts/WriterComposer';
+import { countryForRegion, regionalPostHref } from '@/lib/regionRoutes';
 
 const locations = createFilterLocations(COUNTRY_LOCATIONS, REGIONS);
 
@@ -50,6 +51,11 @@ function isUnsafeImportedPost(post: Post) {
   if (!isImportedPost(post)) return false;
   const text = `${post.title} ${post.body} ${post.sourceUrl || ''}`;
   return /(누누티비|티비위키|최신주소|주소톡|불법\s*(?:스트리밍|영상)|성착취물|무료\s*시청)/i.test(text);
+}
+
+function publicPostHref(post: Post) {
+  const country = countryForRegion(post.country);
+  return country ? regionalPostHref(country, 'community', post.id) : `/community/${encodeURIComponent(post.id)}`;
 }
 
 function curateCommunityPosts(items: Post[]) {
@@ -214,7 +220,7 @@ export default function CommunityPage() {
            {!loading && filteredPosts.length === 0 && <div className="py-20 text-center text-slate-400">선택한 조건에 맞는 게시글이 없습니다. 조건을 해제하거나 전체를 선택해주세요.</div>}
           {!loading && page.items.map((post) => (
              <div key={post.id} className="relative transition-colors hover:bg-white/[.06]">
-              <Link href={post.sourceContentId ? `/content/${post.sourceContentId}?source=${encodeURIComponent(post.sourceId || '')}&category=${encodeURIComponent(post.sourceCategory || 'community')}&url=${encodeURIComponent(post.sourceUrl || '')}` : `/community/${post.id}`} className="block">
+               <Link href={post.sourceContentId ? `/content/${post.sourceContentId}?source=${encodeURIComponent(post.sourceId || '')}&category=${encodeURIComponent(post.sourceCategory || 'community')}&url=${encodeURIComponent(post.sourceUrl || '')}` : publicPostHref(post)} className="block">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center">
                 <div className="col-span-1 text-xs md:text-sm font-bold text-center">
                   <span className={post.type === 'notice' ? 'text-red-500' : post.type === 'news' ? 'text-blue-500' : 'text-gray-400'}>
