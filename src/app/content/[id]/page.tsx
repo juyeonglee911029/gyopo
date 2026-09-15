@@ -98,7 +98,6 @@ function ContentDetail({ id, collection, source, category, url }: { id: string; 
   const [content, setContent] = useState<ResolvedContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -107,10 +106,10 @@ function ContentDetail({ id, collection, source, category, url }: { id: string; 
       .catch(() => { if (active) setError(true); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [id, collection, source, category, url, revision]);
+  }, [id, collection, source, category, url]);
 
   if (loading) return <div className="mx-auto max-w-3xl px-4 py-24 text-center text-sm text-slate-500">콘텐츠를 불러오는 중입니다...</div>;
-  if (error) return <div className="mx-auto max-w-3xl px-4 py-24 text-center"><p role="alert" className="text-slate-400">콘텐츠를 불러오지 못했습니다.</p><button type="button" className="mt-4 text-teal-300" onClick={() => { setError(false); setLoading(true); setRevision((value) => value + 1); }}>다시 시도</button></div>;
+  if (error) return <div className="mx-auto max-w-3xl px-4 py-24 text-center"><p role="alert" className="text-slate-400">콘텐츠를 불러오지 못했습니다.</p></div>;
   if (!content) return <div className="mx-auto max-w-3xl px-4 py-24 text-center"><p className="text-slate-500">게시된 콘텐츠를 찾을 수 없습니다.</p><Link href="/news" className="mt-4 inline-block font-bold text-teal-400">뉴스 허브로 돌아가기</Link></div>;
 
   const title = content.title || content.name || '출처 콘텐츠';
