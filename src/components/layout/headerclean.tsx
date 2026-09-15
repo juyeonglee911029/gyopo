@@ -61,9 +61,9 @@ export default function Header() {
 
            {user ? (
              <div className="flex items-center gap-2 sm:gap-4">
-               <Link href="/wallet" aria-label={`${formatUsdt(user.usdtBalance)} USDT`} className="usdt-balance">
+               <Link href="/wallet" aria-label={`${formatUsdt(user.usdtBalance)} USD`} className="usdt-balance">
                   <span className="usdt-mark" aria-hidden="true">₮</span>
-                 <span>{formatUsdt(user.usdtBalance)} <small>USDT</small></span>
+                  <span>{formatUsdt(user.usdtBalance)} <small>USD</small></span>
                </Link>
                {isMasterUser(user) && <Link href="/master" className="rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800">MASTER</Link>}
                <div className="flex items-center gap-2">
