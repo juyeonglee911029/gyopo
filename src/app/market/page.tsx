@@ -70,7 +70,7 @@ export default function MarketPage() {
     try {
       await mergeDocument('escrowOrders', order.id, { status, timeline, updatedAt: new Date() }, token);
       setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status, timeline } : item));
-    } catch { window.alert('배송 상태를 변경하지 못했습니다. 새로고침 후 다시 시도해주세요.'); }
+    } catch { window.alert('배송 상태를 변경하지 못했습니다. 잠시 후 다시 시도해주세요.'); }
   };
 
   const removeOrder = async (order: EscrowOrder) => {
