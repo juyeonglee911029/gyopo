@@ -25,13 +25,13 @@ export default async function CountryPage({ params }: Props) {
   if (!country) notFound();
   const overview = await getCountryOverview(country.slug);
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 text-slate-100 sm:px-6">
+    <div className="category-page mx-auto max-w-5xl px-4 py-8 text-slate-100 sm:px-6">
+      <header className="category-header"><div className="category-heading">
       <Link href="/" className="text-sm font-bold text-teal-200">GYOPO 홈</Link>
-      <header className="mt-6">
         <p className="text-xs font-bold uppercase tracking-widest text-teal-200">{country.slug} / GYOPO</p>
         <h1 className="mt-3 text-3xl font-black sm:text-4xl">{country.label} 한인 커뮤니티</h1>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">{country.label} 교민의 생활 이야기와 공개 게시글을 분야별로 살펴보세요. 구인구직, 주거, 뉴스, 업소록과 장터에서 필요한 정보를 찾을 수 있습니다.</p>
-      </header>
+      </div></header>
       <RegionalNavigation country={country} />
       <nav aria-label={`${country.label} 도시`} className="mb-8 flex flex-wrap gap-2">
         {country.cities.map((city) => <Link key={city.slug} href={cityHref({ ...city, country })} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-xs font-bold text-slate-300 hover:border-teal-300/30 hover:text-teal-100">{city.label}</Link>)}

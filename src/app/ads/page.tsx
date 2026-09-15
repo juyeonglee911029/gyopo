@@ -2,24 +2,28 @@
 
 import { useState } from 'react';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { getSessionToken, saveProfile } from '@/lib/firebase';
 import { Megaphone, Image as ImageIcon, Link as LinkIcon, Calendar, Info } from 'lucide-react';
 
 export default function AdsPage() {
-  const { user, updateUsdt, addTransaction } = useGlobalStore();
+  const { user, setUser, addTransaction } = useGlobalStore();
   const [days, setDays] = useState(1);
   const [imageUrl, setImageUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
 
   const totalCost = days * 60;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return alert("로그인이 필요합니다.");
     if (!imageUrl || !linkUrl) return alert("이미지 URL과 연결 링크를 모두 입력해주세요.");
-    if (user.usdtBalance < totalCost) return alert(`잔고가 부족합니다. (${totalCost} USDT 필요)`);
+    if (Number(user.usdBalance || 0) < totalCost) return alert(`서비스 잔액이 부족합니다. ($${totalCost} 필요)`);
 
-    // Process payment
-    updateUsdt(-totalCost);
+    const nextUser = { ...user, usdBalance: Number(user.usdBalance || 0) - totalCost };
+    const token = getSessionToken();
+    if (!token) return alert('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+    await saveProfile(nextUser, token);
+    setUser(nextUser);
     addTransaction({
       type: 'ADS',
       amount: totalCost,
@@ -27,23 +31,23 @@ export default function AdsPage() {
       details: `셀프 광고 등록 (${days}일)`
     });
 
-    alert(`[시스템] 광고 등록이 완료되었습니다! ${totalCost} USDT가 차감되었습니다.\n(설정하신 기간이 지나면 자동 삭제됩니다.)`);
+    alert(`[시스템] 광고 등록이 완료되었습니다! $${totalCost}가 차감되었습니다.\n(설정하신 기간이 지나면 자동 삭제됩니다.)`);
     setDays(1);
     setImageUrl('');
     setLinkUrl('');
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <div className="text-center mb-10 space-y-4">
+    <div className="category-page container mx-auto px-4 py-8 max-w-4xl">
+      <div className="category-header"><div className="category-heading">
         <h1 className="text-3xl md:text-4xl font-black text-gray-900 flex items-center justify-center gap-3">
           <Megaphone className="text-blue-600" size={36} />
           셀프서비스 광고 센터
         </h1>
         <p className="text-gray-500 text-lg">
-          누구의 도움 없이도 직접 배너 광고를 올리세요. <strong className="text-gray-800">하루 60 USDT</strong>로 전 세계 교민들에게 도달합니다.
+           누구의 도움 없이도 직접 배너 광고를 올리세요. <strong className="text-gray-800">하루 $60</strong>로 전 세계 교민들에게 도달합니다.
         </p>
-      </div>
+      </div></div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
@@ -103,7 +107,7 @@ export default function AdsPage() {
             <div className="pt-6 border-t border-gray-100">
               <div className="flex justify-between items-center mb-6">
                 <span className="text-gray-500 font-bold">총 결제 금액:</span>
-                <span className="text-3xl font-black text-gray-900">{totalCost} <span className="text-lg text-gray-500">USDT</span></span>
+                 <span className="text-3xl font-black text-gray-900">${totalCost}</span>
               </div>
               <button 
                 type="submit"
@@ -123,7 +127,7 @@ export default function AdsPage() {
             </h3>
             <ul className="space-y-3 text-sm text-blue-700/80 list-disc pl-5">
               <li>등록 즉시 메인 페이지 및 각 서브 페이지 배너 영역에 광고가 노출됩니다.</li>
-              <li>광고 비용은 <strong>하루(24시간) 기준 60 USDT</strong>입니다.</li>
+               <li>광고 비용은 <strong>하루(24시간) 기준 $60</strong>입니다.</li>
               <li>설정하신 기간이 만료되면 시스템이 자동으로 광고를 내립니다.</li>
               <li>부적절한 내용의 광고는 관리자 직권으로 삭제될 수 있으며 환불되지 않습니다.</li>
             </ul>

@@ -1,5 +1,6 @@
 import { creditUsdBalance } from '@/lib/firebaseAdmin';
-import { amountFromTransaction, paddleRequest, requirePaddleUser, type PaddleTransaction } from '@/lib/paddle';
+import { amountFromTransaction, PaddleConfigurationError, paddleRequest, requirePaddleUser, type PaddleTransaction } from '@/lib/paddle';
+import { ApiAuthError } from '@/lib/apiSecurity';
 
 export const runtime = 'edge';
 
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
     const credited = await creditUsdBalance({ userId, transactionId, amountUsd, currencyCode: transaction.currency_code });
     return Response.json({ status: 'completed', credited: true, ...credited });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : '결제 금액 반영에 실패했습니다.' }, { status: 500 });
+    const status = error instanceof ApiAuthError || error instanceof PaddleConfigurationError ? error.status : 500;
+    return Response.json({ error: error instanceof Error ? error.message : '결제 금액 반영에 실패했습니다.' }, { status });
   }
 }

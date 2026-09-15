@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">GYOPO 글로벌 한인 교민 네트워크</title>
+  <desc id="desc">구인구직, 생활 정보, 업소록과 커뮤니티를 연결하는 글로벌 교민 포털</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07131a"/>
+      <stop offset="0.55" stop-color="#123f38"/>
+      <stop offset="1" stop-color="#24132f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="75%" cy="18%" r="75%">
+      <stop offset="0" stop-color="#49efd0" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#49efd0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <path d="M0 510C220 430 390 590 650 490S1020 370 1200 465V630H0Z" fill="#070b17" opacity=".48"/>
+  <circle cx="1010" cy="125" r="92" fill="none" stroke="#68f5d7" stroke-width="2" opacity=".5"/>
+  <circle cx="1010" cy="125" r="55" fill="none" stroke="#68f5d7" stroke-width="2" opacity=".7"/>
+  <text x="82" y="125" fill="#68f5d7" font-family="Arial,sans-serif" font-size="25" font-weight="700" letter-spacing="8">GYOPO GLOBAL NETWORK</text>
+  <text x="78" y="305" fill="#ffffff" font-family="Arial,'Noto Sans KR',sans-serif" font-size="88" font-weight="800">필요한 답을</text>
+  <text x="78" y="405" fill="#68f5d7" font-family="Arial,'Noto Sans KR',sans-serif" font-size="88" font-weight="800">한 곳에서 찾습니다.</text>
+  <text x="84" y="505" fill="#d3e4df" font-family="Arial,'Noto Sans KR',sans-serif" font-size="28">Jobs · Local Life · Businesses · Community</text>
+</svg>

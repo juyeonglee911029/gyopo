@@ -1,4 +1,5 @@
 import { MASTER_DEPOSIT_ADDRESS } from '@/lib/firebase';
+import { clientAddress, consumeRateLimit, rateLimitResponse, requireMasterUser, unauthorizedResponse } from '@/lib/apiSecurity';
 
 export const runtime = 'edge';
 
@@ -11,9 +12,20 @@ function isTronAddress(value: string) {
 }
 
 export async function GET(request: Request) {
+  let user;
+  try {
+    user = await requireMasterUser(request);
+  } catch (error) {
+    return unauthorizedResponse(error);
+  }
+  const rate = consumeRateLimit(`tron-deposits:${user.uid}:${clientAddress(request)}`, 12, 60_000);
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfterMs);
+
   const params = new URL(request.url).searchParams;
-  const address = params.get('address') || MASTER_DEPOSIT_ADDRESS;
-  const limit = Math.min(200, Math.max(1, Number(params.get('limit') || 50)));
+  const address = params.get('address')?.trim() || MASTER_DEPOSIT_ADDRESS;
+  const parsedLimit = Number(params.get('limit') || 50);
+  const limit = Number.isInteger(parsedLimit) ? Math.min(200, Math.max(1, parsedLimit)) : 50;
+  if (address.toLowerCase() !== MASTER_DEPOSIT_ADDRESS.toLowerCase()) return Response.json({ error: '마스터 입금 지갑만 조회할 수 있습니다.' }, { status: 403 });
   if (!isTronAddress(address)) return Response.json({ error: '올바른 TRON 주소가 아닙니다.' }, { status: 400 });
 
   const response = await fetch(`${TRONSCAN_API}/v1/accounts/${address}/transactions/trc20?only_confirmed=true&limit=${limit}&order_by=block_timestamp,desc&contract_address=${USDT_CONTRACT}`, {
@@ -22,6 +34,7 @@ export async function GET(request: Request) {
       ...(process.env.TRONGRID_API_KEY ? { 'TRON-PRO-API-KEY': process.env.TRONGRID_API_KEY } : {}),
     },
     cache: 'no-store',
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) return Response.json({ error: `TRON 입금 내역 조회 실패 (${response.status})` }, { status: 502 });
 

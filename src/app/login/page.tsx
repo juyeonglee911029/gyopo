@@ -5,6 +5,16 @@ import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { getStoredSession, googleClientId, loadGoogleIdentityScript, signInWithGoogleCredential } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { trackGrowth } from '@/lib/growthTracking';
+
+function loginErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : '';
+  if (raw.includes('OPERATION_NOT_ALLOWED')) return 'Firebase에서 Google 로그인 제공업체가 비활성화되어 있습니다.';
+  if (raw.includes('UNAUTHORIZED_DOMAIN')) return `현재 도메인(${window.location.hostname})이 Firebase 승인 도메인에 없습니다.`;
+  if (raw.includes('INVALID_IDP_RESPONSE') || raw.includes('INVALID_CREDENTIAL')) return 'Google 인증 응답이 만료되었거나 올바르지 않습니다. 로그인 창을 다시 열어주세요.';
+  if (raw.includes('popup') || raw.includes('cancel')) return 'Google 로그인 창이 닫혔습니다. 다시 시도해주세요.';
+  return raw ? `Google 로그인에 실패했습니다: ${raw.slice(0, 180)}` : 'Google 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,6 +25,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     let cancelled = false;
+    trackGrowth({ event: 'login_view' });
 
     const existingUser = getStoredSession()?.user;
     if (existingUser) {
@@ -35,10 +46,10 @@ export default function LoginPage() {
               const user = await signInWithGoogleCredential(credential);
               setUser(user);
                router.replace('/');
-            } catch {
-              setError('Google 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
-              setLoading(false);
-            }
+             } catch (error) {
+               setError(loginErrorMessage(error));
+               setLoading(false);
+             }
           },
         });
         window.google.accounts.id.renderButton(buttonRef.current, {

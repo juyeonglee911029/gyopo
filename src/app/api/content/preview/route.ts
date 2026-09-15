@@ -3,6 +3,8 @@ import type { ContentCategory, ContentSource } from '@/lib/contentSources';
 import { curateSourceItems, normalizeSourceBody, normalizeSourceText, normalizeSourceTitle, normalizeSourceUrl } from '@/lib/sourcepreview';
 import type { LiveSourceItem } from '@/lib/sourcepreview';
 import { SITE_URL } from '@/lib/seo';
+import { REGIONS } from '@/lib/regions';
+import { clientAddress, consumeRateLimit, rateLimitResponse } from '@/lib/apiSecurity';
 
 export const runtime = 'edge';
 
@@ -664,19 +666,33 @@ async function fetchNaverSource(source: ContentSource, requestedCategory: Conten
   return { sourceId: source.id, sourceName: source.name, region: source.region, url: source.url, title: '네이버 뉴스 최신 기사', description: source.note, items: requestedCategory ? items : [], sections, status: items.length ? 'ready' : 'unavailable', warnings: items.length ? [] : ['네이버 뉴스 섹션을 읽지 못했습니다.'], fetchedAt: new Date().toISOString(), verified: true };
 }
 
+// This endpoint is public by design for the portal's public content pages. It never accepts an arbitrary URL:
+// source, region, and category are bounded identifiers resolved against local allowlists below.
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  if (params.get('source') === 'market') return Response.json(await fetchMarket(), { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=120' } });
-  const region = params.get('region');
+  const sourceParam = params.get('source') || '';
+  const regionParam = params.get('region') || '';
+  const categoryParam = params.get('category') || '';
+  if (sourceParam.length > 80 || regionParam.length > 80 || categoryParam.length > 20) {
+    return Response.json({ error: '콘텐츠 조회 입력값이 너무 깁니다.' }, { status: 400 });
+  }
+  const rate = consumeRateLimit(`content-preview:${clientAddress(request)}`, 20, 60_000);
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfterMs);
+  if (sourceParam === 'market') return Response.json(await fetchMarket(), { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=120' } });
+  const region = regionParam || null;
   if (region) {
+    if (!REGIONS.some((item) => item.id === region)) return Response.json({ error: '지원하지 않는 지역입니다.' }, { status: 400 });
     try {
       return Response.json(await fetchRegionalNews(region));
     } catch (error) {
       return Response.json({ sourceId: `regional-${region}`, sourceName: `${region} 지역 뉴스 검색`, region, items: [], sections: [], status: 'unavailable', warnings: [error instanceof Error ? error.message : '지역 뉴스 피드를 확인하지 못했습니다.'], fetchedAt: new Date().toISOString() }, { status: 200 });
     }
   }
-  const id = params.get('source');
-  const requestedCategory = params.get('category') as ContentCategory | null;
+  const id = sourceParam;
+  const requestedCategory = categoryParam as ContentCategory | null;
+  if (requestedCategory && !['news', 'directory', 'jobs', 'market', 'events', 'community'].includes(requestedCategory)) {
+    return Response.json({ error: '지원하지 않는 콘텐츠 카테고리입니다.' }, { status: 400 });
+  }
   const source = CONTENT_SOURCES.find((item) => item.id === id);
   if (!source) return Response.json({ error: '등록되지 않은 출처입니다.' }, { status: 404 });
   if (requestedCategory && !source.categories.includes(requestedCategory)) return Response.json({ error: '이 출처에서 지원하지 않는 카테고리입니다.' }, { status: 400 });

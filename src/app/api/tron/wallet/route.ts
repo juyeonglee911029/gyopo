@@ -1,6 +1,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
 import { keccak_256 } from '@noble/hashes/sha3';
+import { consumeRateLimit, rateLimitResponse, requireAuthenticatedUser, unauthorizedResponse } from '@/lib/apiSecurity';
 
 export const runtime = 'edge';
 
@@ -72,12 +73,28 @@ async function readWallet(userId: string, token: string): Promise<WalletResult |
 }
 
 export async function POST(request: Request) {
-  const authorization = request.headers.get('authorization') || '';
-  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-  if (!token) return Response.json({ error: '로그인 세션이 필요합니다.' }, { status: 401 });
-  const body = await request.json().catch(() => ({})) as { userId?: string };
-  const userId = body.userId?.trim() || '';
+  let user;
+  try {
+    user = await requireAuthenticatedUser(request);
+  } catch (error) {
+    return unauthorizedResponse(error);
+  }
+  const rate = consumeRateLimit(`tron-wallet:${user.uid}`, 3, 60 * 60_000);
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfterMs);
+  const token = user.token;
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > 4_000) return Response.json({ error: '요청 데이터가 너무 큽니다.' }, { status: 413 });
+  const rawBody = await request.text().catch(() => '');
+  if (rawBody.length > 4_000) return Response.json({ error: '요청 데이터가 너무 큽니다.' }, { status: 413 });
+  let body: { userId?: string } = {};
+  try {
+    body = JSON.parse(rawBody || '{}') as { userId?: string };
+  } catch {
+    return Response.json({ error: '요청 데이터 형식이 올바르지 않습니다.' }, { status: 400 });
+  }
+  const userId = (typeof body.userId === 'string' ? body.userId.trim() : '') || user.uid;
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(userId)) return Response.json({ error: '회원 식별자가 올바르지 않습니다.' }, { status: 400 });
+  if (userId !== user.uid) return Response.json({ error: '본인 계정의 자동 지갑만 발급할 수 있습니다.' }, { status: 403 });
 
   try {
     const existing = await readWallet(userId, token);
@@ -110,4 +127,3 @@ export async function POST(request: Request) {
     return Response.json({ error: error instanceof Error ? error.message : '자동 지갑 발급에 실패했습니다.' }, { status: 500 });
   }
 }
-

@@ -9,6 +9,7 @@ import { POST_COLLECTIONS, isPostCollection, postThreadKey, type PostCollection 
 import { sourceItemId } from '@/lib/contentSources';
 import PostComments from '@/components/posts/PostComments';
 import PostActions from '@/components/posts/PostActions';
+import ImageCarousel from '@/components/media/ImageCarousel';
 
 export const runtime = 'edge';
 
@@ -123,7 +124,7 @@ function ContentDetail({ id, collection, source, category, url }: { id: string; 
     <article className="w-full px-4 py-8 sm:px-6 lg:px-10">
       <Link href={backHref} className="text-sm font-bold text-teal-300 hover:text-teal-200">← 목록으로 돌아가기</Link>
       <div className="mt-5 overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] shadow-2xl">
-        {images[0] ? <img src={images[0]} alt={title} className="max-h-[42rem] w-full bg-black/20 object-contain" /> : imported ? <div className="grid h-52 place-items-center bg-gradient-to-br from-teal-500/20 via-slate-900 to-slate-950 text-sm font-bold text-teal-200">원문 대표 이미지가 없습니다</div> : null}
+        {images[0] ? <ImageCarousel images={images} alt={title} className="max-h-[42rem] min-h-64" /> : imported ? <div className="grid h-52 place-items-center bg-gradient-to-br from-teal-500/20 via-slate-900 to-slate-950 text-sm font-bold text-teal-200">원문 대표 이미지가 없습니다</div> : null}
         <div className="p-6 sm:p-10">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {content.country && <span className="rounded-full bg-teal-300/10 px-2.5 py-1 font-bold text-teal-200">{content.country}</span>}

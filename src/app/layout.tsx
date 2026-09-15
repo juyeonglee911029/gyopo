@@ -1,31 +1,20 @@
 import type { Metadata, Viewport } from 'next';
-import { Manrope, Noto_Sans_KR } from 'next/font/google';
 import './globals.css';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/footer';
 import GlobalChat from '@/components/layout/GlobalChat';
 import PortalFrame from '@/components/layout/portalframe';
-import MusicPlayer from '@/components/layout/musicplayer';
 import SiteBackgroundVideo from '@/components/layout/sitebackgroundvideo';
 import PortalTextRail from '@/components/layout/portaltextrail';
+import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
 import PageTransition from '@/components/layout/PageTransition';
 import AssistantDock from '@/components/layout/AssistantDock';
 import NavigationFX from '@/components/layout/NavigationFX';
+import GoogleTranslate from '@/components/layout/GoogleTranslate';
 import { AdSenseScript } from '@/components/ads/AdSense';
 import { SITE_URL } from '@/lib/seo';
-
-const notoSansKr = Noto_Sans_KR({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '700', '900'],
-  variable: '--font-noto-sans-kr'
-});
-
-const manrope = Manrope({
-  subsets: ['latin'],
-  variable: '--font-manrope',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -42,11 +31,13 @@ export const metadata: Metadata = {
     siteName: 'GYOPO',
     title: 'GYOPO | 글로벌 한인 교민 통합 포털',
     description: '교민 커뮤니티, 구인구직, 업소록, 장터, 화상채팅과 K-POP 라디오를 한 곳에서 만나보세요.',
+    images: [{ url: '/og-image.svg', alt: 'GYOPO 글로벌 한인 교민 네트워크' }],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'GYOPO | 글로벌 한인 교민 통합 포털',
     description: '전 세계 한인을 위한 커뮤니티와 생활 플랫폼',
+    images: ['/og-image.svg'],
   },
   robots: { index: true, follow: true },
 };
@@ -60,7 +51,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={`${notoSansKr.variable} ${manrope.variable} font-sans bg-[#070b17] text-slate-100 pt-24 min-h-screen flex flex-col`}>
+      <body className="font-sans bg-[#070b17] text-slate-100 min-h-screen flex flex-col">
         <AppRuntime>
           <AdSenseScript />
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
@@ -73,11 +64,12 @@ export default function RootLayout({
             inLanguage: ['ko', 'en'],
              potentialAction: { '@type': 'SearchAction', target: `${SITE_URL}/assistant?q={search_term_string}`, 'query-input': 'required name=search_term_string' },
           }) }} />
-          <SiteBackgroundVideo />
-          <div className="portal-chrome">
-            <Header />
-            <MusicPlayer />
-            <PortalTextRail />
+           <SiteBackgroundVideo />
+           <GoogleTranslate />
+            <div className="portal-chrome">
+              <Header />
+              <PortalTextRail />
+           <MobileBottomNav />
              <GlobalChat />
              <FriendDock />
              <AssistantDock />

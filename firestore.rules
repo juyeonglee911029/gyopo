@@ -42,89 +42,52 @@ service cloud.firestore {
     function hasValidProfileState(data) {
       return hasNoOnboardingFields(data) || hasCompletedOnboarding(data);
     }
+     function hasNonNegativeBalances(data) {
+       return (!data.keys().hasAny(['usdtBalance']) || (data.usdtBalance is number && data.usdtBalance >= 0))
+         && (!data.keys().hasAny(['usdBalance']) || (data.usdBalance is number && data.usdBalance >= 0));
+     }
+     function hasSafeProfileValues(data) {
+       return hasNonNegativeBalances(data)
+         && (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() > 0 && data.name.size() <= 120))
+         && (!data.keys().hasAny(['email']) || (data.email is string && data.email.size() <= 320))
+         && (!data.keys().hasAny(['image']) || (data.image is string && data.image.size() <= 2000))
+         && (!data.keys().hasAny(['isSubscribed']) || data.isSubscribed is bool)
+         && (!data.keys().hasAny(['walletAddress']) || (data.walletAddress is string && data.walletAddress.size() == 34))
+         && (!data.keys().hasAny(['walletNetwork']) || data.walletNetwork == 'TRC20')
+         && (!data.keys().hasAny(['walletPublic']) || data.walletPublic is bool)
+         && (!data.keys().hasAny(['musicFavorites']) || data.musicFavorites is list)
+         && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp);
+     }
+     function hasNoServerManagedProfileChange() {
+       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+         'usdtBalance', 'usdBalance', 'lastTransferId', 'lastUsdOperationId', 'isSubscribed', 'premiumExpiresAt'
+       ]);
+     }
+     function hasSafeProfileCreate(data) {
+       return data.keys().hasOnly([
+           'name', 'email', 'image', 'usdtBalance', 'usdBalance', 'isSubscribed', 'gender', 'genderPreference',
+           'premiumExpiresAt', 'age', 'country', 'walletAddress', 'walletNetwork', 'walletPublic', 'walletPinHash',
+           'walletPinSalt', 'transferPinHash', 'transferPinSalt', 'musicFavorites', 'updatedAt'
+         ])
+         && data.keys().hasAll(['name', 'email', 'image', 'usdtBalance', 'usdBalance', 'isSubscribed', 'updatedAt'])
+         && hasSafeProfileValues(data)
+         && data.usdtBalance == 0
+         && data.usdBalance == 0
+         && data.isSubscribed == false
+         && hasValidProfileState(data);
+     }
      function hasImmutableOnboardingFields() {
-      return hasValidProfileState(request.resource.data)
-        && (!hasValidGender(resource.data) || request.resource.data.gender == resource.data.gender)
-        && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age);
-    }
+       return hasValidProfileState(request.resource.data)
+         && (!hasValidGender(resource.data) || request.resource.data.gender == resource.data.gender)
+         && (!hasValidAge(resource.data) || request.resource.data.age == resource.data.age)
+         && (!hasValidCountry(resource.data) || request.resource.data.country == resource.data.country);
+     }
     function hasNoWalletBalanceChange() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['usdtBalance', 'usdBalance', 'lastTransferId', 'lastUsdOperationId']);
     }
-    function isDirectTransferProfileUpdate(userId) {
-      return request.auth != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usdtBalance', 'lastTransferId', 'updatedAt'])
-        && request.resource.data.lastTransferId is string
-        && request.resource.data.usdtBalance is number
-        && resource.data.usdtBalance is number
-        && request.resource.data.updatedAt is timestamp
-        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.status == 'COMPLETED'
-        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.senderId == request.auth.uid
-        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.amount is number
-        && getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.fee is number
-        && (
-          (userId == getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.senderId
-            && request.auth.uid == userId
-            && request.resource.data.usdtBalance == resource.data.usdtBalance
-              - getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.amount
-              - getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.fee)
-          || (userId == getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.recipientId
-            && request.resource.data.usdtBalance == resource.data.usdtBalance
-              + getAfter(/databases/$(database)/documents/transferRequests/$(request.resource.data.lastTransferId)).data.amount)
-        );
-    }
-    function isDirectTransferLedger(data) {
-      return request.auth != null
-        && data.keys().hasAll(['userId', 'requestId', 'amount', 'direction'])
-        && data.requestId is string
-        && data.amount is number
-        && data.direction is string
-        && getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.status == 'COMPLETED'
-        && getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.senderId == request.auth.uid
-        && data.amount == getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.amount
-        && ((data.userId == request.auth.uid && data.direction == 'OUT')
-          || (data.userId == getAfter(/databases/$(database)/documents/transferRequests/$(data.requestId)).data.recipientId && data.direction == 'IN'));
-    }
-    function isUsdServiceBalanceUpdate(userId) {
-      return request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usdBalance', 'lastUsdOperationId', 'updatedAt'])
-        && request.resource.data.lastUsdOperationId is string
-        && request.resource.data.usdBalance is number
-        && resource.data.usdBalance is number
-        && (
-          (existsAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId))
-            && getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.userId == userId
-            && getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.amount is number
-            && getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
-            && (
-              (getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.status == 'RESERVED'
-                && request.resource.data.usdBalance == resource.data.usdBalance - getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.amount)
-              || (getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.status == 'REFUNDED'
-                && request.resource.data.usdBalance == resource.data.usdBalance + getAfter(/databases/$(database)/documents/gameStakes/$(request.resource.data.lastUsdOperationId)).data.amount)
-            ))
-          || (existsAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId))
-            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.userId == userId
-            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.amount is number
-            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
-            && getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.status == 'RESERVED'
-            && request.resource.data.usdBalance == resource.data.usdBalance - getAfter(/databases/$(database)/documents/genderMatchStakes/$(request.resource.data.lastUsdOperationId)).data.amount)
-          || (existsAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId))
-            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.winnerId == userId
-            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
-            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.payoutAmount is number
-            && getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.status == 'PAID'
-            && request.resource.data.usdBalance == resource.data.usdBalance + getAfter(/databases/$(database)/documents/gamePayouts/$(request.resource.data.lastUsdOperationId)).data.payoutAmount)
-          || (existsAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId))
-            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.userId == userId
-            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.currency == 'USD'
-            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.amount is number
-            && getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.status == 'ACTIVE'
-            && request.resource.data.usdBalance == resource.data.usdBalance - getAfter(/databases/$(database)/documents/premiumSubscriptions/$(request.resource.data.lastUsdOperationId)).data.amount)
-        );
-    }
-    function canInitializeUsdBalance(userId) {
-      return request.auth != null
-        && request.auth.uid == userId
+     function canInitializeUsdBalance(userId) {
+       return request.auth != null
+         && request.auth.uid == userId
         && !resource.data.keys().hasAny(['usdBalance'])
         && request.resource.data.usdBalance == 0
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usdBalance', 'updatedAt']);
@@ -144,12 +107,13 @@ service cloud.firestore {
          && (!data.keys().hasAny(['walletNetwork']) || data.walletNetwork == 'TRC20')
          && (!data.keys().hasAny(['age']) || (data.age is int && data.age > 0 && data.age <= 130));
     }
-    function publicProfileMatchesPrivate(userId) {
-      return request.resource.data.gender == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.gender
-        && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country
-        && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age;
-    }
-    function isSafePresence(data) {
+     function publicProfileMatchesPrivate(userId) {
+       return request.resource.data.gender == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.gender
+         && request.resource.data.country == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.country
+         && request.resource.data.age == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.age
+         && request.resource.data.isSubscribed == getAfter(/databases/$(database)/documents/profiles/$(userId)).data.isSubscribed;
+     }
+     function isSafePresence(data) {
       return data.keys().hasOnly(['userId', 'name', 'image', 'gender', 'country', 'age', 'lastSeenAt', 'updatedAt'])
         && data.keys().hasAll(['lastSeenAt', 'updatedAt'])
         && data.lastSeenAt is timestamp
@@ -200,10 +164,10 @@ service cloud.firestore {
     match /posts/{postId} {
       allow read: if true;
       allow create: if request.auth != null && request.resource.data.authorId == request.auth.uid;
-          allow update: if isMaster() || (request.auth != null && (
+      allow update: if isMaster() || (request.auth != null && (
         resource.data.authorId == request.auth.uid ||
         (request.resource.data.authorId == resource.data.authorId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']))
-      );
+      ));
       allow delete: if request.auth != null && (resource.data.authorId == request.auth.uid || isMaster());
     }
     match /comments/{commentId} {
@@ -310,28 +274,77 @@ service cloud.firestore {
            || (exists(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId))
              && get(/databases/$(database)/documents/webrtcCalls/$(resource.data.callId)).data.status == 'ended'));
      }
+     function hasValidDepositRequest(data) {
+       return data.keys().hasOnly([
+           'userId', 'amount', 'network', 'depositAddress', 'source', 'sourceWalletAddress', 'txHash', 'status',
+           'createdAt', 'reviewedAt', 'reviewedBy'
+         ])
+         && data.keys().hasAll(['userId', 'amount', 'network', 'status', 'createdAt'])
+         && data.userId is string
+         && data.amount is number
+         && data.amount > 0
+         && data.amount <= 1000000
+         && data.network == 'TRC20'
+         && data.status == 'PENDING'
+         && data.createdAt is timestamp
+         && (!data.keys().hasAny(['depositAddress']) || (data.depositAddress is string && data.depositAddress.size() <= 100))
+         && (!data.keys().hasAny(['source']) || data.source == 'TRONCHAIN')
+         && (!data.keys().hasAny(['sourceWalletAddress']) || (data.sourceWalletAddress is string && data.sourceWalletAddress.size() == 34))
+         && (!data.keys().hasAny(['txHash']) || (data.txHash is string && data.txHash.size() >= 32 && data.txHash.size() <= 128));
+     }
+     function hasValidWithdrawalRequest(data) {
+       return data.keys().hasOnly(['userId', 'amount', 'fee', 'targetAddress', 'network', 'status', 'createdAt', 'reviewedAt', 'reviewedBy'])
+         && data.keys().hasAll(['userId', 'amount', 'fee', 'targetAddress', 'network', 'status', 'createdAt'])
+         && data.userId is string
+         && data.amount is number && data.amount > 0 && data.amount <= 1000000
+         && data.fee is number && data.fee >= 0 && data.fee <= 1000
+         && data.targetAddress is string && data.targetAddress.matches('^T[1-9A-HJ-NP-Za-km-z]{33}$')
+         && data.network == 'TRC20'
+         && data.status == 'PENDING'
+         && data.createdAt is timestamp;
+     }
      match /depositRequests/{requestId} {
        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-       allow create: if request.auth != null && (
-         request.resource.data.userId == request.auth.uid
-         || (isMaster()
-           && request.resource.data.source == 'TRONCHAIN'
-           && request.resource.data.txHash is string
-           && request.resource.data.sourceWalletAddress is string
-           && request.resource.data.amount is number
-           && request.resource.data.amount > 0)
-       );
-       allow update: if isMaster();
+       allow create: if request.auth != null && hasValidDepositRequest(request.resource.data)
+         && ((request.resource.data.userId == request.auth.uid && !request.resource.data.keys().hasAny(['source', 'txHash', 'sourceWalletAddress']))
+           || (isMaster() && request.resource.data.source == 'TRONCHAIN'
+             && request.resource.data.txHash is string
+             && request.resource.data.sourceWalletAddress is string));
+       allow update: if isMaster()
+         && request.resource.data.userId == resource.data.userId
+         && request.resource.data.amount == resource.data.amount
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy'])
+         && request.resource.data.status in ['APPROVED', 'REJECTED']
+         && request.resource.data.reviewedBy == request.auth.token.email;
        allow delete: if false;
-    }
+     }
+     match /walletVault/{userId} {
+       allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
+       allow create: if request.auth != null
+         && request.auth.uid == userId
+         && request.resource.data.keys().hasOnly(['userId', 'address', 'network', 'encryptedPrivateKey', 'iv', 'immutable', 'createdAt'])
+         && request.resource.data.userId == userId
+         && request.resource.data.address is string
+         && request.resource.data.address.matches('^T[1-9A-HJ-NP-Za-km-z]{33}$')
+         && request.resource.data.network == 'TRC20'
+         && request.resource.data.encryptedPrivateKey is string
+         && request.resource.data.iv is string
+         && request.resource.data.immutable == true
+         && request.resource.data.createdAt is timestamp;
+       allow update, delete: if false;
+     }
     match /profiles/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isMaster());
-      allow create: if isMaster() || (request.auth != null && request.auth.uid == userId && hasValidProfileState(request.resource.data));
-      allow update: if isMaster()
-        || isDirectTransferProfileUpdate(userId)
-        || isUsdServiceBalanceUpdate(userId)
-        || canInitializeUsdBalance(userId)
-        || (request.auth != null && request.auth.uid == userId && hasImmutableOnboardingFields() && hasNoWalletBalanceChange());
+       allow create: if (isMaster() && hasNonNegativeBalances(request.resource.data))
+         || (request.auth != null && request.auth.uid == userId && hasSafeProfileCreate(request.resource.data));
+       allow update: if (isMaster() && hasNonNegativeBalances(request.resource.data))
+         || canInitializeUsdBalance(userId)
+         || (request.auth != null
+           && request.auth.uid == userId
+           && hasImmutableOnboardingFields()
+           && hasSafeProfileValues(request.resource.data)
+           && hasNoWalletBalanceChange()
+           && hasNoServerManagedProfileChange());
       allow delete: if isMaster();
     }
     match /publicProfiles/{userId} {
@@ -343,54 +356,38 @@ service cloud.firestore {
         && publicProfileMatchesPrivate(userId);
       allow delete: if false;
     }
-    match /withdrawalRequests/{requestId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if isMaster();
+     match /withdrawalRequests/{requestId} {
+       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+       allow create: if request.auth != null
+         && request.resource.data.userId == request.auth.uid
+         && hasValidWithdrawalRequest(request.resource.data);
+       allow update: if isMaster()
+         && request.resource.data.userId == resource.data.userId
+         && request.resource.data.amount == resource.data.amount
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy'])
+         && request.resource.data.status in ['APPROVED', 'REJECTED']
+         && request.resource.data.reviewedBy == request.auth.token.email;
        allow delete: if false;
      }
-      match /transferRequests/{requestId} {
+     match /transferRequests/{requestId} {
        allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || isMaster());
-       allow create: if request.auth != null
-         && request.resource.data.senderId == request.auth.uid
-         && ((request.resource.data.status == 'PENDING')
-           || (request.resource.data.status == 'COMPLETED'
-             && request.resource.data.amount is number
-             && request.resource.data.amount > 0
-             && request.resource.data.fee is number
-             && request.resource.data.fee >= 0
-             && request.resource.data.recipientId is string
-             && request.resource.data.recipientId != request.auth.uid));
-      allow update: if isMaster();
-      allow delete: if false;
-    }
-      match /walletLedger/{entryId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-       allow create: if request.auth != null
-          && request.resource.data.type is string
-          && request.resource.data.direction is string
-          && request.resource.data.amount is number
-          && request.resource.data.amount >= 0
-          && request.resource.data.status is string
-          && request.resource.data.createdAt is timestamp
-          && request.resource.data.keys().hasOnly(['userId', 'type', 'direction', 'amount', 'fee', 'status', 'network', 'symbol', 'txHash', 'fromAddress', 'toAddress', 'counterpartyId', 'requestId', 'memo', 'createdAt'])
-          && (request.resource.data.userId == request.auth.uid || isDirectTransferLedger(request.resource.data));
-       allow update, delete: if false;
-      }
+       // No verified settlement service exists for this legacy flow.
+       allow create, update, delete: if false;
+     }
+     match /walletLedger/{entryId} {
+       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+       // Ledger entries are written by verified server/webhook code only.
+       allow create, update, delete: if false;
+     }
       match /paddlePayments/{paymentId} {
         allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
         allow create, update, delete: if false;
       }
       match /escrowOrders/{orderId} {
-      allow read: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
-      allow create: if request.auth != null
-        && request.resource.data.buyerId == request.auth.uid
-        && isValidEscrowOrder(request.resource.data)
-        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.usdtBalance
-          == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.usdtBalance - request.resource.data.amount;
-      allow update: if isMaster() || (request.auth != null && isAllowedEscrowTransition());
-      allow delete: if isMaster();
-    }
+        allow read: if request.auth != null && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isMaster());
+        // Payment holding and lifecycle changes require a verified server settlement transaction.
+        allow create, update, delete: if false;
+      }
     match /adminSettings/{settingId} {
       allow read: if true;
       allow write: if isMaster();
@@ -529,7 +526,7 @@ service cloud.firestore {
                || resource.data.status == 'offline'
                || (resource.data.updatedAt is timestamp
                  && request.time > resource.data.updatedAt + duration.value(20, 's'))))
-          ));
+          );
           allow delete: if request.auth != null && (resource.data.hostId == request.auth.uid || isMaster());
        }
      match /liveRoomMessages/{messageId} {
@@ -555,7 +552,6 @@ service cloud.firestore {
           && request.resource.data.hostId == get(/databases/$(database)/documents/liveRooms/$(request.resource.data.roomId)).data.hostId;
          allow update: if isMaster() || (request.auth != null && (
            resource.data.viewerId == request.auth.uid
-           || request.resource.data.viewerId == request.auth.uid
            || resource.data.hostId == request.auth.uid
          ));
         allow delete: if isMaster() || (request.auth != null && (resource.data.viewerId == request.auth.uid || get(/databases/$(database)/documents/liveRooms/$(resource.data.roomId)).data.hostId == request.auth.uid));
@@ -584,6 +580,10 @@ service cloud.firestore {
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
         && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.hasAll([
+          get(/databases/$(database)/documents/friendships/$(request.resource.data.friendshipId)).data.requesterId,
+          get(/databases/$(database)/documents/friendships/$(request.resource.data.friendshipId)).data.addresseeId
+        ])
         && get(/databases/$(database)/documents/friendships/$(request.resource.data.friendshipId)).data.status == 'accepted';
       allow update: if false;
        allow delete: if request.auth != null
@@ -619,32 +619,44 @@ service cloud.firestore {
       );
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
-    match /gameStakes/{stakeId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0 && request.resource.data.currency == 'USD';
-      allow update: if request.auth != null
-        && resource.data.userId == request.auth.uid
-        && resource.data.status == 'RESERVED'
-        && request.resource.data.status == 'REFUNDED'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'refundedAt']);
-      allow delete: if false;
-    }
-    match /gamePayouts/{payoutId} {
-      allow read: if request.auth != null && (resource.data.winnerId == request.auth.uid || resource.data.loserId == request.auth.uid || isMaster());
-       allow create: if request.auth != null && request.resource.data.winnerId == request.auth.uid && request.resource.data.payoutAmount == request.resource.data.amount * 2 && request.resource.data.currency == 'USD';
-      allow update, delete: if false;
-    }
-    match /genderMatchStakes/{stakeId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount > 0 && request.resource.data.currency == 'USD';
-      allow update, delete: if false;
-    }
-    match /premiumSubscriptions/{subscriptionId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
-       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid && request.resource.data.amount == 30 && request.resource.data.currency == 'USD';
-      allow update, delete: if false;
-    }
-    match /tetrisInvites/{inviteId} {
+     match /gameStakes/{stakeId} {
+       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+       allow create, update, delete: if false;
+     }
+     match /gamePayouts/{payoutId} {
+       allow read: if request.auth != null && (resource.data.winnerId == request.auth.uid || resource.data.loserId == request.auth.uid || isMaster());
+       // A client cannot declare a winner or mint a payout.
+       allow create, update, delete: if false;
+     }
+     match /genderMatchStakes/{stakeId} {
+       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+       allow create, update, delete: if false;
+     }
+     match /premiumSubscriptions/{subscriptionId} {
+       allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isMaster());
+       allow create, update, delete: if false;
+     }
+     function hasValidTetrisScore(data) {
+       return data.keys().hasOnly(['userId', 'name', 'country', 'score', 'lines', 'combo', 'mode', 'createdAt'])
+         && data.keys().hasAll(['userId', 'name', 'country', 'score', 'lines', 'combo', 'mode', 'createdAt'])
+         && data.userId is string
+         && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+         && data.country is string && data.country.size() > 0 && data.country.size() <= 80
+         && data.score is number && data.score >= 0 && data.score <= 1000000000
+         && data.lines is number && data.lines >= 0 && data.lines <= 100000
+         && data.combo is number && data.combo >= 0 && data.combo <= 10000
+         && data.mode in ['practice', 'battle']
+         && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 40;
+     }
+     match /tetrisScores/{scoreId} {
+       allow read: if true;
+       // Scores are public, actor-bound, and immutable. Existing documents are untouched.
+       allow create: if request.auth != null
+         && request.resource.data.userId == request.auth.uid
+         && hasValidTetrisScore(request.resource.data);
+       allow update, delete: if false;
+     }
+     match /tetrisInvites/{inviteId} {
       allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid;
       allow update: if request.auth != null && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
@@ -687,6 +699,19 @@ service cloud.firestore {
           !resource.data.keys().hasAny(['betAmount'])
           && request.auth.uid == request.resource.data.playerAId
           && hasValidTetrisBet(request.resource.data)
+         );
+      }
+      function preservesTetrisSettlement() {
+        return (
+          !resource.data.keys().hasAny(['stakeHeldA', 'stakeHeldB', 'payoutStatus', 'payoutAmount'])
+          && !request.resource.data.keys().hasAny(['stakeHeldA', 'stakeHeldB', 'payoutStatus', 'payoutAmount'])
+        ) || (
+          resource.data.keys().hasAll(['stakeHeldA', 'stakeHeldB', 'payoutStatus', 'payoutAmount'])
+          && request.resource.data.keys().hasAll(['stakeHeldA', 'stakeHeldB', 'payoutStatus', 'payoutAmount'])
+          && request.resource.data.stakeHeldA == resource.data.stakeHeldA
+          && request.resource.data.stakeHeldB == resource.data.stakeHeldB
+          && request.resource.data.payoutStatus == resource.data.payoutStatus
+          && request.resource.data.payoutAmount == resource.data.payoutAmount
         );
       }
       match /tetrisRoomAccess/{matchId} {
@@ -706,10 +731,13 @@ service cloud.firestore {
       }
       match /tetrisRooms/{roomId} {
         allow read: if canAccessTetrisRoom(roomId, resource.data);
-        allow create: if canAccessTetrisRoom(roomId, request.resource.data)
-          && (!request.resource.data.keys().hasAny(['betAmount'])
-            || (request.resource.data.playerAId == request.auth.uid && hasValidTetrisBet(request.resource.data)));
-        allow update: if (canAccessTetrisRoom(roomId, resource.data) || canAccessTetrisRoom(roomId, request.resource.data)) && preservesTetrisBet();
+         allow create: if canAccessTetrisRoom(roomId, request.resource.data)
+           && !request.resource.data.keys().hasAny(['stakeHeldA', 'stakeHeldB', 'payoutStatus', 'payoutAmount'])
+           && (!request.resource.data.keys().hasAny(['betAmount'])
+             || (request.resource.data.playerAId == request.auth.uid && hasValidTetrisBet(request.resource.data)));
+         allow update: if (canAccessTetrisRoom(roomId, resource.data) || canAccessTetrisRoom(roomId, request.resource.data))
+           && preservesTetrisBet()
+           && preservesTetrisSettlement();
         allow delete: if canAccessTetrisRoom(roomId, resource.data);
       }
   }

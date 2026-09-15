@@ -1,4 +1,5 @@
 import { MASTER_DEPOSIT_ADDRESS } from '@/lib/firebase';
+import { clientAddress, consumeRateLimit, rateLimitResponse, readProfileWalletAddress, requireAuthenticatedUser, unauthorizedResponse } from '@/lib/apiSecurity';
 
 export const runtime = 'edge';
 
@@ -18,12 +19,28 @@ function headers() {
 }
 
 export async function GET(request: Request) {
-  const address = new URL(request.url).searchParams.get('address') || MASTER_DEPOSIT_ADDRESS;
+  let user;
+  try {
+    user = await requireAuthenticatedUser(request);
+  } catch (error) {
+    return unauthorizedResponse(error);
+  }
+  const rate = consumeRateLimit(`tron-balance:${user.uid}:${clientAddress(request)}`, 30, 60_000);
+  if (!rate.allowed) return rateLimitResponse(rate.retryAfterMs);
+
+  const requestedAddress = new URL(request.url).searchParams.get('address')?.trim() || '';
+  const isMaster = user.email === 'juyeonglee911029@gmail.com';
+  const ownerAddress = isMaster ? MASTER_DEPOSIT_ADDRESS : await readProfileWalletAddress(user);
+  const address = requestedAddress || ownerAddress || '';
+  if (!isMaster && (!ownerAddress || address.toLowerCase() !== ownerAddress.toLowerCase())) {
+    return Response.json({ error: '등록된 본인 지갑만 조회할 수 있습니다.' }, { status: 403 });
+  }
   if (!isTronAddress(address)) return Response.json({ error: '올바른 TRON 주소가 아닙니다.' }, { status: 400 });
 
   const response = await fetch(`${TRONSCAN_API}/v1/accounts/${address}?only_confirmed=true`, {
     headers: headers(),
     cache: 'no-store',
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) return Response.json({ error: `TRON 잔고 조회 실패 (${response.status})` }, { status: 502 });
 
@@ -31,6 +48,7 @@ export async function GET(request: Request) {
   const entries = payload.data?.[0]?.trc20 || [];
   const token = entries.find((entry) => Object.prototype.hasOwnProperty.call(entry, USDT_CONTRACT));
   const rawBalance = token?.[USDT_CONTRACT] || '0';
+  if (!/^\d{1,30}$/.test(rawBalance)) return Response.json({ error: 'TRON 잔고 형식이 올바르지 않습니다.' }, { status: 502 });
   const balance = Number(rawBalance) / (10 ** USDT_DECIMALS);
 
   return Response.json({

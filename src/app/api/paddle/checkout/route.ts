@@ -1,5 +1,6 @@
-import { amountFromTransaction, paddleRequest, requirePaddleUser, type PaddleTransaction } from '@/lib/paddle';
+import { amountFromTransaction, PaddleConfigurationError, paddleRequest, requirePaddleUser, type PaddleTransaction } from '@/lib/paddle';
 import { SITE_URL } from '@/lib/seo';
+import { ApiAuthError } from '@/lib/apiSecurity';
 
 export const runtime = 'edge';
 
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
     }
     return Response.json({ transactionId: result.data.id, checkoutUrl: result.data.checkout.url, amountUsd: amountFromTransaction(result.data) });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : '결제 준비에 실패했습니다.' }, { status: 500 });
+    const status = error instanceof ApiAuthError || error instanceof PaddleConfigurationError ? error.status : 500;
+    return Response.json({ error: error instanceof Error ? error.message : '결제 준비에 실패했습니다.' }, { status });
   }
 }
