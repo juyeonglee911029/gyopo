@@ -10,6 +10,7 @@ type FilterState = { brightness: number; contrast: number; saturation: number; s
 type ViewerSignal = { id: string; roomId: string; sessionId?: string; viewerId: string; hostId: string; status: 'offer' | 'answer' | 'connected' | 'ended'; offer?: string; answer?: string; updatedAt?: string };
 type LiveMessage = { id: string; roomId: string; sessionId?: string; authorId: string; user: string; text: string; createdAt: string };
 const defaultFilters: FilterState = { brightness: 100, contrast: 100, saturation: 100, softness: 0, beauty: 0 };
+const limitRoomTitle = (value: string) => Array.from(value).slice(0, 10).join('');
 const iceServers = [
   { urls: 'stun:stun.cloudflare.com:3478' },
   { urls: 'stun:stun.l.google.com:19302' },
@@ -45,6 +46,7 @@ export default function LiveBroadcastPage() {
   const roomRef = useRef('live-room-01');
   const sessionRef = useRef<string | null>(null);
   const [roomId, setRoomId] = useState('live-room-01');
+  const [roomTitle, setRoomTitle] = useState('ROOM 01');
   const [filters, setFilters] = useState(defaultFilters);
   const [live, setLive] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -61,6 +63,7 @@ export default function LiveBroadcastPage() {
     const nextRoom = new URLSearchParams(window.location.search).get('room') || 'live-room-01';
     roomRef.current = nextRoom;
     setRoomId(nextRoom);
+    setRoomTitle(limitRoomTitle(`ROOM ${nextRoom.match(/\d+$/)?.[0] || '01'}`));
   }, []);
 
   const captureThumbnail = () => {
@@ -82,9 +85,14 @@ export default function LiveBroadcastPage() {
     if (!token) { setMessage('로그인 세션이 만료되었습니다. 다시 로그인해주세요.'); return false; }
     const roomNumber = Number(roomRef.current.match(/\d+$/)?.[0] || 1);
     const offline = status === 'offline';
-    const roomData = { roomNumber, title: `LIVE ROOM ${String(roomNumber).padStart(2, '0')}`, category: '교민 라이브', hostId: offline ? null : user.id, hostName: offline ? null : user.name, hostImage: offline ? null : user.image, sessionId: offline ? null : sessionRef.current, status, updatedAt: new Date(), quality, ...(resetViewers || offline ? { viewers: 0 } : {}), ...(offline ? { thumbnail: null } : thumbnail !== undefined ? { thumbnail } : {}) };
+     const roomData = { roomNumber, title: limitRoomTitle(roomTitle.trim() || `ROOM ${String(roomNumber).padStart(2, '0')}`), category: '교민 라이브', hostId: offline ? null : user.id, hostName: offline ? null : user.name, hostImage: offline ? null : user.image, sessionId: offline ? null : sessionRef.current, status, updatedAt: new Date(), quality, ...(resetViewers || offline ? { viewers: 0 } : {}), ...(offline ? { thumbnail: null } : thumbnail !== undefined ? { thumbnail } : {}) };
     try { await mergeDocument('liveRooms', roomRef.current, roomData, token); return true; } catch { setMessage('라이브 서버에 연결하지 못했습니다. Firebase 로그인과 방송 권한을 확인해주세요.'); return false; }
   };
+
+  useEffect(() => {
+    if (!live) return;
+    void publishRoom('live', uploadedThumbnail || captureThumbnail());
+  }, [roomTitle]);
 
   const replacePeerTrack = async (track: MediaStreamTrack) => {
     await Promise.all([...viewerPeersRef.current.values()].map(async (peer) => {
@@ -340,6 +348,7 @@ export default function LiveBroadcastPage() {
      <header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><Link href="/theater" className="mb-3 inline-flex items-center gap-2 text-xs font-black text-rose-200 hover:text-white"><ArrowLeft size={14} /> LIVE ROOM으로 돌아가기</Link><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-rose-300"><Radio size={15} /> Broadcaster studio</div><h1 className="mt-1 text-2xl font-black text-white">LIVE ROOM · 방송 설정</h1><p className="mt-1 text-xs text-slate-500">{roomId} · {live ? '현재 송출 중' : '방송 전 카메라 미리보기'}</p></div><span className={`live-indicator ${live ? 'is-live' : ''}`}><span />{live ? 'LIVE' : cameraReady ? 'CAMERA READY' : 'READY'}</span></header>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]"><section className="live-studio-preview"><div className="relative aspect-video overflow-hidden bg-black"><video ref={videoRef} muted playsInline className="h-full w-full object-cover" style={{ filter: filterString(filters) }} /><canvas ref={canvasRef} className="hidden" />{!cameraReady && <div className="absolute inset-0 grid place-items-center text-center"><div><Camera size={38} className="mx-auto text-rose-300" /><p className="mt-3 text-sm font-black">카메라 미리보기</p><p className="mt-1 text-xs text-slate-500">방송 전에 얼굴과 화면을 확인할 수 있습니다.</p></div></div>}{live && <div className="absolute left-3 top-3 live-indicator is-live"><span />LIVE</div>}</div><div className="flex flex-wrap items-center gap-2 p-3"><button type="button" onClick={() => void startCamera()} className="live-studio-button"><Camera size={15} />{cameraReady ? '카메라 다시 켜기' : '카메라 켜기'}</button><button type="button" onClick={toggleMic} className="live-studio-button"><Mic size={15} />{micOn ? '마이크 켜짐' : '마이크 꺼짐'}</button><button type="button" onClick={() => void toggleScreenShare()} className="live-studio-button"><MonitorUp size={15} />{screenSharing ? '화면 공유 중' : '화면 공유'}</button><button type="button" onClick={() => thumbnailInputRef.current?.click()} className="live-studio-button"><ImagePlus size={15} />썸네일 업로드</button><input ref={thumbnailInputRef} type="file" accept="image/*" onChange={handleThumbnailUpload} className="hidden" />{live ? <button type="button" onClick={() => void stopBroadcast()} className="live-studio-stop"><CircleStop size={15} />방송 종료</button> : <button type="button" onClick={() => void startBroadcast()} className="live-studio-start"><Radio size={15} />방송 시작</button>}</div><p className="border-t border-white/10 px-3 py-2 text-xs text-slate-400">{message}</p></section>
       <aside className="live-studio-settings"><div className="flex gap-1 border-b border-white/10 pb-2" role="tablist"><button type="button" role="tab" aria-selected={studioTab === 'chat'} onClick={() => setStudioTab('chat')} className={`live-studio-tab ${studioTab === 'chat' ? 'is-active' : ''}`}><MessageCircle size={14} />채팅 <span>{chatMessages.length}</span></button><button type="button" role="tab" aria-selected={studioTab === 'settings'} onClick={() => setStudioTab('settings')} className={`live-studio-tab ${studioTab === 'settings' ? 'is-active' : ''}`}><Settings2 size={14} />방송 설정</button></div>{studioTab === 'chat' ? <div className="live-studio-chat"><div className="flex items-center justify-between text-xs font-black"><span>시청자와 실시간 대화</span><span className="text-slate-500">방송자 화면</span></div><div className="live-studio-chat-list">{chatMessages.length ? chatMessages.map((item) => <div key={item.id} className="live-studio-chat-row"><b>{item.user}</b><span>{item.text}</span></div>) : <p className="py-12 text-center text-xs text-slate-600">시청자 메시지가 여기에 표시됩니다.</p>}</div><form onSubmit={sendBroadcasterMessage} className="mt-3 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} className="live-room-input" placeholder="시청자에게 답장하기" /><button type="submit" aria-label="방송자 메시지 보내기" className="live-room-send"><Send size={14} /></button></form></div> : <div><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-black"><Settings2 size={16} className="text-rose-300" />고급 방송 설정</div><button type="button" onClick={resetFilters} className="text-xs text-slate-500 hover:text-white"><RotateCcw size={14} /></button></div><label className="mt-4 block text-xs font-bold text-slate-400">방송 품질<select value={quality} onChange={(event) => setQuality(event.target.value)} className="live-studio-select"><option>1080p</option><option>720p</option><option>480p</option></select></label><div className="mt-5 space-y-4"><div className="flex items-center gap-2 text-xs font-black text-amber-200"><Lightbulb size={14} />조도·색상</div>{([['brightness', '밝기', 70, 140], ['contrast', '대비', 70, 140], ['saturation', '채도', 70, 140]] as const).map(([key, label, min, max]) => <label key={key} className="block text-xs text-slate-400">{label}<input type="range" min={min} max={max} value={filters[key]} onChange={(event) => updateFilter(key, Number(event.target.value))} className="mt-2 w-full accent-rose-300" /></label>)}</div><div className="mt-5 space-y-4"><div className="flex items-center gap-2 text-xs font-black text-cyan-200"><Sparkles size={14} />피부 보정</div><label className="block text-xs text-slate-400">부드럽게<input type="range" min="0" max="12" value={filters.softness} onChange={(event) => updateFilter('softness', Number(event.target.value))} className="mt-2 w-full accent-cyan-300" /></label><label className="block text-xs text-slate-400">팔자주름 완화<input type="range" min="0" max="12" value={filters.beauty} onChange={(event) => updateFilter('beauty', Number(event.target.value))} className="mt-2 w-full accent-cyan-300" /></label></div><div className="mt-5 grid grid-cols-2 gap-2 text-[11px] text-slate-500"><div className="border border-white/10 p-3"><Grid3X3 size={14} className="mb-1 text-rose-300" />30개 방 용량</div><div className="border border-white/10 p-3"><Radio size={14} className="mb-1 text-rose-300" />1080p · 30fps</div></div></div>}</aside>
-    </div>
-  </div></main>;
+       <section className="xl:col-span-2 rounded-2xl border border-rose-300/15 bg-white/[.03] p-4"><label className="block text-xs font-bold text-slate-300">방 제목<input value={roomTitle} maxLength={10} onChange={(event) => setRoomTitle(limitRoomTitle(event.target.value))} className="live-studio-select mt-2" /><small className="mt-1 block text-[10px] text-slate-500">최대 10자 · 시청자 화면에 표시됩니다.</small></label></section>
+     </div>
+   </div></main>;
 }
