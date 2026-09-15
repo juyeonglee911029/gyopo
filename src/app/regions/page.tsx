@@ -2,18 +2,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowUpRight, MapPin } from 'lucide-react';
 import { COUNTRY_LOCATIONS, LOCATION_GROUPS } from '@/lib/locations';
+import { REGION_ROUTES } from '@/lib/regionRoutes';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata('지역별 교민 네트워크', '국가와 도시를 선택해 가까운 교민 커뮤니티, 구인구직, 생활 정보와 지역 서비스를 확인하세요.', '/regions');
 
 export default function RegionsPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
-      <header className="max-w-3xl border-b border-white/10 pb-8">
+    <div className="category-page mx-auto max-w-7xl px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
+      <header className="category-header"><div className="category-heading">
         <p className="text-xs font-black uppercase tracking-[.22em] text-teal-300">Explore by location / 지역 탐색</p>
         <h1 className="mt-3 text-4xl font-black tracking-tight text-white sm:text-5xl">우리 동네 교민 네트워크</h1>
         <p className="mt-4 text-sm leading-7 text-slate-300">국가에서 도시까지 내려가면 해당 지역의 구인구직, 주거, 교육, 커뮤니티, 업소록과 장터를 한 흐름으로 확인할 수 있습니다.</p>
-      </header>
+      </div></header>
+      <nav aria-label="지역 대륙" className="mt-8 flex flex-wrap gap-2">{REGION_ROUTES.map((region) => <Link key={region.slug} href={`/regions/${region.slug}`} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-xs font-bold text-slate-300 hover:border-teal-300/30 hover:text-teal-100">{region.korean}</Link>)}</nav>
       <div className="mt-8 space-y-10">
         {LOCATION_GROUPS.map((group) => {
           const countries = COUNTRY_LOCATIONS.filter((country) => country.group === group.id);

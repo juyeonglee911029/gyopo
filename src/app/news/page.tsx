@@ -110,19 +110,17 @@ export default function NewsPage() {
   const regionName = selectedCountry === 'Global' ? '글로벌' : regionLabel(selectedCountry);
 
   return (
-    <div className="news-page min-h-screen bg-transparent text-slate-100">
-      <header className="border-b border-white/10 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-6xl items-end justify-between gap-5">
-          <div>
+    <div className="category-page news-page min-h-screen bg-transparent text-slate-100">
+      <header className="category-header">
+          <div className="category-heading">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.2em] text-emerald-200"><Radio size={12} /> {regionName} live desk</div>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">오늘의 뉴스</h1>
             <p className="mt-2 text-sm text-slate-400">카테고리 선택 없이 최신 소식을 목록에서 바로 확인하세요.</p>
           </div>
           <button onClick={() => void load()} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[.05] px-3 text-xs font-black text-slate-200 transition hover:border-teal-300/30 hover:text-teal-200"><RefreshCcw size={14} /> 새로고침</button>
-        </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="category-shell mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-teal-300">Latest stories</p><h2 className="mt-1 text-lg font-black text-white">최신 소식 <span className="text-slate-500">{stories.length}</span></h2></div><span className="text-xs text-slate-500">행을 클릭하면 원문을 확인합니다</span></div>
         {loading && stories.length === 0 && <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm font-bold text-slate-500">확인된 출처를 불러오는 중입니다...</div>}
         {!loading && stories.length === 0 && <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm font-bold text-slate-500"><Newspaper size={26} className="mx-auto mb-3 text-slate-600" />선택한 지역의 뉴스가 없습니다.</div>}

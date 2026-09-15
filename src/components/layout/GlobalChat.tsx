@@ -27,7 +27,7 @@ export default function GlobalChat() {
   const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [onlineCount, setOnlineCount] = useState(47);
+  const [onlineCount, setOnlineCount] = useState<number | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [desktopMaximized, setDesktopMaximized] = useState(false);
@@ -81,10 +81,14 @@ export default function GlobalChat() {
   useEffect(() => {
     let active = true;
     const loadCount = async () => {
-      const response = await fetch('/api/online-count', { cache: 'no-store' }).catch(() => null);
-      if (!response?.ok) return;
-      const data = await response.json() as { count?: number };
-      if (active && Number.isFinite(data.count)) setOnlineCount(Number(data.count));
+      try {
+        const response = await fetch('/api/online-count', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Online count unavailable');
+        const data = await response.json() as { count?: number };
+        if (active) setOnlineCount(typeof data.count === 'number' && Number.isSafeInteger(data.count) && data.count >= 0 ? data.count : null);
+      } catch {
+        if (active) setOnlineCount(null);
+      }
     };
     void loadCount();
     const interval = window.setInterval(() => void loadCount(), 60_000);
@@ -162,7 +166,7 @@ export default function GlobalChat() {
              </div>
            <div className="global-lounge-online flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/10 px-2 py-1 text-xs font-bold text-emerald-300">
            <Users size={12} />
-            <span>{language === 'ko' ? `${onlineCount}명 접속중` : `${onlineCount} online`}</span>
+            <span>{onlineCount === null ? (language === 'ko' ? '접속 수 확인 불가' : 'Online count unavailable') : language === 'ko' ? `${onlineCount}명 접속중` : `${onlineCount} online`}</span>
          </div>
          </div>
        </div>

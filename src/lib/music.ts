@@ -29,6 +29,9 @@ export function emitMusicPlayerEvent(detail: { player: 'top' | 'video' | 'radio'
 }
 
 export const MUSIC_TRACKS: MusicTrack[] = [
+  { id: 'like-jennie', title: 'like JENNIE', artist: 'JENNIE', videoId: 'JSFG-IE8n_c', keywords: ['JENNIE', '제니', 'like JENNIE', 'BLACKPINK'], thumbnail: 'https://i.ytimg.com/vi/JSFG-IE8n_c/hqdefault.jpg' },
+  { id: 'earthquake', title: 'earthquake', artist: 'JISOO', videoId: '2V6lvCUPT8I', keywords: ['JISOO', '지수', 'earthquake', 'AMORTAGE'], thumbnail: 'https://i.ytimg.com/vi/2V6lvCUPT8I/hqdefault.jpg' },
+  { id: 'sawadika', title: 'SaWaDiKa', artist: 'LISA', videoId: 'FyS5dAywkEo', keywords: ['LISA', '리사', 'SaWaDiKa', 'Sawasdee Ka', 'BLACKPINK'], thumbnail: 'https://i.ytimg.com/vi/FyS5dAywkEo/hqdefault.jpg' },
   { id: 'would-you', title: 'WOULD YOU (feat. TARZZAN, WOOCHAN)', artist: 'TAEYANG', videoId: 'K1VTsnCNu3Y', keywords: ['TAEYANG', '태양', 'WOULD YOU', 'QUINTESSENCE'], thumbnail: 'https://i.ytimg.com/vi/K1VTsnCNu3Y/hqdefault.jpg' },
   { id: 'swim', title: 'SWIM', artist: 'BTS', videoId: 'b4iVv91Z6lY', keywords: ['BTS', 'SWIM', '신곡'], thumbnail: 'https://i.ytimg.com/vi/b4iVv91Z6lY/hqdefault.jpg' },
   { id: 'droptop', title: 'DROP TOP', artist: 'MEOVV (미야오)', videoId: 'l4On7TQoM-M', keywords: ['미야오', 'DROPTOP', 'MEOVV'], thumbnail: 'https://i.ytimg.com/vi/l4On7TQoM-M/hqdefault.jpg' },
@@ -38,7 +41,7 @@ export const MUSIC_TRACKS: MusicTrack[] = [
   { id: 'butter', title: 'Butter', artist: 'BTS', videoId: 'WMweEpGlu_U', keywords: ['BTS', 'Butter', 'K-pop'], thumbnail: 'https://i.ytimg.com/vi/WMweEpGlu_U/hqdefault.jpg' },
 ];
 
-export const MUSIC_HOT_KEYWORDS = ['WOULD YOU', 'SWIM', '미야오 DROP TOP', 'K-pop 최신곡', 'BTS 전곡', 'K-POP TOP 100', '뉴진스', 'BLACKPINK'];
+export const MUSIC_HOT_KEYWORDS = ['like JENNIE', 'earthquake', 'SaWaDiKa', 'K-pop 최신곡', 'BTS 전곡', 'K-POP TOP 100', '뉴진스', 'BLACKPINK'];
 
 export function searchMusicTracks(query: string): MusicTrack[] {
   const normalized = query.trim().toLowerCase();

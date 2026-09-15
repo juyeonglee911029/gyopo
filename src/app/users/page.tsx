@@ -130,10 +130,10 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="users-page min-h-[calc(100vh-64px)] bg-transparent px-4 py-8 md:py-12">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-8 flex flex-wrap items-end justify-between gap-5">
-          <div>
+    <div className="category-page users-page min-h-[calc(100vh-64px)] bg-transparent px-4 py-8 md:py-12">
+      <div className="category-shell mx-auto max-w-6xl">
+        <header className="category-header">
+          <div className="category-heading">
             <div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-indigo-500">Open directory</div>
             <h1 className="text-2xl font-black tracking-tight text-slate-950 md:text-3xl">실시간 회원</h1>
             <p className="mt-3 text-sm text-slate-500">로그인이나 결제 없이 현재 접속 중인 회원을 공개합니다.</p>

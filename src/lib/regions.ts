@@ -35,6 +35,32 @@ export const REGIONS = [
 
 export type RegionId = (typeof REGIONS)[number]['id'];
 
+const REGION_BY_COUNTRY_CODE: Record<string, RegionId> = {
+  KR: 'SouthKorea', US: 'USA', CA: 'Canada', BR: 'Brazil', AR: 'Argentina', CL: 'Chile', CO: 'Colombia',
+  BO: 'Bolivia', PY: 'Paraguay', UY: 'Uruguay', PA: 'Panama', MX: 'Mexico', PT: 'Portugal', ES: 'Spain',
+  NL: 'Netherlands', DE: 'Germany', RO: 'Romania', HU: 'Hungary', MT: 'Malta', TH: 'Thailand', VN: 'Vietnam',
+  AU: 'Australia', JP: 'Japan', CN: 'China', NZ: 'NewZealand', SG: 'Singapore', GB: 'UnitedKingdom',
+  UK: 'UnitedKingdom', FR: 'France', IT: 'Italy', PH: 'Philippines',
+};
+
+export function regionForCountryCode(code: string): RegionId | undefined {
+  return REGION_BY_COUNTRY_CODE[code.trim().toUpperCase()];
+}
+
+export async function detectRegionFromIp(): Promise<RegionId | undefined> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 3500);
+  try {
+    const response = await fetch('https://ipapi.co/country_code/', { cache: 'no-store', signal: controller.signal });
+    if (!response.ok) return undefined;
+    return regionForCountryCode(await response.text());
+  } catch {
+    return undefined;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export const REGION_TIME_ZONES: Record<RegionId, string> = {
   Global: 'UTC',
   SouthKorea: 'Asia/Seoul',

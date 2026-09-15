@@ -41,14 +41,15 @@ export default function WorldClock() {
   const selectedLabel = selectedCountry === 'Global' ? '세계 기준 (UTC)' : regionLabel(selectedCountry);
 
   return (
-    <div className="mt-7 grid max-w-2xl gap-2 sm:grid-cols-2">
-      <div className="rounded-2xl border border-teal-300/20 bg-teal-300/[.07] px-4 py-3">
-        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.18em] text-teal-200"><Clock3 size={14} /> 한국 시간</div>
-        <div className="mt-1 flex items-baseline justify-between gap-3"><strong className="font-display text-2xl font-extrabold text-white tabular-nums">{now ? formatClock(now, koreaZone) : '--:--:--'}</strong><span className="text-[11px] text-slate-400">{now ? formatDate(now, koreaZone) : ''}</span></div>
+    <div className="home-world-clock mt-7 grid min-w-0 gap-2 sm:grid-cols-2">
+      <div className="home-clock-card min-w-0 overflow-hidden rounded-2xl border border-teal-300/20 bg-teal-300/[.07] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-[.18em] text-teal-200"><Clock3 size={14} /><span className="truncate">한국 시간</span></div>
+        <div className="mt-1 flex min-w-0 items-baseline justify-between gap-2"><strong className="font-display shrink-0 text-xl font-extrabold text-white tabular-nums">{now ? formatClock(now, koreaZone) : '--:--:--'}</strong><span className="min-w-0 truncate text-right text-[11px] text-slate-400">{now ? formatDate(now, koreaZone) : ''}</span></div>
       </div>
-      <div className="rounded-2xl border border-white/10 bg-white/[.05] px-4 py-3">
-        <div className="flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400"><span className="flex items-center gap-2"><Clock3 size={14} className="text-cyan-300" /> 선택 지역</span><select aria-label="시간을 볼 국가 선택" value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} className="max-w-[9rem] rounded-lg border border-white/10 bg-white/[.06] px-2 py-1 text-[10px] font-bold tracking-normal text-slate-200 outline-none"><option value="Global">🌐 전체 지역</option>{REGIONS.filter((region) => region.id !== 'Global').map((region) => <option key={region.id} value={region.id}>{region.flag} {region.label}</option>)}</select></div>
-        <div className="mt-1 flex items-baseline justify-between gap-3"><strong className="font-display text-2xl font-extrabold text-white tabular-nums">{now ? formatClock(now, selectedZone) : '--:--:--'}</strong><span className="truncate text-right text-[11px] text-slate-400">{selectedLabel}</span></div>
+      <div className="home-clock-card min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[.05] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400"><Clock3 size={14} className="shrink-0 text-cyan-300" /><span className="truncate">선택 지역</span></div>
+        <select aria-label="시간을 볼 국가 선택" value={selectedCountry} onChange={(event) => setSelectedCountry(event.target.value)} className="mt-2 w-full min-w-0 max-w-full truncate rounded-lg border border-white/10 bg-white/[.06] px-2 py-1 text-[10px] font-bold tracking-normal text-slate-200 outline-none"><option value="Global">🌐 전체 지역</option>{REGIONS.filter((region) => region.id !== 'Global').map((region) => <option key={region.id} value={region.id}>{region.flag} {region.label}</option>)}</select>
+        <div className="mt-1 flex min-w-0 items-baseline justify-between gap-2"><strong className="font-display shrink-0 text-xl font-extrabold text-white tabular-nums">{now ? formatClock(now, selectedZone) : '--:--:--'}</strong><span className="min-w-0 truncate text-right text-[11px] text-slate-400">{selectedLabel}</span></div>
       </div>
     </div>
   );

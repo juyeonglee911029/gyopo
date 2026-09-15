@@ -7,6 +7,8 @@ const firebaseConfig = {
   appId: '1:376649492363:web:10e20f97af4ee5d2fc318e',
 };
 
+const firebaseStorageBucket = firebaseConfig.storageBucket;
+
 export const googleClientId =
   '376649492363-lgc1jrll9434im7ehi7o3o86ctrklr5u.apps.googleusercontent.com';
 export const MASTER_EMAIL = 'juyeonglee911029@gmail.com';
@@ -165,7 +167,23 @@ export type FirestoreFilter = {
 const sessionKey = 'gyopo-auth-session';
 const firestoreBase = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`;
 const firestoreDocumentBase = `projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+const serverOnlyCollections = new Set([
+  'ledgerTransactions',
+  'walletLedger',
+  'transferRequests',
+  'gameStakes',
+  'gamePayouts',
+  'genderMatchStakes',
+  'premiumSubscriptions',
+  'paddlePayments',
+  'escrowOrders',
+]);
+const serverOnlyFinancialError = '이 금융 작업은 검증된 서버에서만 처리됩니다. 현재 클라이언트 정산 경로는 보안상 비활성화되어 있습니다.';
 let refreshPromise: Promise<string | undefined> | null = null;
+
+function assertClientWriteAllowed(collection: string): void {
+  if (serverOnlyCollections.has(collection)) throw new Error(serverOnlyFinancialError);
+}
 
 function firestoreDocumentName(collection: string, id: string) {
   return `${firestoreDocumentBase}/${collection}/${encodeURIComponent(id)}`;
@@ -234,7 +252,10 @@ function encodeFields(data: Record<string, unknown>): Record<string, FirestoreVa
 async function getRawDocument(collection: string, id: string, token?: string): Promise<FirestoreDocument | null> {
   const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {}, token);
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(errorBody?.error?.message || `Firebase 인증 요청이 거절되었습니다. (${response.status})`);
+  }
   return response.json() as Promise<FirestoreDocument>;
 }
 
@@ -261,7 +282,7 @@ async function runQueryDocuments(collection: string, filters: FirestoreFilter[],
   return data.flatMap((item) => item.document ? [item.document] : []);
 }
 
-async function refreshSessionToken(): Promise<string | undefined> {
+async function refreshStoredSessionToken(): Promise<string | undefined> {
   if (refreshPromise) return refreshPromise;
   const session = getStoredSession();
   if (!session?.refreshToken) return undefined;
@@ -300,7 +321,7 @@ async function authenticatedFetch(url: string, options: RequestInit = {}, token?
   });
   let response = await send(token);
   if (response.status === 401 && token) {
-    const refreshed = await refreshSessionToken();
+    const refreshed = await refreshStoredSessionToken();
     if (refreshed) response = await send(refreshed);
   }
   return response;
@@ -350,6 +371,7 @@ export async function createDocument<T extends Record<string, unknown>>(
   data: T,
   token?: string,
 ): Promise<void> {
+  assertClientWriteAllowed(collection);
   await firestoreRequest(
     `${firestoreBase}/${collection}?documentId=${encodeURIComponent(id)}`,
     {
@@ -362,8 +384,27 @@ export async function createDocument<T extends Record<string, unknown>>(
   );
 }
 
+export async function uploadStorageFile(file: Blob, path: string, token?: string): Promise<string> {
+  if (!token) throw new Error('로그인 세션이 없어 파일을 업로드할 수 없습니다.');
+  const response = await fetch(`https://firebasestorage.googleapis.com/v0/b/${firebaseStorageBucket}/o?uploadType=media&name=${encodeURIComponent(path)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': file.type || 'application/octet-stream',
+    },
+    body: file,
+  });
+  const result = await response.json().catch(() => null) as { name?: string; downloadTokens?: string } | null;
+  if (!response.ok || !result?.name) throw new Error('파일 업로드에 실패했습니다.');
+  const downloadToken = result.downloadTokens?.split(',')[0];
+  const query = downloadToken ? `&token=${encodeURIComponent(downloadToken)}` : '';
+  return `https://firebasestorage.googleapis.com/v0/b/${firebaseStorageBucket}/o/${encodeURIComponent(result.name)}?alt=media${query}`;
+}
+
 export async function recordLedgerTransaction(entry: Omit<LedgerTransaction, 'createdAt'> & { id: string; createdAt?: string }, token?: string): Promise<void> {
-  await createDocument('ledgerTransactions', entry.id, { ...entry, immutable: true, createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date() }, token).catch(() => undefined);
+  void entry;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function listLedgerTransactions(userId: string, token?: string): Promise<LedgerTransaction[]> {
@@ -376,6 +417,7 @@ export async function publishDocument<T extends Record<string, unknown>>(
   data: T,
   token?: string,
 ): Promise<void> {
+  assertClientWriteAllowed(collection);
   const fields = Object.fromEntries(Object.entries(data).map(([key, value]) => [key, toFirestoreValue(value)]));
   const createResponse = await authenticatedFetch(`${firestoreBase}/${collection}?documentId=${encodeURIComponent(id)}`, {
     method: 'POST',
@@ -415,6 +457,7 @@ export async function mergeDocument<T extends Record<string, unknown>>(
   data: T,
   token?: string,
 ): Promise<void> {
+  assertClientWriteAllowed(collection);
   await firestoreRequest(`${firestoreBase}:commit`, {
     method: 'POST',
     body: JSON.stringify({
@@ -446,6 +489,7 @@ async function replaceDocument<T extends Record<string, unknown>>(
 }
 
 export async function incrementDocument(collection: string, id: string, field: string, amount: number, token?: string): Promise<void> {
+  assertClientWriteAllowed(collection);
   await firestoreRequest(`${firestoreBase}:commit`, {
     method: 'POST',
     body: JSON.stringify({
@@ -460,39 +504,11 @@ export async function incrementDocument(collection: string, id: string, field: s
 }
 
 export async function approveDepositRequest(requestId: string, userId: string, reviewedBy: string, token?: string): Promise<void> {
-  const [requestDocument, profileDocument] = await Promise.all([
-    getRawDocument('depositRequests', requestId, token),
-    getRawDocument('profiles', userId, token),
-  ]);
-  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('입금 신청을 찾을 수 없습니다.');
-  if (!profileDocument?.name || !profileDocument.updateTime) throw new Error('회원 지갑을 찾을 수 없습니다.');
-
-  const request = decodeDocument<{ userId?: string; amount?: number; status?: string }>(requestDocument);
-  if (request.status !== 'PENDING') throw new Error('이미 처리된 입금 신청입니다.');
-  if (request.userId !== userId) throw new Error('입금 신청 회원 정보가 일치하지 않습니다.');
-  const amount = Number(request.amount || 0);
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error('입금 금액이 올바르지 않습니다.');
-
-   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdtBalance) || 0);
-  const requestFields = {
-    ...(requestDocument.fields || {}),
-    ...encodeFields({ status: 'APPROVED', reviewedAt: new Date(), reviewedBy }),
-  };
-  const profileFields = {
-    ...(profileDocument.fields || {}),
-    ...encodeFields({ usdtBalance: currentBalance + amount, updatedAt: new Date() }),
-  };
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        { update: { name: profileDocument.name, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
-        { update: { name: requestDocument.name, fields: requestFields }, currentDocument: { updateTime: requestDocument.updateTime } },
-      ],
-    }),
-  }, token);
-  if (!response.ok) throw new Error('승인 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
+  void requestId;
+  void userId;
+  void reviewedBy;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function reviewDepositRequest(requestId: string, status: 'REJECTED', reviewedBy: string, token?: string): Promise<void> {
@@ -517,38 +533,10 @@ export async function reviewDepositRequest(requestId: string, status: 'REJECTED'
 }
 
 export async function approveTransferRequest(requestId: string, reviewedBy: string, token?: string): Promise<void> {
-  const requestDocument = await getRawDocument('transferRequests', requestId, token);
-  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('송금 신청을 찾을 수 없습니다.');
-  const request = decodeDocument<{ senderId?: string; recipientId?: string; amount?: number; fee?: number; status?: string }>(requestDocument);
-  if (request.status !== 'PENDING') throw new Error('이미 처리된 송금 신청입니다.');
-  if (!request.senderId || !request.recipientId || request.senderId === request.recipientId) throw new Error('송금 회원 정보가 올바르지 않습니다.');
-  const amount = Number(request.amount || 0);
-  const fee = Number(request.fee || 0);
-  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(fee) || fee < 0) throw new Error('송금 금액이 올바르지 않습니다.');
-  const [senderDocument, recipientDocument] = await Promise.all([
-    getRawDocument('profiles', request.senderId, token),
-    getRawDocument('profiles', request.recipientId, token),
-  ]);
-  if (!senderDocument?.name || !senderDocument.updateTime) throw new Error('보내는 회원 지갑을 찾을 수 없습니다.');
-  if (!recipientDocument?.name || !recipientDocument.updateTime) throw new Error('받는 회원 지갑을 찾을 수 없습니다.');
-  const senderBalance = Number(fromFirestoreValue(senderDocument.fields?.usdtBalance) || 0);
-  if (senderBalance < amount + fee) throw new Error(`보내는 회원 잔고가 부족합니다. ${amount + fee} USDT가 필요합니다.`);
-  const recipientBalance = Number(fromFirestoreValue(recipientDocument.fields?.usdtBalance) || 0);
-  const requestFields = { ...(requestDocument.fields || {}), ...encodeFields({ status: 'APPROVED', reviewedAt: new Date(), reviewedBy }) };
-  const senderFields = { ...(senderDocument.fields || {}), ...encodeFields({ usdtBalance: senderBalance - amount - fee, updatedAt: new Date() }) };
-  const recipientFields = { ...(recipientDocument.fields || {}), ...encodeFields({ usdtBalance: recipientBalance + amount, updatedAt: new Date() }) };
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        { update: { name: senderDocument.name, fields: senderFields }, currentDocument: { updateTime: senderDocument.updateTime } },
-        { update: { name: recipientDocument.name, fields: recipientFields }, currentDocument: { updateTime: recipientDocument.updateTime } },
-        { update: { name: requestDocument.name, fields: requestFields }, currentDocument: { updateTime: requestDocument.updateTime } },
-      ],
-    }),
-  }, token);
-  if (!response.ok) throw new Error('송금 원장 충돌이 발생했습니다. 목록을 새로고침하고 다시 승인해주세요.');
+  void requestId;
+  void reviewedBy;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function sendUserTransfer(
@@ -559,56 +547,21 @@ export async function sendUserTransfer(
   token = getSessionToken(),
   options: { kind?: string; roomId?: string; memo?: string } = {},
 ): Promise<string> {
-  if (!token) throw new Error('로그인 세션이 만료되었습니다.');
-  if (!senderId || !recipientId || senderId === recipientId) throw new Error('송금 회원 정보가 올바르지 않습니다.');
-  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(fee) || fee < 0) throw new Error('송금 금액이 올바르지 않습니다.');
-  const senderDocument = await getRawDocument('profiles', senderId, token);
-  if (!senderDocument?.name || !senderDocument.updateTime) throw new Error('보내는 회원 지갑을 찾을 수 없습니다.');
-  const recipientDocument = await getRawDocument('profiles', recipientId, token);
-  if (!recipientDocument?.name || !recipientDocument.updateTime) throw new Error('받는 회원 지갑을 찾을 수 없습니다.');
-  const senderBalance = Number(fromFirestoreValue(senderDocument.fields?.usdtBalance) || 0);
-  const recipientBalance = Number(fromFirestoreValue(recipientDocument.fields?.usdtBalance) || 0);
-  if (senderBalance < amount + fee) throw new Error(`잔고가 부족합니다. ${amount + fee} USDT가 필요합니다.`);
-
-  const requestId = `transfer-${senderId}-${crypto.randomUUID()}`;
-  const now = new Date();
-  const transferFields = encodeFields({ senderId, recipientId, amount, fee, status: 'COMPLETED', kind: options.kind || 'P2P', roomId: options.roomId, memo: options.memo || '회원 간 USDT 즉시 송금', createdAt: now, completedAt: now });
-  const senderFields = { ...(senderDocument.fields || {}), ...encodeFields({ usdtBalance: senderBalance - amount - fee, lastTransferId: requestId, updatedAt: now }) };
-  const recipientFields = encodeFields({ usdtBalance: recipientBalance + amount, lastTransferId: requestId, updatedAt: now });
-  const ledgerBase = { amount, fee, status: 'COMPLETED', symbol: 'USDT', requestId, createdAt: now };
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        { update: { name: senderDocument.name, fields: senderFields }, updateMask: { fieldPaths: [...Object.keys(senderFields)] }, currentDocument: { updateTime: senderDocument.updateTime } },
-        { update: { name: recipientDocument.name, fields: recipientFields }, updateMask: { fieldPaths: ['usdtBalance', 'lastTransferId', 'updatedAt'] }, currentDocument: { updateTime: recipientDocument.updateTime } },
-        { update: { name: firestoreDocumentName('transferRequests', requestId), fields: transferFields }, currentDocument: { exists: false } },
-        { update: { name: firestoreDocumentName('walletLedger', `send-${requestId}`), fields: encodeFields({ ...ledgerBase, userId: senderId, type: 'INTERNAL_TRANSFER', direction: 'OUT', counterpartyId: recipientId, memo: options.memo || '회원 간 USDT 즉시 송금' }) }, currentDocument: { exists: false } },
-        { update: { name: firestoreDocumentName('walletLedger', `receive-${requestId}`), fields: encodeFields({ ...ledgerBase, userId: recipientId, type: 'INTERNAL_TRANSFER', direction: 'IN', counterpartyId: senderId, memo: options.memo || '회원 간 USDT 수신' }) }, currentDocument: { exists: false } },
-      ],
-    }),
-  }, token);
-  if (!response.ok) throw new Error('송금 처리에 실패했습니다. 잔고가 변경되지 않았습니다.');
-  return requestId;
+  void senderId;
+  void recipientId;
+  void amount;
+  void fee;
+  void token;
+  void options;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function reviewTransferRequest(requestId: string, status: 'REJECTED', reviewedBy: string, token?: string): Promise<void> {
-  const requestDocument = await getRawDocument('transferRequests', requestId, token);
-  if (!requestDocument?.name || !requestDocument.updateTime) throw new Error('송금 신청을 찾을 수 없습니다.');
-  const request = decodeDocument<{ status?: string }>(requestDocument);
-  if (request.status !== 'PENDING') throw new Error('이미 처리된 송금 신청입니다.');
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [{
-        update: { name: requestDocument.name, fields: { ...(requestDocument.fields || {}), ...encodeFields({ status, reviewedAt: new Date(), reviewedBy }) } },
-        currentDocument: { updateTime: requestDocument.updateTime },
-      }],
-    }),
-  }, token);
-  if (!response.ok) throw new Error('송금 거절 처리 중 서버 원장 충돌이 발생했습니다. 목록을 새로고침해주세요.');
+  void requestId;
+  void status;
+  void reviewedBy;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export type TetrisQueueProfile = {
@@ -1035,73 +988,18 @@ export async function claimWebrtcMatch(profile: TetrisQueueProfile, token?: stri
 }
 
 export async function reserveGameStake(userId: string, matchId: string, amount: number, token?: string): Promise<void> {
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  const authUserId = getTokenUserId(token) || userId;
-  const stakeId = `game-${matchId}-${authUserId}`;
-  const profileDocument = await getRawDocument('profiles', authUserId, token);
-  if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
-  const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdBalance) || 0);
-  if (currentBalance < amount) throw new Error(`게임 참가비 ${amount} USD가 부족합니다.`);
-   const profileName = firestoreDocumentName('profiles', authUserId);
-   const stakeName = firestoreDocumentName('gameStakes', stakeId);
-  const profileFields = {
-    ...(profileDocument.fields || {}),
-    usdBalance: toFirestoreValue(currentBalance - amount),
-    lastUsdOperationId: toFirestoreValue(stakeId),
-    updatedAt: toFirestoreValue(new Date()),
-  };
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        { update: { name: profileName, fields: profileFields }, currentDocument: { updateTime: profileDocument.updateTime } },
-         { update: { name: stakeName, fields: encodeFields({ userId: authUserId, matchId, amount, currency: 'USD', createdAt: new Date(), status: 'RESERVED' }) }, currentDocument: { exists: false } },
-      ],
-    }),
-  }, token);
-  if (!response.ok) {
-    const error = await response.text();
-    if (error.includes('ALREADY_EXISTS')) return;
-    throw new Error('게임 참가비 예약 권한을 확인하지 못했습니다. 다시 로그인해주세요.');
-  }
+  void userId;
+  void matchId;
+  void amount;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function refundGameStake(userId: string, matchId: string, token?: string): Promise<void> {
-  const authUserId = getTokenUserId(token) || userId;
-  const stakeId = `game-${matchId}-${authUserId}`;
-  const stakeDocument = await getRawDocument('gameStakes', stakeId, token).catch(() => null);
-  if (!stakeDocument?.name) return;
-  const stake = decodeDocument<{ amount?: number; status?: string; userId?: string }>(stakeDocument);
-  if (stake.status === 'REFUNDED') return;
-  if (stake.status !== 'RESERVED' || stake.userId !== authUserId) throw new Error('환불 가능한 참가비가 아닙니다.');
-  const profileDocument = await getRawDocument('profiles', authUserId, token);
-  if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
-  const amount = Number(stake.amount || 0);
-  const balance = Number(fromFirestoreValue(profileDocument.fields?.usdBalance) || 0);
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        {
-          update: {
-            name: profileDocument.name,
-            fields: { ...(profileDocument.fields || {}), ...encodeFields({ usdBalance: balance + amount, lastUsdOperationId: stakeId, updatedAt: new Date() }) },
-          },
-          currentDocument: { updateTime: profileDocument.updateTime },
-        },
-        {
-          update: {
-            name: stakeDocument.name,
-            fields: { ...(stakeDocument.fields || {}), ...encodeFields({ status: 'REFUNDED', refundedAt: new Date() }) },
-          },
-          currentDocument: { updateTime: stakeDocument.updateTime },
-        },
-      ],
-    }),
-  }, token);
-  if (!response.ok) throw new Error('참가비 환불을 완료하지 못했습니다.');
+  void userId;
+  void matchId;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function startTetrisCountdown(matchId: string, token?: string): Promise<string | null> {
@@ -1144,153 +1042,26 @@ export async function settleTetrisMatch(
   amount: number,
   token?: string,
 ): Promise<void> {
-  if (!matchId || !winnerId || !loserId || winnerId === loserId || !Number.isFinite(amount) || amount <= 0) {
-    throw new Error('게임 정산 정보가 올바르지 않습니다.');
-  }
-  const payoutId = `game-payout-${matchId}`;
-  const winnerProfile = await getRawDocument('profiles', winnerId, token);
-  if (!winnerProfile?.name) throw new Error('승자 프로필을 찾을 수 없습니다.');
-
-  const payoutAmount = amount * 2;
-   const winnerBalance = Number(fromFirestoreValue(winnerProfile.fields?.usdBalance) || 0);
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        {
-          update: {
-             name: firestoreDocumentName('profiles', winnerId),
-            fields: {
-              ...(winnerProfile.fields || {}),
-               usdBalance: toFirestoreValue(winnerBalance + payoutAmount),
-               lastUsdOperationId: toFirestoreValue(payoutId),
-              updatedAt: toFirestoreValue(new Date()),
-            },
-          },
-          currentDocument: { updateTime: winnerProfile.updateTime },
-        },
-        {
-          update: {
-             name: firestoreDocumentName('gamePayouts', payoutId),
-            fields: encodeFields({
-              matchId,
-              winnerId,
-              loserId,
-              amount,
-              payoutAmount,
-              status: 'PAID',
-               currency: 'USD',
-               createdAt: new Date(),
-            }),
-          },
-          currentDocument: { exists: false },
-        },
-      ],
-    }),
-  }, token);
-  if (!response.ok) {
-    const error = await response.text();
-    if (error.includes('ALREADY_EXISTS')) return;
-    throw new Error('게임 정산에 실패했습니다. 잠시 후 다시 시도해주세요.');
-  }
+  void matchId;
+  void winnerId;
+  void loserId;
+  void amount;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function reserveGenderMatchStake(userId: string, callId: string, amount: number, token?: string): Promise<void> {
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  const authUserId = getTokenUserId(token) || userId;
-  const stakeId = `gender-${callId}-${authUserId}`;
-  if (await getRawDocument('genderMatchStakes', stakeId, token)) return;
-  const profileDocument = await getRawDocument('profiles', authUserId, token);
-  if (!profileDocument?.name) throw new Error('프로필을 찾을 수 없습니다.');
-   const currentBalance = Number(fromFirestoreValue(profileDocument.fields?.usdBalance) || 0);
-  if (currentBalance < amount) throw new Error(`성별 매칭 이용료 ${amount} USD가 부족합니다.`);
-    const profileName = firestoreDocumentName('profiles', authUserId);
-   const stakeName = firestoreDocumentName('genderMatchStakes', stakeId);
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        {
-          update: {
-            name: profileName,
-            fields: { ...(profileDocument.fields || {}), usdBalance: toFirestoreValue(currentBalance - amount), lastUsdOperationId: toFirestoreValue(stakeId), updatedAt: toFirestoreValue(new Date()) },
-          },
-          currentDocument: { updateTime: profileDocument.updateTime },
-        },
-        {
-          update: {
-            name: stakeName,
-            fields: encodeFields({ userId: authUserId, callId, amount, currency: 'USD', createdAt: new Date(), status: 'RESERVED' }),
-          },
-          currentDocument: { exists: false },
-        },
-      ],
-    }),
-  }, token);
-  if (!response.ok) {
-    if (await getRawDocument('genderMatchStakes', stakeId, token)) return;
-    throw new Error('성별 매칭 이용료 예약에 실패했습니다. 다시 시도해주세요.');
-  }
+  void userId;
+  void callId;
+  void amount;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function purchasePremiumSubscription(userId: string, token?: string): Promise<PortalUser> {
-  const cost = 30;
-  const profileDocument = await getRawDocument('profiles', userId, token);
-  if (!profileDocument?.name || !profileDocument.updateTime) throw new Error('프로필을 찾을 수 없습니다.');
-  const profile = decodeDocument<PortalUser>(profileDocument);
-  const currentExpiry = profile.premiumExpiresAt ? new Date(profile.premiumExpiresAt) : null;
-  if (profile.isSubscribed && (!currentExpiry || currentExpiry.getTime() > Date.now())) {
-    return (await refreshStoredUser()) || profile;
-  }
-  const currentBalance = Number(profile.usdBalance || 0);
-  if (currentBalance < cost) throw new Error(`USD 잔고가 부족합니다. (월정액 ${cost} USD 필요)`);
-  const nextExpiry = currentExpiry && currentExpiry.getTime() > Date.now() ? new Date(currentExpiry) : new Date();
-  nextExpiry.setUTCMonth(nextExpiry.getUTCMonth() + 1);
-  const subscriptionId = `premium-${userId}-${nextExpiry.toISOString().slice(0, 7)}`;
-  if (await getRawDocument('premiumSubscriptions', subscriptionId, token)) return (await refreshStoredUser()) || profile;
-   const profileName = firestoreDocumentName('profiles', userId);
-   const subscriptionName = firestoreDocumentName('premiumSubscriptions', subscriptionId);
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        {
-          update: {
-            name: profileName,
-            fields: {
-              ...(profileDocument.fields || {}),
-               usdBalance: toFirestoreValue(currentBalance - cost),
-               lastUsdOperationId: toFirestoreValue(subscriptionId),
-              isSubscribed: toFirestoreValue(true),
-              premiumExpiresAt: toFirestoreValue(nextExpiry),
-              updatedAt: toFirestoreValue(new Date()),
-            },
-          },
-          currentDocument: { updateTime: profileDocument.updateTime },
-        },
-        {
-          update: {
-            name: subscriptionName,
-           fields: encodeFields({ userId, amount: cost, currency: 'USD', startedAt: new Date(), expiresAt: nextExpiry, status: 'ACTIVE' }),
-          },
-          currentDocument: { exists: false },
-        },
-      ],
-    }),
-  }, token);
-  if (!response.ok) {
-    if (await getRawDocument('premiumSubscriptions', subscriptionId, token)) return (await refreshStoredUser()) || profile;
-    throw new Error('프리미엄 결제 처리 중 서버 원장 충돌이 발생했습니다. 잔고를 확인해주세요.');
-  }
-  return (await refreshStoredUser()) || {
-    ...profile,
-     usdBalance: currentBalance - cost,
-    isSubscribed: true,
-    premiumExpiresAt: nextExpiry.toISOString(),
-  };
+  void userId;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function reserveEscrowPurchase(
@@ -1300,29 +1071,12 @@ export async function reserveEscrowPurchase(
   amount: number,
   token?: string,
 ): Promise<string> {
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error('유효한 상품 금액이 아닙니다.');
-  if (buyerId === sellerId) throw new Error('내가 등록한 물품은 구매할 수 없습니다.');
-  const orderId = `order-${buyerId}-${productId}-${crypto.randomUUID()}`;
-  const buyerDocument = await getRawDocument('profiles', buyerId, token);
-  if (!buyerDocument?.name) throw new Error('구매자 프로필을 찾을 수 없습니다.');
-  const currentBalance = Number(fromFirestoreValue(buyerDocument.fields?.usdtBalance) || 0);
-  if (currentBalance < amount) throw new Error(`잔고가 부족합니다. ${amount} USDT가 필요합니다.`);
-   const profileName = firestoreDocumentName('profiles', buyerId);
-   const orderName = firestoreDocumentName('escrowOrders', orderId);
-  const profileFields = { ...(buyerDocument.fields || {}), usdtBalance: toFirestoreValue(currentBalance - amount), updatedAt: toFirestoreValue(new Date()) };
-  const orderFields = encodeFields({ buyerId, sellerId, productId, amount, status: 'PAYMENT_HELD', createdAt: new Date(), updatedAt: new Date(), timeline: [{ status: 'PAYMENT_HELD', at: new Date(), note: '구매자 결제 금액을 에스크로에 보관했습니다.' }] });
-  const response = await authenticatedFetch(`${firestoreBase}:commit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      writes: [
-        { update: { name: profileName, fields: profileFields }, currentDocument: { updateTime: buyerDocument.updateTime } },
-        { update: { name: orderName, fields: orderFields }, currentDocument: { exists: false } },
-      ],
-    }),
-  }, token);
-  if (!response.ok) throw new Error('에스크로 주문을 생성하지 못했습니다. 다시 시도해주세요.');
-  return orderId;
+  void buyerId;
+  void productId;
+  void sellerId;
+  void amount;
+  void token;
+  throw new Error(serverOnlyFinancialError);
 }
 
 export async function listEscrowOrdersForMember(memberId: string, token = getSessionToken()): Promise<EscrowOrder[]> {
@@ -1499,16 +1253,64 @@ function getTokenUserId(token?: string): string | undefined {
   }
 }
 
+function tokenExpiresAt(token?: string): number | null {
+  if (!token) return null;
+  try {
+    const encoded = token.split('.')[1];
+    if (!encoded) return null;
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+    const payload = JSON.parse(atob(normalized + padding)) as { exp?: unknown };
+    return typeof payload.exp === 'number' ? payload.exp * 1_000 : null;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshSessionToken(session: StoredSession): Promise<string | undefined> {
+  if (!session.refreshToken) return undefined;
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(firebaseConfig.apiKey)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: session.refreshToken! }),
+    }).catch(() => null);
+    if (!response?.ok) return undefined;
+    const result = await response.json().catch(() => null) as { id_token?: string; refresh_token?: string } | null;
+    if (!result?.id_token) return undefined;
+    const nextSession = { ...session, idToken: result.id_token, refreshToken: result.refresh_token || session.refreshToken };
+    window.localStorage.setItem(sessionKey, JSON.stringify(nextSession));
+    return nextSession.idToken;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
+export async function getFreshSessionToken(force = false): Promise<string | undefined> {
+  const session = getStoredSession();
+  if (!session) return undefined;
+  const expiresAt = tokenExpiresAt(session.idToken);
+  if (!force && expiresAt && expiresAt > Date.now() + 2 * 60_000) return session.idToken;
+  return refreshSessionToken(session);
+}
+
 export async function refreshStoredUser(): Promise<PortalUser | null> {
   const session = getStoredSession();
   if (!session) return null;
-  const userId = getTokenUserId(session.idToken) || session.user.id;
-  const profile = await getDocument<PortalUser>('profiles', userId, session.idToken).catch(() => null);
+  const token = await getFreshSessionToken();
+  if (!token) {
+    signOut();
+    return null;
+  }
+  const userId = getTokenUserId(token) || session.user.id;
+  const profile = await getDocument<PortalUser>('profiles', userId, token).catch(() => null);
   if (!profile) return { ...session.user, id: userId };
   const premiumExpiresAt = profile.premiumExpiresAt || session.user.premiumExpiresAt;
   const isSubscribed = Boolean(profile.isSubscribed && (!premiumExpiresAt || new Date(premiumExpiresAt).getTime() > Date.now()));
   const user = { ...session.user, ...profile, id: userId, isSubscribed, premiumExpiresAt };
-  if (typeof window !== 'undefined') window.localStorage.setItem(sessionKey, JSON.stringify({ ...session, user }));
+  if (typeof window !== 'undefined') window.localStorage.setItem(sessionKey, JSON.stringify({ ...getStoredSession(), user }));
   return user;
 }
 
@@ -1853,6 +1655,7 @@ export async function listOnlineUsers(): Promise<OnlineUser[]> {
 }
 
 export async function deleteDocument(collection: string, id: string, token?: string): Promise<void> {
+  assertClientWriteAllowed(collection);
   const response = await authenticatedFetch(`${firestoreBase}/${collection}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   }, token);

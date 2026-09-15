@@ -49,6 +49,9 @@
 }
 
 .tetris-video-pane {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 0;
   width: 100%;
   max-width: 22rem;
   justify-self: end;
@@ -58,6 +61,12 @@
   height: auto !important;
   min-height: 0 !important;
   aspect-ratio: 16 / 9;
+}
+
+.tetris-video-pane > div,
+.tetris-chat-messages,
+.tetris-chat-content {
+  min-width: 0;
 }
 
 .tetris-vs-title {
@@ -224,28 +233,11 @@
 
 @media (max-width: 1023px) {
   .portal-text-rail {
-    top: auto !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    display: flex !important;
-    width: 100% !important;
-    height: 4.35rem !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    border-top: 1px solid rgba(165, 243, 252, .12) !important;
-    background: rgba(8, 16, 31, .78) !important;
-    padding-bottom: env(safe-area-inset-bottom) !important;
-    backdrop-filter: blur(20px);
+    display: none !important;
   }
 
-  .portal-text-rail .portal-rail-card { display: flex; min-width: max-content; width: 100%; }
-  .portal-text-rail-label { display: none !important; }
-  .portal-text-rail-nav { display: flex !important; width: 100%; align-items: stretch; gap: .15rem; padding: .35rem .45rem; }
-  .portal-text-link { display: inline-flex !important; min-width: 4.4rem; align-items: center; justify-content: center; padding: .3rem .4rem !important; font-size: .58rem !important; line-height: 1.2; white-space: nowrap; }
-  .portal-friends-link { min-width: 5.7rem; font-size: .58rem !important; }
-  .portal-frame > main { padding-bottom: 4.5rem !important; }
-  #friend-dock-launch { right: .75rem !important; bottom: 8.25rem !important; }
+  .portal-frame > main { padding-bottom: 5.75rem !important; }
+  #friend-dock-launch { right: .75rem !important; bottom: calc(5.1rem + env(safe-area-inset-bottom) + 1.25rem) !important; }
   #friend-dock { bottom: 4.75rem !important; }
 }
 

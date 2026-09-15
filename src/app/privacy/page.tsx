@@ -1,9 +1,11 @@
 export default function PrivacyPage() {
-  return <article className="container mx-auto max-w-3xl px-4 py-12 text-slate-100">
+  return <article className="category-page container mx-auto max-w-3xl px-4 py-12 text-slate-100">
+    <header className="category-header"><div className="category-heading">
     <p className="text-xs font-black uppercase tracking-[.24em] text-cyan-300">Safety & Privacy</p>
     <h1 className="mt-3 text-3xl font-black">개인정보처리방침</h1>
     <p className="mt-4 text-sm leading-7 text-slate-400">GYOPO는 랜덤 화상채팅을 만 18세 이상 인증 회원에게만 제공합니다. 실제 출시 전 관할 지역의 개인정보·아동 안전·통신·불법 콘텐츠 관련 법률 검토를 완료해야 합니다.</p>
-    <div className="mt-8 space-y-6 text-sm leading-7 text-slate-300">
+    </div></header>
+    <div className="mt-8 max-w-3xl space-y-6 text-sm leading-7 text-slate-300">
       <section><h2 className="text-lg font-black text-white">1. 수집 정보와 목적</h2><p className="mt-2">Google 로그인 계정의 이름·이메일·프로필 이미지는 계정 식별과 서비스 제공에 사용합니다. 프로필의 성별·나이·국가는 매칭 안전과 연령 필터에 사용하며, 랜덤 화상채팅 화면에는 실명 대신 익명 별칭을 표시합니다.</p></section>
       <section><h2 className="text-lg font-black text-white">2. 영상·음성 처리</h2><p className="mt-2">화상·음성은 WebRTC 연결을 통해 상대방에게 전송됩니다. GYOPO는 영상·음성 녹화를 기본 저장하지 않습니다. 화면 공유를 시작하면 사용자가 공유한 화면과 오디오가 상대방에게 전송될 수 있습니다.</p></section>
       <section><h2 className="text-lg font-black text-white">3. 안전 운영 기록</h2><p className="mt-2">신고·차단·계정 제재·안전 감사 로그는 신고 처리, 재발 방지, 법적 의무 대응을 위해 저장할 수 있습니다. 화상채팅 메시지는 기본 1분 후 자동 삭제하며, 신고 사건과 관련된 최소 정보는 사건 종결 및 법정 보존 의무가 끝날 때까지 보존합니다.</p></section>
@@ -12,3 +14,7 @@ export default function PrivacyPage() {
     </div>
   </article>;
 }
+import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = pageMetadata('GYOPO 개인정보처리방침', 'GYOPO가 서비스 제공을 위해 개인정보를 처리하는 기준과 이용자의 권리를 안내합니다.', '/privacy');

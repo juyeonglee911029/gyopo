@@ -1,22 +1,36 @@
 import type { MetadataRoute } from 'next';
 import { getRegionalSitemapPosts } from '@/lib/regionalContent';
 import { canonicalUrl } from '@/lib/seo';
-import { regionalPostHref } from '@/lib/regionRoutes';
+import { cityRegionalPostHref, countriesForRegion, getCityRoute, publicServiceSlugForCategory, REGION_ROUTES, regionalPostHref } from '@/lib/regionRoutes';
 
 export const runtime = 'edge';
 
-const routes = ['/', '/regions', '/jobs', '/life', '/community', '/apps', '/apps/ai-search', '/apps/random-chat', '/games', '/music', '/webrtc', '/theater', '/news', '/directory', '/market', '/ads', '/privacy', '/terms'];
+const routes = [
+  '/', '/regions', '/jobs', '/life', '/community', '/apps', '/apps/ai-search', '/apps/tetris', '/apps/random-chat',
+  '/music', '/theater', '/news', '/directory', '/market', '/blog', '/help', '/ads', '/pricing', '/refund', '/privacy', '/terms',
+];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const rows = await getRegionalSitemapPosts();
   const regional = new Map<string, MetadataRoute.Sitemap[number]>();
+  for (const region of REGION_ROUTES) {
+    if (countriesForRegion(region.slug).length > 0) regional.set(`/regions/${region.slug}`, { url: canonicalUrl(`/regions/${region.slug}`), changeFrequency: 'weekly', priority: 0.7 });
+  }
   for (const post of rows) {
     const countryPath = `/${post.country.slug}`;
-    const categoryPath = `${countryPath}/${post.category}`;
+    const categoryPath = `${countryPath}/${publicServiceSlugForCategory(post.category)}`;
     regional.set(countryPath, { url: canonicalUrl(countryPath), changeFrequency: 'daily', priority: 0.8 });
     regional.set(categoryPath, { url: canonicalUrl(categoryPath), changeFrequency: 'daily', priority: 0.85 });
-    const detailPath = regionalPostHref(post.country, post.category, post.id);
+    const city = post.city ? getCityRoute(post.country.slug, post.city) : undefined;
+    if (city) {
+      const cityPath = `/${post.country.slug}/${city.slug}`;
+      const cityCategoryPath = `${cityPath}/${publicServiceSlugForCategory(post.category)}`;
+      regional.set(cityPath, { url: canonicalUrl(cityPath), changeFrequency: 'daily', priority: 0.75 });
+      regional.set(cityCategoryPath, { url: canonicalUrl(cityCategoryPath), changeFrequency: 'daily', priority: 0.8 });
+    }
+    const detailPath = city ? cityRegionalPostHref(city, post.category, post.id) : regionalPostHref(post.country, post.category, post.id);
     regional.set(detailPath, { url: canonicalUrl(detailPath), lastModified: post.updatedAt || post.createdAt, changeFrequency: 'weekly', priority: 0.7 });
+    regional.set(`/regions/${post.country.region}`, { url: canonicalUrl(`/regions/${post.country.region}`), changeFrequency: 'weekly', priority: 0.7 });
   }
   return [...routes.map((route) => ({
     url: canonicalUrl(route),

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getSessionToken, saveProfile, type PortalUser } from '@/lib/firebase';
+import { REGIONS } from '@/lib/regions';
 
 export type Transaction = {
   id: string;
@@ -15,6 +16,12 @@ export type PortalLanguage = 'ko' | 'en';
 function storedLanguage(): PortalLanguage {
   if (typeof window === 'undefined') return 'ko';
   return window.localStorage.getItem('gyopo-language') === 'en' ? 'en' : 'ko';
+}
+
+function storedCountry(): string {
+  if (typeof window === 'undefined') return 'Global';
+  const value = window.localStorage.getItem('gyopo-country');
+  return value && REGIONS.some((region) => region.id === value) ? value : 'Global';
 }
 
 interface GlobalState {
@@ -35,8 +42,11 @@ interface GlobalState {
 }
 
 export const useGlobalStore = create<GlobalState>((set) => ({
-  selectedCountry: 'Global',
-  setSelectedCountry: (country) => set({ selectedCountry: country }),
+  selectedCountry: storedCountry(),
+  setSelectedCountry: (country) => {
+    if (typeof window !== 'undefined') window.localStorage.setItem('gyopo-country', country);
+    set({ selectedCountry: country });
+  },
   language: storedLanguage(),
   setLanguage: (language) => {
     if (typeof window !== 'undefined') window.localStorage.setItem('gyopo-language', language);

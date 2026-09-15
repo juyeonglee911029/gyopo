@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { AppWindow, BriefcaseBusiness, Film, Gamepad2, Home, Map, MessageCircle, Music2, Newspaper, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { type FormEvent, useState } from 'react';
+import { AppWindow, BriefcaseBusiness, Film, Gamepad2, Home, Map, MessageCircle, Music2, Newspaper, Search, ShoppingBag, Sparkles, Store, UserRoundCheck, Users, Video } from 'lucide-react';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { resolvePortalSearch } from '@/lib/searchRouting';
+import { trackSearch } from '@/lib/searchTracking';
 
 const primaryLinks = [
   { href: '/', label: '홈', english: 'Home', icon: Home },
@@ -38,15 +41,43 @@ function LinkRow({ href, label, english, icon: Icon, active, language }: { href:
 
 export default function PortalSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const language = useGlobalStore((state) => state.language);
+  const selectedCountry = useGlobalStore((state) => state.selectedCountry);
+  const user = useGlobalStore((state) => state.user);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+    const portalRoute = resolvePortalSearch(query);
+    if (portalRoute) {
+      trackSearch({ query, mode: portalRoute.mode, destination: portalRoute.href, country: selectedCountry, audience: user ? 'member' : 'guest' });
+      router.push(portalRoute.href);
+      return;
+    }
+    trackSearch({ query, mode: 'AI', destination: '/assistant', country: selectedCountry, audience: user ? 'member' : 'guest' });
+    window.dispatchEvent(new CustomEvent('gyopo-assistant-query', { detail: { query } }));
+  };
+
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-0 bg-transparent pt-24 shadow-none backdrop-blur-none lg:flex">
        <div className="border-b border-white/8 px-4 py-4">
-        <div className="text-[10px] font-black uppercase tracking-[.24em] text-teal-300">GYOPO NETWORK</div>
+         <div className="text-[10px] font-black uppercase tracking-[.24em] text-teal-300">GYOPO NETWORK</div>
        </div>
 
        <nav className="flex-1 overflow-y-auto px-3 py-5">
-          <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">{language === 'ko' ? '커뮤니티 / COMMUNITY' : 'COMMUNITY / 커뮤니티'}</p>
+          <form onSubmit={submitSearch} className="mb-6 rounded-2xl border border-teal-300/15 bg-white/[.045] p-2.5" role="search">
+            <label className="mb-2 flex items-center gap-1.5 px-1 text-[10px] font-black uppercase tracking-[.16em] text-teal-200"><Sparkles size={12} /> AI 검색</label>
+            <div className="flex items-center gap-2 rounded-xl bg-black/20 px-2.5 py-2">
+              <Search size={15} className="shrink-0 text-slate-500" />
+              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="질문 또는 핫키워드" aria-label="AI 또는 포털 검색" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600" />
+              <button type="submit" aria-label="검색" className="shrink-0 rounded-lg bg-teal-300 p-1.5 text-slate-950"><Search size={13} /></button>
+            </div>
+            <p className="mt-2 px-1 text-[10px] leading-4 text-slate-600">질문은 AI로, 구인·뉴스 같은 핫키워드는 해당 메뉴로 이동합니다.</p>
+          </form>
+           <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[.2em] text-slate-600">{language === 'ko' ? '커뮤니티 / COMMUNITY' : 'COMMUNITY / 커뮤니티'}</p>
         <div className="space-y-1">
            {primaryLinks.map((link) => <LinkRow key={link.href} {...link} language={language} active={link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)} />)}
         </div>

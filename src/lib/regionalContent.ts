@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { countryForRegion, getCountryRoute, isRegionalPostId, COUNTRY_LIFE_CATEGORIES, type CountryRoute, type RegionalCategory } from './regionRoutes';
+import { cityRegionalPostHref, countryForRegion, getCityRoute, getCountryRoute, isRegionalPostId, regionalPostHref, REGIONAL_CATEGORIES, COUNTRY_LIFE_CATEGORIES, type CityRoute, type CountryRoute, type RegionalCategory } from './regionRoutes';
 
 // The same public project as firebase.ts; no user token or admin credentials are used.
 const DOCUMENT_ROOT = 'projects/gyopo-live-portal-506019/databases/(default)/documents';
@@ -9,12 +9,14 @@ export const PUBLIC_COLLECTIONS = ['posts', 'jobs', 'directories', 'marketItems'
 export type PublicCollection = (typeof PUBLIC_COLLECTIONS)[number];
 export const REGIONAL_PAGE_SIZE = 50;
 const MAX_SITEMAP_PAGES = 10;
+const MAX_SEARCH_PAGES = 3;
 
 export type RegionalPost = {
   id: string;
   collection: PublicCollection;
   country: CountryRoute;
   region: string;
+  city?: string;
   category: RegionalCategory;
   title: string;
   body: string;
@@ -34,6 +36,15 @@ type FirestoreValue = { stringValue?: string; timestampValue?: string; booleanVa
 type FirestoreDocument = { name: string; fields?: Record<string, FirestoreValue>; updateTime?: string };
 export type RegionalListing = { status: 'ok' | 'unavailable'; posts: RegionalPost[]; nextCursor?: string };
 export type RegionalDetail = { status: 'ok'; post: RegionalPost } | { status: 'not-found' | 'unavailable' };
+export type RegionalSearchMatch = {
+  id: string;
+  href: string;
+  title: string;
+  snippet: string;
+  category: string;
+  region: string;
+  city?: string;
+};
 
 function decode(value: FirestoreValue): unknown {
   if (value.stringValue !== undefined) return value.stringValue;
@@ -103,6 +114,7 @@ export function regionalPostFromRecord(collection: PublicCollection, id: string,
   return {
     id, collection, country, category, title,
     region: text(record.country),
+    city: text(record.city) || text(record.citySlug) || text(record.cityName) || text(record.locationCity) || undefined,
     body: text(record.body) || text(record.desc) || text(record.description),
     description: text(record.description),
     author: text(record.author) || undefined,
@@ -175,9 +187,21 @@ async function readBatch(collection: PublicCollection, country?: CountryRoute, c
   return { documents: page, nextCursor: documents.length > REGIONAL_PAGE_SIZE ? page.at(-1)?.name.split('/').pop() : undefined };
 }
 
-export const getRegionalListing = cache(async (slug: string, category: RegionalCategory, cursor = ''): Promise<RegionalListing> => {
+function postMatchesCity(post: RegionalPost, city: CityRoute) {
+  if (!post.city) return false;
+  const normalize = (value: string) => value.trim().toLocaleLowerCase().replace(/[\s_]+/g, '-');
+  const value = normalize(post.city);
+  return [city.slug, city.label, city.english].some((candidate) => normalize(candidate) === value);
+}
+
+function postMatchesCategory(post: RegionalPost, category: RegionalCategory) {
+  return category === 'directory' ? post.category === 'directory' || post.category === 'food' : post.category === category;
+}
+
+export const getRegionalListing = cache(async (slug: string, category: RegionalCategory, cursor = '', citySlug?: string): Promise<RegionalListing> => {
   const country = getCountryRoute(slug);
-  if (!country || (cursor && !isRegionalPostId(cursor))) return { status: 'ok', posts: [] };
+  const city = citySlug ? getCityRoute(slug, citySlug) : undefined;
+  if (!country || (cursor && !isRegionalPostId(cursor)) || (citySlug && !city)) return { status: 'ok', posts: [] };
   const canonicalSlug = country.slug;
   const collection = collectionFor(category);
   try {
@@ -185,7 +209,7 @@ export const getRegionalListing = cache(async (slug: string, category: RegionalC
     const seen = new Set<string>();
     const posts = batch.documents.flatMap((document) => {
       const post = fromDocument(collection, document);
-      if (!post || post.country.slug !== canonicalSlug || post.category !== category) return [];
+      if (!post || post.country.slug !== canonicalSlug || !postMatchesCategory(post, category) || (city && !postMatchesCity(post, city))) return [];
       const key = post.sourceUrl || post.id;
       if (seen.has(key)) return [];
       seen.add(key);
@@ -203,21 +227,91 @@ export const getCountryOverview = cache(async (slug: string) => Promise.all(
   COUNTRY_LIFE_CATEGORIES.map(async (category) => ({ category, listing: await getRegionalListing(slug, category.slug) })),
 ));
 
-export const getRegionalPost = cache(async (slug: string, category: RegionalCategory, id: string): Promise<RegionalDetail> => {
+export const getCityOverview = cache(async (slug: string, citySlug: string) => Promise.all(
+  COUNTRY_LIFE_CATEGORIES.map(async (category) => ({ category, listing: await getRegionalListing(slug, category.slug, '', citySlug) })),
+));
+
+export const getRegionalPost = cache(async (slug: string, category: RegionalCategory, id: string, citySlug?: string): Promise<RegionalDetail> => {
   const country = getCountryRoute(slug);
-  if (!country || !isRegionalPostId(id)) return { status: 'not-found' };
+  const city = citySlug ? getCityRoute(slug, citySlug) : undefined;
+  if (!country || !isRegionalPostId(id) || (citySlug && !city)) return { status: 'not-found' };
   const collection = collectionFor(category);
   try {
     const response = await fetch(`${FIRESTORE_URL}/${collection}/${encodeURIComponent(id)}`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
     if (response.status === 404) return { status: 'not-found' };
     if (!response.ok) throw new Error(`Public content read failed (${response.status})`);
     const post = fromDocument(collection, await response.json() as FirestoreDocument);
-    return post && post.country.slug === country.slug && post.category === category ? { status: 'ok', post } : { status: 'not-found' };
+    return post && post.country.slug === country.slug && postMatchesCategory(post, category) && (!city || postMatchesCity(post, city)) ? { status: 'ok', post } : { status: 'not-found' };
   } catch (error) {
     console.warn('[regional-content]', collection, error instanceof Error ? error.message : 'Read unavailable');
     return { status: 'unavailable' };
   }
 });
+
+function normalizeSearchText(value: string) {
+  return value.toLocaleLowerCase().replace(/<[^>]*>/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function searchSnippet(post: RegionalPost, query: string) {
+  const body = normalizeSearchText(post.body || post.description || post.title);
+  const terms = normalizeSearchText(query).split(' ').filter(Boolean);
+  const start = Math.max(0, terms.map((term) => body.indexOf(term)).filter((index) => index >= 0).sort((a, b) => a - b)[0] || 0);
+  const excerpt = body.slice(start, start + 180).trim();
+  return `${start > 0 ? '…' : ''}${excerpt}${start + excerpt.length < body.length ? '…' : ''}`;
+}
+
+export async function searchRegionalPosts(query: string, region = '', limit = 5): Promise<RegionalSearchMatch[]> {
+  const normalizedQuery = normalizeSearchText(query);
+  const terms = normalizedQuery.split(' ').filter((term) => term.length > 1).slice(0, 8);
+  if (!terms.length) return [];
+  const country = countryForRegion(region);
+
+  const batches = await Promise.all(PUBLIC_COLLECTIONS.map(async (collection) => {
+    const posts: RegionalPost[] = [];
+    let cursor: string | undefined;
+    try {
+      for (let page = 0; page < MAX_SEARCH_PAGES; page += 1) {
+        const batch = await readBatch(collection, country, undefined, cursor);
+        for (const document of batch.documents) {
+          const post = fromDocument(collection, document);
+          if (post && (!country || post.country.slug === country.slug)) posts.push(post);
+        }
+        cursor = batch.nextCursor;
+        if (!cursor) break;
+      }
+    } catch (error) {
+      console.warn('[regional-search]', collection, error instanceof Error ? error.message : 'Read unavailable');
+    }
+    return posts;
+  }));
+
+  const seen = new Set<string>();
+  return batches.flat().flatMap((post) => {
+    const categoryLabel = REGIONAL_CATEGORIES.find((category) => category.slug === post.category)?.label || post.category;
+    const metadata = [post.title, post.body, post.description, post.region, post.city || '', post.country.label, post.country.english, ...post.country.aliases, categoryLabel].map(normalizeSearchText).join(' ');
+    const title = normalizeSearchText(post.title);
+    const matchedTerms = terms.filter((term) => metadata.includes(term));
+    if (!matchedTerms.length) return [];
+    const key = post.sourceUrl || post.id;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const score = matchedTerms.length * 4 + matchedTerms.filter((term) => title.includes(term)).length * 8 + (title.includes(normalizedQuery) ? 20 : 0);
+    const city = post.city ? getCityRoute(post.country.slug, post.city) : undefined;
+    return [{
+      score,
+      post,
+      match: {
+        id: post.id,
+        href: city ? cityRegionalPostHref(city, post.category, post.id) : regionalPostHref(post.country, post.category, post.id),
+        title: post.title,
+        snippet: searchSnippet(post, query),
+        category: categoryLabel,
+        region: post.country.label,
+        city: post.city,
+      },
+    }];
+  }).sort((a, b) => b.score - a.score || (Date.parse(b.post.updatedAt || b.post.createdAt || '') || 0) - (Date.parse(a.post.updatedAt || a.post.createdAt || '') || 0)).slice(0, limit).map(({ match }) => match);
+}
 
 export async function getRegionalSitemapPosts(): Promise<RegionalPost[]> {
   const batches = await Promise.all(PUBLIC_COLLECTIONS.map(async (collection) => {

@@ -134,6 +134,7 @@ export default function WebRTCPage() {
   const [hasEnded, setHasEnded] = useState(false);
   const [callElapsed, setCallElapsed] = useState(0);
   const [adultConsent, setAdultConsent] = useState(false);
+  const [showRandomConsent, setShowRandomConsent] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportCategory, setReportCategory] = useState<'sexual_content' | 'minor_safety' | 'harassment' | 'privacy' | 'spam' | 'other'>('harassment');
   const [reportDetails, setReportDetails] = useState('');
@@ -435,9 +436,11 @@ export default function WebRTCPage() {
   };
 
   const requestSafetyGuard = async (action: 'match' | 'message' | 'report' | 'block') => {
+    const token = getSessionToken();
+    if (!token) throw new Error('로그인이 필요합니다.');
     const response = await fetch('/api/safety/guard', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+         headers: { 'Content-Type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify({ action, automated: Boolean(navigator.webdriver) }),
     });
     const result = await response.json().catch(() => ({})) as { error?: string };
@@ -485,7 +488,7 @@ export default function WebRTCPage() {
     }
   };
 
-  const startMatch = async () => {
+  const startMatch = async (consentOverride = false) => {
     if (startingRef.current || active || (terminalRef.current && targetedCall)) return;
     if (!user) {
       window.alert('로그인이 필요합니다.');
@@ -501,7 +504,7 @@ export default function WebRTCPage() {
       setStatus('18세 이상 이용 가능');
       return;
     }
-    if (callKind === 'random' && !adultConsent) {
+    if (callKind === 'random' && !adultConsent && !consentOverride) {
       setPermissionError('랜덤 화상채팅은 만 18세 이상이며 안전수칙에 동의해야 시작할 수 있습니다.');
       setStatus('안전수칙 동의 필요');
       return;
@@ -605,6 +608,26 @@ export default function WebRTCPage() {
       return;
     }
     setActive(true);
+  };
+
+  const startMatchFromUi = () => {
+    if (callKind === 'random' && !adultConsent) {
+      setShowRandomConsent(true);
+      return;
+    }
+    void startMatch();
+  };
+
+  const acceptRandomConsent = () => {
+    setAdultConsent(true);
+    setShowRandomConsent(false);
+    void startMatch(true);
+  };
+
+  const rejectRandomConsent = () => {
+    setShowRandomConsent(false);
+    if (window.history.length > 1) router.back();
+    else router.push('/');
   };
 
   useEffect(() => {
@@ -1030,7 +1053,7 @@ export default function WebRTCPage() {
     try {
       const response = await fetch('/api/assistant', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({
           messages: [...chatMessages.slice(-8).map((message) => ({ role: message.user === 'GYOPO AI' ? 'assistant' : 'user', content: message.text })), { role: 'user', content: question }],
         }),
@@ -1070,7 +1093,7 @@ export default function WebRTCPage() {
              </div>
           </div>
 
-          {permissionError && !hasEnded && <div className="call-permission-error" role="alert"><span>{permissionError}</span>{!active && <button type="button" onClick={() => void startMatch()} disabled={isStarting}>권한 확인 후 다시 시도</button>}</div>}
+           {permissionError && !hasEnded && <div className="call-permission-error" role="alert"><span>{permissionError}</span>{!active && <button type="button" onClick={startMatchFromUi} disabled={isStarting}>권한 확인 후 다시 시도</button>}</div>}
           <div className="call-compact-controls grid shrink-0 grid-cols-3 gap-1.5 border-t border-white/10 bg-[#10182b] p-2">
              <button type="button" onClick={toggleMicrophone} disabled={!active} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 text-[10px] font-black disabled:opacity-40">{audioEnabled ? <Mic size={13} /> : <MicOff size={13} />}{audioEnabled ? '마이크' : '음소거'}</button>
               <button type="button" onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-9 items-center justify-center gap-1 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-1 text-[10px] font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={13} />{isSharingScreen ? '공유 중지' : '화면 공유'}</button>
@@ -1082,15 +1105,17 @@ export default function WebRTCPage() {
   }
 
   return (
+    <>
+      {showRandomConsent && <div className="fixed inset-0 z-[90] grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="random-chat-consent-title"><div className="random-chat-consent w-full max-w-lg p-6"><div className="flex items-start gap-3"><ShieldAlert size={22} className="mt-0.5 shrink-0 text-amber-200" /><div><h2 id="random-chat-consent-title" className="text-lg font-black text-white">랜덤 화상채팅 이용 안내</h2><p className="mt-3 text-sm leading-6 text-slate-300">만 18세 이상만 이용할 수 있습니다. 실명·전화번호·주소·외부 연락처·링크를 공유하지 말고, 불쾌하거나 위험한 상황에서는 즉시 종료·신고·차단해주세요. 안전수칙에 동의하면 카메라와 마이크 연결을 시작합니다.</p></div></div><div className="mt-6 flex gap-2"><button type="button" onClick={rejectRandomConsent} className="flex-1 border border-white/10 bg-white/[.06] py-3 text-sm font-black text-slate-300">거절하고 이전 화면</button><button type="button" onClick={acceptRandomConsent} className="flex-1 bg-cyan-300 py-3 text-sm font-black text-slate-950">동의하고 시작</button></div></div></div>}
     <div className="webrtc-page min-h-[calc(100vh-64px)] bg-[#080d1c] px-4 py-8 text-white">
       <div className="webrtc-shell mx-auto max-w-6xl">
-         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+         <header className="category-header category-header-workspace mb-6 flex flex-wrap items-end justify-between gap-4">
             <div className="webrtc-title-stack"><div className="mb-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-300">LIVE CHAT</div><h1 className="text-3xl font-black tracking-tight md:text-5xl">LIVE CHAT</h1><p className="mt-2 text-sm text-slate-400">현재 접속 중인 인증 회원과 자동으로 연결됩니다.</p></div>
          </header>
 
          <section className="mb-5 grid gap-3 border border-amber-300/20 bg-amber-300/[.06] p-4 text-sm text-amber-50 lg:grid-cols-[1fr_auto] lg:items-center">
            <div><div className="flex items-center gap-2 font-black"><ShieldAlert size={17} className="text-amber-200" /> 랜덤 화상채팅 안전정책</div><p className="mt-1 text-xs leading-5 text-amber-100/70">만 18세 이상만 이용할 수 있습니다. 실명·전화번호·주소·외부 연락처·링크 공유는 차단되며, 신고·차단·계정 정지와 운영자 검토가 적용됩니다.</p></div>
-           {callKind === 'random' && <label className="flex min-w-0 items-start gap-2 text-xs font-bold text-amber-100"><input type="checkbox" checked={adultConsent} onChange={(event) => setAdultConsent(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-amber-300" />안전수칙을 읽었고 만 18세 이상입니다.</label>}
+            {callKind === 'random' && <p className="text-xs font-bold text-amber-100">시작 버튼을 누르면 안전수칙 동의 화면이 먼저 표시됩니다.</p>}
          </section>
 
          {peer && <section className="mb-5 border border-rose-300/20 bg-rose-300/[.05] p-4">
@@ -1112,7 +1137,7 @@ export default function WebRTCPage() {
                  <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-slate-300"><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-3.5 w-3.5 accent-cyan-400" /> 좌우 반전</label>
                </div>
                <div className="grid grid-cols-3 gap-2">
-                 {!active ? <button onClick={startMatch} className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-3 text-sm font-black text-slate-950"><PhoneCall size={17} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 py-3 text-sm font-black text-white"><VideoOff size={17} /> 연결 종료</button>}
+                  {!active ? <button onClick={startMatchFromUi} className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-400 px-3 py-3 text-sm font-black text-slate-950"><PhoneCall size={17} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="col-span-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-3 py-3 text-sm font-black text-white"><VideoOff size={17} /> 연결 종료</button>}
                   <button onClick={toggleMicrophone} disabled={!active} aria-label={audioEnabled ? '마이크 끄기' : '마이크 켜기'} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/10 px-2 text-xs font-black disabled:opacity-40">{audioEnabled ? <Mic size={14} /> : <MicOff size={14} />}{audioEnabled ? '마이크' : '음소거'}</button>
                    <button onClick={() => void toggleScreenShare()} disabled={!isConnected} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-2 text-xs font-black text-cyan-100 disabled:opacity-40"><MonitorUp size={14} /> {isSharingScreen ? '공유 중지' : '화면·오디오 공유'}</button>
                  <span className="flex min-h-10 items-center justify-center rounded-xl border border-white/10 px-2 text-[11px] font-bold text-slate-400">{isConnected ? '연결됨' : '대기 중'}</span>
@@ -1121,7 +1146,7 @@ export default function WebRTCPage() {
            </section>
 
           <aside className="space-y-5">
-              <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">LIVE CHAT 상태</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-amber-500/10 p-3 text-xs font-bold text-amber-100">{permissionError}</p>}{!active ? <button onClick={startMatch} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
+               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">LIVE CHAT 상태</span><span className="text-xs font-bold text-cyan-300">{status}</span></div>{peer ? <div className="mb-5 flex items-center gap-3 rounded-2xl bg-white/[0.05] p-3"><img src={peer.image} alt="" className="h-12 w-12 rounded-full object-cover" /><div><div className="font-black">{peer.name}</div><div className="mt-1 text-xs text-slate-400">{peer.gender || '성별 미설정'} · {peer.age || '나이 미설정'} · {peer.country || '국가 미설정'}</div></div></div> : <div className="mb-5 rounded-2xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500"><Users className="mx-auto mb-2" size={22} />현재 연결된 상대가 없습니다.</div>}{permissionError && <p className="mb-4 rounded-xl bg-amber-500/10 p-3 text-xs font-bold text-amber-100">{permissionError}</p>}{!active ? <button onClick={startMatchFromUi} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 py-4 font-black text-slate-950 transition hover:bg-cyan-300"><PhoneCall size={19} /> LIVE CHAT 시작</button> : <button onClick={() => void endMatch()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-4 font-black text-white transition hover:bg-red-400"><VideoOff size={19} /> 연결 종료</button>}</section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">카메라 설정</span><span className="text-xs text-slate-500">상대 화면에도 적용</span></div><label className="flex cursor-pointer items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm font-bold"><span>내 화면 좌우 반전</span><input type="checkbox" checked={flip} onChange={(event) => setFlip(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><div className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500"><CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-300" />내 영상과 상대방에게 전송되는 영상 모두에 적용됩니다.</div></section>
               <section className="rounded-[2rem] border border-cyan-300/20 bg-[#111a2d] p-5"><div className="mb-4 flex items-center justify-between"><span className="font-black">LIVE CHAT 필터 / Filters</span><span className="text-xs font-bold text-cyan-300">18–60</span></div><label className="block text-xs font-bold text-slate-400">찾고 싶은 상대 / Gender<select value={genderPreference} onChange={(event) => setGenderPreference(event.target.value as GenderPreference)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none"><option value="any">모두 / Any</option><option value="male">남성 / Male</option><option value="female">여성 / Female</option></select></label><div className="mt-4 grid grid-cols-2 gap-2"><label className="text-xs font-bold text-slate-400">최소 나이 / Min<select value={ageMin} onChange={(event) => setAgeMin(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none">{Array.from({ length: 43 }, (_, index) => index + 18).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-xs font-bold text-slate-400">최대 나이 / Max<select value={ageMax} onChange={(event) => setAgeMax(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-white outline-none">{Array.from({ length: 43 }, (_, index) => index + 18).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div><p className="mt-3 text-xs leading-5 text-slate-500">랜덤 화상 매칭은 18–60세 범위에서만 연결합니다. 친구 통화는 서로 지정한 상대에게 직접 연결됩니다.</p></section>
               <section className="rounded-[2rem] border border-white/10 bg-[#111a2d] p-5 text-sm text-slate-400"><div className="mb-2 flex items-center gap-2 font-black text-white"><RefreshCcw size={16} className="text-cyan-300" /> 자동 연결 안내</div><p>연결이 끊기거나 상대가 나가면 연결 종료를 누르지 않아도 다음 인증 회원을 계속 찾습니다.</p></section>
@@ -1135,7 +1160,8 @@ export default function WebRTCPage() {
            </aside>
          </div>
          <section className="mt-5 rounded-[2rem] border border-white/10 bg-[#111a2d] p-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-black">화상 채팅</h2><span className="text-[10px] font-bold text-emerald-300">1분 후 자동 삭제</span></div><div className="max-h-48 space-y-2 overflow-y-auto">{chatMessages.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">상대와 연결되면 메시지를 보낼 수 있습니다.</p> : chatMessages.map((message) => <div key={message.id} className="rounded-xl bg-white/[0.05] p-3 text-sm"><div className="mb-1 text-[10px] font-bold text-cyan-300">{message.user}</div><div className="break-words text-slate-200">{message.text}</div></div>)}</div>{chatError && <p className="mt-2 text-xs font-bold text-rose-300">{chatError}</p>}{user && activeCallId && <form onSubmit={sendVideoChat} className="mt-3 flex gap-2"><input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="화상 채팅 메시지..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none" /><button className="rounded-xl bg-cyan-400 px-4 text-sm font-black text-slate-950">전송</button></form>}</section>
-       </div>
-    </div>
+        </div>
+     </div>
+    </>
   );
 }

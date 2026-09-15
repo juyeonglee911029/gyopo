@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { completeProfileOnboarding, createDocument, deleteDocument, getSessionToken, getStoredSession, hasCompletedProfile, isMasterUser, mergeDocument, queryDocumentsWhere, recordVisit, refreshStoredUser, saveProfile, sendUserTransfer, USDT_NETWORK, type Gender } from '@/lib/firebase';
-import { REGIONS } from '@/lib/regions';
+import { usePathname } from 'next/navigation';
+import { completeProfileOnboarding, createDocument, deleteDocument, getSessionToken, getStoredSession, hasCompletedProfile, isMasterUser, mergeDocument, queryDocumentsWhere, recordVisit, refreshStoredUser, saveProfile, type Gender } from '@/lib/firebase';
+import { detectRegionFromIp, REGIONS } from '@/lib/regions';
 import { useGlobalStore } from '@/store/useGlobalStore';
+import { trackGrowth } from '@/lib/growthTracking';
 import StartupExperience from '@/components/layout/StartupExperience';
-import { LiveRoomPlayer, RoomChatPanel, type LiveRoom } from '@/app/theater/page';
+import { LiveRoomPlayer, RoomChatPanel, type LiveRoom } from '@/app/theater/liveRoomShared';
 
 type FloatingLiveMessage = { id: string; roomId: string; sessionId?: string; authorId: string; user: string; text: string; createdAt: string };
 
@@ -36,8 +38,11 @@ function resizeProfileImage(file: File): Promise<string> {
 export default function AppRuntime({ children }: { children: React.ReactNode }) {
   const setUser = useGlobalStore((state) => state.setUser);
   const user = useGlobalStore((state) => state.user);
+  const setSelectedCountry = useGlobalStore((state) => state.setSelectedCountry);
   const darkMode = useGlobalStore((state) => state.darkMode);
   const setDarkMode = useGlobalStore((state) => state.setDarkMode);
+  const selectedCountry = useGlobalStore((state) => state.selectedCountry);
+  const pathname = usePathname();
   const [sessionChecked, setSessionChecked] = useState(false);
   const [gender, setGender] = useState<Gender | ''>('');
   const [country, setCountry] = useState('');
@@ -48,19 +53,31 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
-  const [profileForm, setProfileForm] = useState({ name: '', country: '', image: '', walletAddress: '', walletNetwork: USDT_NETWORK, walletPublic: false });
+  const [profileForm, setProfileForm] = useState({ name: '', country: '', image: '' });
   const [floatingRoom, setFloatingRoom] = useState<LiveRoom | null>(null);
   const [floatingMinimized, setFloatingMinimized] = useState(false);
   const [floatingOffset, setFloatingOffset] = useState({ x: 0, y: 0 });
   const [floatingMessages, setFloatingMessages] = useState<FloatingLiveMessage[]>([]);
   const [floatingInput, setFloatingInput] = useState('');
-  const [floatingGiftAmount, setFloatingGiftAmount] = useState('1');
-  const [floatingGiftMessage, setFloatingGiftMessage] = useState('');
   const floatingDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+
+  useEffect(() => {
+    trackGrowth({ event: 'page_view', path: pathname, country: selectedCountry, audience: user ? (isMasterUser(user) ? 'master' : 'member') : 'guest' });
+  }, [pathname]);
 
   useEffect(() => {
     setDarkMode(true);
   }, [setDarkMode]);
+
+  useEffect(() => {
+    const savedCountry = window.localStorage.getItem('gyopo-country');
+    if (savedCountry && REGIONS.some((region) => region.id === savedCountry)) return;
+    let active = true;
+    void detectRegionFromIp().then((region) => {
+      if (active && region && !window.localStorage.getItem('gyopo-country')) setSelectedCountry(region);
+    });
+    return () => { active = false; };
+  }, [setSelectedCountry]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'dark';
@@ -71,11 +88,12 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     let active = true;
     const hydrate = async () => {
-      const savedUser = getStoredSession()?.user || null;
+      const savedSession = getStoredSession();
+      const savedUser = savedSession?.user || null;
       if (savedUser) setUser(savedUser);
       const refreshedUser = await refreshStoredUser();
       if (active) {
-        setUser(refreshedUser || savedUser);
+        setUser(savedSession ? refreshedUser : null);
         setSessionChecked(true);
       }
     };
@@ -107,7 +125,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const openProfile = () => {
       if (!user) return;
-       setProfileForm({ name: user.name, country: user.country || '', image: user.image, walletAddress: user.walletAddress || '', walletNetwork: user.walletNetwork || USDT_NETWORK, walletPublic: Boolean(user.walletPublic) });
+       setProfileForm({ name: user.name, country: user.country || '', image: user.image });
       setProfileError('');
       setProfileOpen(true);
     };
@@ -162,7 +180,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   const savedCountry = user?.country && user.country.trim() !== 'Global' ? user.country.trim() : '';
   const savedAge = user?.age && user.age >= 13 ? String(user.age) : '';
   const onboardingRequired = Boolean(sessionChecked && user && !hasCompletedProfile(user));
-  const blocked = !sessionChecked || onboardingRequired;
+  const blocked = onboardingRequired;
 
   useEffect(() => {
     setGender(savedGender);
@@ -198,6 +216,7 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     try {
       const completedUser = await completeProfileOnboarding(user, nextGender, nextCountry, nextAge, getSessionToken());
       setUser(completedUser);
+      trackGrowth({ event: 'onboarding_completed', country: completedUser.country, audience: isMasterUser(completedUser) ? 'master' : 'member' });
       void recordVisit(completedUser);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : '프로필을 저장하지 못했습니다.');
@@ -270,18 +289,6 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
     setFloatingInput('');
   };
 
-  const sendFloatingGift = async () => {
-    if (!user || !floatingRoom?.hostId || floatingRoom.hostId === user.id) return setFloatingGiftMessage('방송자에게만 선물할 수 있습니다.');
-    const amount = Number(floatingGiftAmount);
-    const token = getSessionToken();
-    if (!token || !Number.isFinite(amount) || amount <= 0 || amount > user.usdtBalance) return setFloatingGiftMessage('USDT 잔고와 금액을 확인해주세요.');
-    try {
-      await sendUserTransfer(user.id, floatingRoom.hostId, amount, 0, token, { kind: 'LIVE_GIFT', roomId: floatingRoom.id, memo: `${floatingRoom.title} 방송 USDT 선물` });
-      const refreshed = await refreshStoredUser().catch(() => null);
-      if (refreshed) setUser(refreshed);
-      setFloatingGiftMessage(`${amount} USDT 선물을 보냈습니다.`);
-    } catch { setFloatingGiftMessage('선물에 실패했습니다. Firebase Rules와 잔고를 확인해주세요.'); }
-  };
 
   const resetFloatingRoom = async () => {
     if (!floatingRoom || !isMasterUser(user)) return;
@@ -308,24 +315,14 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
   return (
     <>
       <StartupExperience ready={sessionChecked}>{children}</StartupExperience>
-      {!sessionChecked && <div className="fixed inset-0 z-[190] cursor-wait bg-[#070b17]" aria-hidden="true" />}
        {floatingRoom && user && <div className={`global-live-room-window ${floatingMinimized ? 'is-minimized' : ''}`} style={{ transform: `translate(${floatingOffset.x}px, ${floatingOffset.y}px)` }}>
         <header className="global-live-room-header" onPointerDown={startFloatingDrag} onPointerMove={moveFloatingDrag} onPointerUp={stopFloatingDrag} onPointerCancel={stopFloatingDrag}><div className="min-w-0 flex-1 truncate text-left text-xs font-black"><span className="mr-1 text-rose-300">●</span>{floatingRoom.title || 'LIVE ROOM'}</div><div className="flex gap-1"><button type="button" onPointerDown={(event) => event.stopPropagation()} aria-label={floatingMinimized ? '라이브 창 복원' : '라이브 창 최소화'} onClick={() => setFloatingMinimized((value) => !value)} className="live-room-icon-button">{floatingMinimized ? '□' : '−'}</button><button type="button" onPointerDown={(event) => event.stopPropagation()} aria-label={isMasterUser(user) ? 'Master 방 종료 및 초기화' : '라이브 창 닫기'} onClick={() => isMasterUser(user) ? void resetFloatingRoom() : closeFloatingRoom()} className="live-room-icon-button">×</button></div></header>
-         {floatingMinimized ? <div className="global-live-room-mini-video" role="button" tabIndex={0} aria-label="최소화된 LIVE ROOM 열기" onClick={() => setFloatingMinimized(false)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setFloatingMinimized(false); }}><LiveRoomPlayer room={floatingRoom} user={user} compact /></div> : <div className="global-live-room-body"><LiveRoomPlayer room={floatingRoom} user={user} /><RoomChatPanel room={floatingRoom} user={user} messages={floatingMessages} message={floatingInput} onMessageChange={setFloatingInput} onSubmit={sendFloatingMessage} /><div className="global-live-room-gift"><div className="text-[10px] font-black text-pink-200">USDT 선물 · 방송인에게</div><div className="mt-1 flex gap-1"><input value={floatingGiftAmount} onChange={(event) => setFloatingGiftAmount(event.target.value)} type="number" min="1" step="1" className="min-w-0 flex-1 bg-white/10 px-2 py-1 text-xs text-white outline-none" /><button type="button" onClick={() => void sendFloatingGift()} className="bg-pink-300 px-2 py-1 text-[10px] font-black text-slate-950">선물</button></div>{floatingGiftMessage && <p className="mt-1 text-[10px] text-emerald-200">{floatingGiftMessage}</p>}</div></div>}
+          {floatingMinimized ? <div className="global-live-room-mini-video" role="button" tabIndex={0} aria-label="최소화된 LIVE ROOM 열기" onClick={() => setFloatingMinimized(false)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setFloatingMinimized(false); }}><LiveRoomPlayer room={floatingRoom} user={user} compact /></div> : <div className="global-live-room-body"><LiveRoomPlayer room={floatingRoom} user={user} /><RoomChatPanel room={floatingRoom} user={user} messages={floatingMessages} message={floatingInput} onMessageChange={setFloatingInput} onSubmit={sendFloatingMessage} /></div>}
        </div>}
        {floatingRoom && floatingMinimized && <button type="button" className="global-live-room-restore" onClick={() => setFloatingMinimized(false)} aria-label="최소화된 LIVE ROOM 열기">LIVE ROOM</button>}
-      <dialog ref={dialogRef} onCancel={(event) => event.preventDefault()} className={`m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] p-0 text-white shadow-2xl backdrop:bg-[#050812]/90 ${!sessionChecked ? 'session-loading-dialog' : ''}`}>
-        {!sessionChecked ? (
-          <div className="app-session-loading" role="status" aria-label="GYOPO 로딩 중">
-            <div className="app-session-loading-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" className="h-9 w-9 fill-none stroke-current" strokeWidth="2.2"><path d="M5 5.5h14M5 12h14M5 18.5h14M5 5.5v13M19 5.5v13" /></svg>
-            </div>
-            <strong>GYOPO</strong>
-            <span>GLOBAL NETWORK</span>
-            <i aria-hidden="true" />
-          </div>
-        ) : onboardingRequired ? (
-          <form onSubmit={saveOnboarding} className="p-6 md:p-8">
+       <dialog ref={dialogRef} onCancel={(event) => event.preventDefault()} className="m-auto w-[calc(100%-2rem)] max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-[#10182b] p-0 text-white shadow-2xl backdrop:bg-[#050812]/90">
+         {onboardingRequired ? (
+           <form onSubmit={saveOnboarding} className="p-6 md:p-8">
             <div className="text-xs font-black uppercase tracking-[0.25em] text-cyan-300">First profile setup</div>
             <h2 className="mt-3 text-3xl font-black">필수 프로필 설정</h2>
              <p className="mt-3 text-sm leading-6 text-slate-300">회원 활동을 시작하려면 성별·나이·거주 국가를 선택해주세요. 저장 후에는 일반 계정에서 변경할 수 없습니다.</p>
@@ -361,8 +358,8 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
               {saving ? '안전하게 저장 중...' : '확인하고 시작하기'}
             </button>
           </form>
-         ) : null}
-      </dialog>
+          ) : null}
+       </dialog>
       {profileOpen && user && <div className="fixed inset-0 z-[180] flex items-center justify-center bg-[#050812]/85 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && setProfileOpen(false)}>
          <section role="dialog" aria-modal="true" aria-label="프로필 편집 / Edit profile" className="profile-edit-panel max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-none border-0 bg-[rgba(8,16,31,.86)] p-6 text-white shadow-none md:p-8">
           <div className="flex items-start justify-between gap-4">
@@ -377,7 +374,6 @@ export default function AppRuntime({ children }: { children: React.ReactNode }) 
              <label className="block text-sm font-bold text-slate-200">이름 / Name<input value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} maxLength={40} className="mt-2 w-full rounded-none border-0 bg-[#070b17] px-4 py-3 text-white outline-none focus:bg-[#0b1221]" /></label>
              <label className="block text-sm font-bold text-slate-200">국가·지역 / Country<input value={profileForm.country} onChange={(event) => setProfileForm((current) => ({ ...current, country: event.target.value }))} list="profile-country-options" className="mt-2 w-full rounded-none border-0 bg-[#070b17] px-4 py-3 text-white outline-none focus:bg-[#0b1221]" /><datalist id="profile-country-options">{REGIONS.filter((region) => region.id !== 'Global').map((region) => <option key={region.id} value={region.id}>{region.flag} {region.label}</option>)}</datalist></label>
               <div className="grid gap-3 sm:grid-cols-2"><label className="block text-sm font-bold text-slate-200">성별 / Gender<input disabled value={user.gender === 'male' ? '남성 / Male' : '여성 / Female'} className="mt-2 w-full cursor-not-allowed rounded-none border-0 bg-white/5 px-4 py-3 text-slate-500" /></label><label className="block text-sm font-bold text-slate-200">나이 / Age<input disabled value={user.age ? `${user.age}세 / years` : ''} className="mt-2 w-full cursor-not-allowed rounded-none border-0 bg-white/5 px-4 py-3 text-slate-500" /></label></div>
-               <div className="bg-emerald-300/[.05] p-4"><div className="text-sm font-black text-emerald-200">입금·출금 지갑 / Crypto wallet</div><p className="mt-1 text-xs leading-5 text-slate-400">지갑 주소는 Wallet 화면에서 생성·관리되는 잠금 정보입니다. 프로필 편집에서는 주소를 직접 입력하거나 변경할 수 없습니다.</p><div className="mt-3 bg-black/20 px-3 py-3 font-mono text-xs text-emerald-100">{user.walletAddress || '아직 생성된 Wallet이 없습니다.'}</div><p className="mt-2 text-[11px] text-slate-500">네트워크: {user.walletNetwork || USDT_NETWORK} · 개인키는 프로필에 저장하지 않습니다.</p></div>
              <p className="bg-amber-300/[.06] p-3 text-xs leading-5 text-amber-100/70">성별과 나이는 최초 가입 시 저장되며 변경할 수 없습니다. Gender and age are locked after signup.</p>
              {profileError && <p role="alert" className="bg-rose-400/10 p-3 text-sm font-bold text-rose-200">{profileError}</p>}
              <button disabled={profileSaving} className="w-full rounded-none bg-cyan-300 py-3.5 font-black text-slate-950 hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-50">{profileSaving ? '저장 중... / Saving...' : '프로필 저장 / Save profile'}</button>

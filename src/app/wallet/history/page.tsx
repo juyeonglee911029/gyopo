@@ -3,26 +3,25 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import Link from 'next/link';
 import { ArrowDownLeft, ArrowUpRight, Download, History, RefreshCw, WalletCards } from 'lucide-react';
-import { getSessionToken, queryDocumentsWhere, type WalletLedgerEntry } from '@/lib/firebase';
+import { getFreshSessionToken, queryDocumentsWhere, type WalletLedgerEntry } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import '@/styles/call-ui.css';
 
 type LedgerRow = WalletLedgerEntry & { id: string };
-type HistoryFilter = 'ALL' | 'DEPOSIT' | 'TRANSFER' | 'ONCHAIN' | 'WITHDRAWAL' | 'FEE';
+type HistoryFilter = 'ALL' | 'DEPOSIT' | 'TRANSFER' | 'WITHDRAWAL' | 'FEE';
 
 const filters: Array<{ id: HistoryFilter; label: string }> = [
   { id: 'ALL', label: '전체' },
   { id: 'DEPOSIT', label: '입금' },
   { id: 'TRANSFER', label: '내부 송금' },
-  { id: 'ONCHAIN', label: '체인 송금' },
-  { id: 'WITHDRAWAL', label: '출금' },
+  { id: 'WITHDRAWAL', label: '차감' },
   { id: 'FEE', label: '수수료' },
 ];
 
 function kindOf(row: LedgerRow): Exclude<HistoryFilter, 'ALL'> {
   if (row.type === 'DEPOSIT' || row.type === 'ONCHAIN_RECEIVE') return 'DEPOSIT';
   if (row.type === 'INTERNAL_TRANSFER') return 'TRANSFER';
-  if (row.type === 'ONCHAIN_SEND') return 'ONCHAIN';
+  if (row.type === 'ONCHAIN_SEND') return 'WITHDRAWAL';
   if (row.type === 'WITHDRAWAL') return 'WITHDRAWAL';
   return 'FEE';
 }
@@ -46,9 +45,9 @@ function shorten(value?: string, fallback = '-') {
 }
 
 function routeLabel(row: LedgerRow) {
-  const from = row.fromAddress || (row.direction === 'OUT' ? (row.counterpartyId ? `회원 ${shorten(row.counterpartyId)}` : '내 지갑') : '외부 지갑');
-  const to = row.toAddress || (row.direction === 'IN' ? '내 지갑' : row.type === 'INTERNAL_TRANSFER' ? '회원 지갑' : '외부 지갑');
-  return `${shorten(from, '출처')} → ${shorten(to, '도착지')}`;
+  if (row.direction === 'IN') return '서비스 잔액 충전';
+  if (row.direction === 'OUT') return '서비스 잔액 사용';
+  return shorten(row.memo, '서비스 처리');
 }
 
 function csvCell(value: unknown) {
@@ -66,7 +65,9 @@ export default function WalletHistoryPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const next = await queryDocumentsWhere<WalletLedgerEntry>('walletLedger', [{ field: 'userId', op: 'EQUAL', value: user.id }], getSessionToken(), 300);
+      const token = await getFreshSessionToken();
+      if (!token) throw new Error('로그인 세션이 만료되었습니다. 로그인 화면에서 Google 계정을 다시 선택해주세요.');
+      const next = await queryDocumentsWhere<WalletLedgerEntry>('walletLedger', [{ field: 'userId', op: 'EQUAL', value: user.id }], token, 300);
       setRows(next.sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime()));
       setError('');
     } catch (loadError) {
@@ -104,30 +105,29 @@ export default function WalletHistoryPage() {
   };
 
   return (
-    <div className="wallet-history-page mx-auto w-full max-w-6xl px-4 py-8 text-slate-100 sm:px-6">
+      <div className="wallet-history-page mx-auto w-full max-w-5xl px-4 py-8 text-slate-100 sm:px-6">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <Link href="/wallet" className="mb-3 inline-flex text-xs font-bold text-cyan-300 hover:text-cyan-100">← 내 지갑</Link>
-           <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-cyan-300/15 text-cyan-700"><History size={21} /></span><div><p className="text-[10px] font-black uppercase tracking-[.24em] text-cyan-700">Wallet ledger</p><h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">거래 내역서</h1></div></div>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">입금·출금·내부 송금·TRON 체인 이동을 한 화면에서 확인합니다. 모든 항목은 서비스 원장에 기록된 시간과 상태를 기준으로 표시됩니다.</p>
+            <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-none bg-cyan-300/10 text-cyan-300"><History size={21} /></span><div><p className="text-[10px] font-black uppercase tracking-[.24em] text-cyan-300">Wallet ledger</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">거래 내역서</h1></div></div>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">충전과 서비스 이용 기록을 한 화면에서 확인합니다. 모든 항목은 서비스 원장에 기록된 시간과 상태를 기준으로 표시됩니다.</p>
         </div>
         <button type="button" onClick={exportCsv} disabled={!rows.length} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100 disabled:opacity-40"><Download size={14} /> CSV 내려받기</button>
       </header>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-         <div className="wallet-history-shell rounded-2xl p-4"><div className="flex items-center gap-2 text-xs font-bold text-emerald-700"><ArrowDownLeft size={14} /> 들어온 금액</div><strong className="mt-2 block text-2xl font-black">{formatUsdt(incoming)} <small className="text-xs text-slate-500">USDT</small></strong></div>
-         <div className="wallet-history-shell rounded-2xl p-4"><div className="flex items-center gap-2 text-xs font-bold text-rose-700"><ArrowUpRight size={14} /> 나간 금액</div><strong className="mt-2 block text-2xl font-black">{formatUsdt(outgoing)} <small className="text-xs text-slate-500">USDT</small></strong></div>
-        <div className="wallet-history-shell rounded-2xl p-4"><div className="flex items-center gap-2 text-xs font-bold text-amber-300"><WalletCards size={14} /> 처리 대기</div><strong className="mt-2 block text-2xl font-black">{pending} <small className="text-xs text-slate-500">건</small></strong></div>
+          <div className="wallet-history-shell rounded-2xl p-4"><div className="flex items-center gap-2 text-xs font-bold text-emerald-300"><ArrowDownLeft size={14} /> 충전 합계</div><strong className="mt-2 block text-2xl font-black">${formatUsdt(incoming)}</strong></div>
+          <div className="wallet-history-shell rounded-2xl p-4"><div className="flex items-center gap-2 text-xs font-bold text-rose-300"><ArrowUpRight size={14} /> 사용 합계</div><strong className="mt-2 block text-2xl font-black">${formatUsdt(outgoing)}</strong></div>
+         <div className="wallet-history-shell rounded-2xl p-4"><div className="flex items-center gap-2 text-xs font-bold text-amber-300"><WalletCards size={14} /> 처리 대기</div><strong className="mt-2 block text-2xl font-black">{pending} <small className="text-xs text-slate-500">건</small></strong></div>
       </div>
 
       <section className="wallet-history-shell overflow-hidden rounded-3xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4 sm:p-5"><div><h2 className="font-black">거래 목록</h2><p className="mt-1 text-xs text-slate-500">{visibleRows.length}건 표시 · 주소는 보안을 위해 축약됩니다.</p></div><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5"><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> 새로고침</button></div>
+         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4 sm:p-5"><div><h2 className="font-black">거래 목록</h2><p className="mt-1 text-xs text-slate-500">{visibleRows.length}건 표시 · 서비스 잔액의 충전과 사용 기록입니다.</p></div><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5"><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> 새로고침</button></div>
         <div className="flex flex-wrap gap-2 border-b border-white/10 p-4">{filters.map((item) => <button key={item.id} type="button" onClick={() => setFilter(item.id)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${filter === item.id ? 'bg-cyan-300 text-slate-950' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'}`}>{item.label}</button>)}</div>
         {error && <p className="m-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs font-bold text-amber-100">{error}</p>}
         {loading && !rows.length ? <div className="flex items-center justify-center gap-2 p-12 text-sm text-slate-400"><RefreshCw size={16} className="animate-spin" /> 원장을 불러오는 중...</div> : !visibleRows.length ? <div className="p-14 text-center text-sm text-slate-500">선택한 분류의 거래내역이 없습니다.</div> : <>
-          <div className="hidden border-b border-white/10 px-5 py-3 text-[10px] font-black uppercase tracking-[.16em] text-slate-500 lg:grid lg:grid-cols-[minmax(170px,1.2fr)_minmax(170px,1fr)_minmax(170px,1fr)_auto_auto] lg:items-center lg:gap-4"><span>거래</span><span>이동 경로</span><span>일시</span><span>금액</span><span>상태</span></div>
-            <div>{visibleRows.map((row) => <article key={row.id} className="wallet-history-row border-b border-white/10 last:border-b-0"><div className="min-w-0"><div className="flex items-center gap-2"><span className={`rounded-md px-2 py-1 text-[10px] font-black ${row.direction === 'IN' ? 'bg-emerald-300/15 text-emerald-700' : row.direction === 'OUT' ? 'bg-rose-300/15 text-rose-700' : 'bg-slate-200 text-slate-600'}`}>{kindLabel(row)}</span><span className="truncate text-sm font-bold text-slate-900">{row.memo || row.type}</span></div><p className="mt-1 truncate text-[10px] text-slate-500">{row.network || '서비스 원장'}</p></div><div className="truncate text-xs text-slate-500">{routeLabel(row)}</div><time className="text-xs text-slate-500">{formatDate(row.createdAt)}</time><strong className={`whitespace-nowrap text-right text-sm ${row.direction === 'IN' ? 'text-emerald-700' : row.direction === 'OUT' ? 'text-rose-700' : 'text-slate-700'}`}>{row.direction === 'IN' ? '+' : row.direction === 'OUT' ? '-' : ''}{formatUsdt(Number(row.amount || 0))} {row.symbol || 'USDT'}</strong><span className={`text-right text-[10px] font-black ${row.status === 'COMPLETED' ? 'text-emerald-700' : row.status === 'PENDING' || row.status === 'SUBMITTED' ? 'text-amber-700' : 'text-slate-500'}`}>{row.status}</span></article>)}</div>
-            <div className="wallet-history-mobile">{visibleRows.map((row) => <article key={row.id} className="border-b border-white/10 p-4 last:border-b-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-black ${row.direction === 'IN' ? 'bg-emerald-300/15 text-emerald-700' : row.direction === 'OUT' ? 'bg-rose-300/15 text-rose-700' : 'bg-slate-200 text-slate-600'}`}>{kindLabel(row)}</span><h3 className="mt-2 truncate text-sm font-bold text-slate-900">{row.memo || row.type}</h3></div><strong className={`whitespace-nowrap text-sm ${row.direction === 'IN' ? 'text-emerald-700' : row.direction === 'OUT' ? 'text-rose-700' : 'text-slate-700'}`}>{row.direction === 'IN' ? '+' : row.direction === 'OUT' ? '-' : ''}{formatUsdt(Number(row.amount || 0))} {row.symbol || 'USDT'}</strong></div><div className="mt-3 grid gap-1 text-xs text-slate-500"><span>이동: {routeLabel(row)}</span><span>일시: {formatDate(row.createdAt)}</span><span>상태: <b className="text-slate-700">{row.status}</b> · {row.network || '서비스 원장'}</span></div>{row.txHash && <a href={`https://tronscan.org/#/transaction/${row.txHash}`} target="_blank" rel="noreferrer" className="mt-2 block truncate font-mono text-[10px] text-cyan-700 hover:underline">TXID: {row.txHash}</a>}</article>)}</div>
+           <div>{visibleRows.map((row) => <article key={row.id} className="wallet-history-row border-b border-white/10 last:border-b-0"><div className="min-w-0"><div className="flex items-center gap-2"><span className={`rounded-md px-2 py-1 text-[10px] font-black ${row.direction === 'IN' ? 'bg-emerald-300/15 text-emerald-200' : row.direction === 'OUT' ? 'bg-rose-300/15 text-rose-200' : 'bg-white/10 text-slate-300'}`}>{kindLabel(row)}</span><span className="truncate text-sm font-bold text-white">{row.memo || '서비스 이용'}</span></div></div><time className="text-xs text-slate-500">{formatDate(row.createdAt)}</time><strong className={`whitespace-nowrap text-right text-sm ${row.direction === 'IN' ? 'text-emerald-200' : row.direction === 'OUT' ? 'text-rose-200' : 'text-slate-200'}`}>{row.direction === 'IN' ? '+' : row.direction === 'OUT' ? '-' : ''}${formatUsdt(Number(row.amount || 0))}</strong><span className={`text-right text-[10px] font-black ${row.status === 'COMPLETED' ? 'text-emerald-200' : row.status === 'PENDING' || row.status === 'SUBMITTED' ? 'text-amber-200' : 'text-slate-400'}`}>{row.status}</span></article>)}</div>
+             <div className="wallet-history-mobile">{visibleRows.map((row) => <article key={row.id} className="border-b border-white/10 p-4 last:border-b-0"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-black ${row.direction === 'IN' ? 'bg-emerald-300/15 text-emerald-200' : row.direction === 'OUT' ? 'bg-rose-300/15 text-rose-200' : 'bg-white/10 text-slate-300'}`}>{kindLabel(row)}</span><h3 className="mt-2 truncate text-sm font-bold text-white">{row.memo || '서비스 이용'}</h3></div><strong className={`whitespace-nowrap text-sm ${row.direction === 'IN' ? 'text-emerald-200' : row.direction === 'OUT' ? 'text-rose-200' : 'text-slate-200'}`}>{row.direction === 'IN' ? '+' : row.direction === 'OUT' ? '-' : ''}${formatUsdt(Number(row.amount || 0))}</strong></div><div className="mt-3 grid gap-1 text-xs text-slate-500"><span>일시: {formatDate(row.createdAt)}</span><span>상태: <b className="text-slate-200">{row.status}</b></span></div></article>)}</div>
         </>}
       </section>
     </div>

@@ -1,6 +1,15 @@
+import { ApiAuthError, authenticateRequest } from '@/lib/apiSecurity';
+
 const firebaseProjectId = 'gyopo-live-portal-506019';
 
-type IdTokenPayload = { sub?: string };
+export class PaddleConfigurationError extends Error {
+  readonly status = 503;
+
+  constructor(message = 'Paddle 결제가 아직 연결되지 않았습니다. 관리자 환경설정을 확인해주세요.') {
+    super(message);
+    this.name = 'PaddleConfigurationError';
+  }
+}
 
 export type PaddleTransaction = {
   id?: string;
@@ -11,35 +20,19 @@ export type PaddleTransaction = {
   checkout?: { url?: string | null };
 };
 
-function decodeBase64Url(value: string): string {
-  const normalized = value.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
-  return atob(normalized);
-}
-
-function readUserId(token: string): string | null {
-  try {
-    const payload = JSON.parse(decodeBase64Url(token.split('.')[1] || '')) as IdTokenPayload;
-    return payload.sub || null;
-  } catch {
-    return null;
-  }
-}
-
 export async function requirePaddleUser(request: Request): Promise<{ userId: string; token: string }> {
-  const value = request.headers.get('authorization') || '';
-  const token = value.startsWith('Bearer ') ? value.slice(7).trim() : '';
-  const userId = token ? readUserId(token) : null;
-  if (!token || !userId) throw new Error('로그인 세션이 필요합니다.');
-  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/profiles/${encodeURIComponent(userId)}`, {
-    headers: { authorization: `Bearer ${token}` },
+  const user = await authenticateRequest(request);
+  if (!user) throw new ApiAuthError();
+  const response = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/profiles/${encodeURIComponent(user.uid)}`, {
+    headers: { authorization: `Bearer ${user.token}` },
   });
   if (!response.ok) throw new Error('로그인 프로필을 확인하지 못했습니다.');
-  return { userId, token };
+  return { userId: user.uid, token: user.token };
 }
 
 export async function paddleRequest(path: string, options: RequestInit = {}): Promise<Response> {
-  const apiKey = process.env.PADDLE_API_KEY;
-  if (!apiKey) throw new Error('PADDLE_API_KEY 설정이 필요합니다.');
+  const apiKey = process.env.PADDLE_API_KEY?.trim();
+  if (!apiKey) throw new PaddleConfigurationError('Paddle API 키가 배포 환경에 설정되지 않았습니다.');
   const headers = new Headers(options.headers);
   headers.set('authorization', `Bearer ${apiKey}`);
   headers.set('content-type', 'application/json');
@@ -48,8 +41,6 @@ export async function paddleRequest(path: string, options: RequestInit = {}): Pr
 }
 
 export function amountFromTransaction(transaction: PaddleTransaction): number {
-  const customAmount = Number(transaction.custom_data?.amountUsd);
-  if (Number.isFinite(customAmount) && customAmount > 0) return Math.round(customAmount * 100) / 100;
   const total = Number(transaction.details?.totals?.grand_total);
   return Number.isFinite(total) && total > 0 ? Math.round((total / 100) * 100) / 100 : 0;
 }

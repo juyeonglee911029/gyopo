@@ -58,12 +58,7 @@ export default function MarketTicker() {
   }, [amount, from, payload, to]);
 
   const assetGroups = payload?.assets || [];
-  const tickerAssets = [
-    assetGroups.find((asset) => asset.key === 'bitcoin') || { key: 'bitcoin', label: 'BTC', value: null, change: null, currency: 'USD' },
-    assetGroups.find((asset) => asset.key === 'ethereum') || { key: 'ethereum', label: 'ETH', value: null, change: null, currency: 'USD' },
-    { key: 'usdt', label: 'USDT', value: 1, change: 0, currency: 'USD' },
-    assetGroups.find((asset) => asset.key === 'solana') || { key: 'solana', label: 'SOL', value: null, change: null, currency: 'USD' },
-  ];
+  const tickerAssets = assetGroups.filter((asset) => !['bitcoin', 'ethereum', 'ripple', 'solana', 'usdt'].includes(asset.key)).slice(0, 4);
 
   return (
     <div className={`market-bar ${expanded ? 'market-bar-expanded' : ''}`}>
@@ -74,7 +69,7 @@ export default function MarketTicker() {
         </button>
       </div>
       <div className="market-table">
-        {tickerAssets.map((asset) => <div key={asset.key} className="market-table-row"><div><b>{asset.label}</b><span>{asset.key === 'usdt' ? 'Tether' : asset.currency}</span></div><div className="market-table-value"><strong>{formatValue(asset.value, asset.currency)}</strong><Change value={asset.change} /></div></div>)}
+         {tickerAssets.map((asset) => <div key={asset.key} className="market-table-row"><div><b>{asset.label}</b><span>{asset.currency}</span></div><div className="market-table-value"><strong>{formatValue(asset.value, asset.currency)}</strong><Change value={asset.change} /></div></div>)}
         {!payload && <div className="market-loading"><RefreshCw size={12} className="animate-spin" /> 시세 연결 중</div>}
       </div>
       {expanded && <div className="market-detail">

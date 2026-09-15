@@ -1,6 +1,6 @@
 'use client';
 
-import { type ChangeEvent, type FormEvent, type PointerEvent, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react';
 import { Check, FileText, MessageCircle, Paperclip, PhoneCall, Send, UserRoundCheck, Video, X } from 'lucide-react';
 import { createDocument, createFriendCallRequest, deleteExpiredChatMessages, getDocument, getFriendCallRequest, getSessionToken, listFriendConnections, listIncomingFriendCallRequests, queryDocumentsWhere, respondToFriendCallRequest, type FriendCallRequest, type PublicProfile } from '@/lib/firebase';
 import { useGlobalStore } from '@/store/useGlobalStore';
@@ -95,6 +95,25 @@ export default function FriendDock() {
     };
     window.addEventListener('gyopo-friends-open', show);
     return () => window.removeEventListener('gyopo-friends-open', show);
+  }, []);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const panel = document.getElementById('friend-dock');
+      const launcher = document.getElementById('friend-dock-launch');
+      if (panel?.contains(target) || launcher?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+    };
   }, []);
 
   useEffect(() => {
@@ -214,7 +233,7 @@ export default function FriendDock() {
     reader.readAsDataURL(file);
   };
 
-  const startDockDrag = (event: PointerEvent<HTMLElement>) => {
+  const startDockDrag = (event: ReactPointerEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest('button')) return;
     const panel = document.getElementById('friend-dock');
     if (!panel) return;
@@ -225,7 +244,7 @@ export default function FriendDock() {
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
-  const moveDock = (event: PointerEvent<HTMLElement>) => {
+  const moveDock = (event: ReactPointerEvent<HTMLElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
     setDockPosition({
@@ -234,7 +253,7 @@ export default function FriendDock() {
     });
   };
 
-  const stopDockDrag = (event: PointerEvent<HTMLElement>) => {
+  const stopDockDrag = (event: ReactPointerEvent<HTMLElement>) => {
     dragRef.current = null;
     setDragging(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -344,7 +363,7 @@ export default function FriendDock() {
 
   return (
     <>
-       <button id="friend-dock-launch" type="button" onClick={() => setOpen(true)} aria-label="친구 채팅 열기" style={{ bottom: '8.25rem', right: '.75rem', transform: 'translateY(-3.5rem)' }} className="fixed bottom-20 right-3 z-[65] grid h-12 w-12 place-items-center rounded-2xl border border-cyan-200/20 bg-[#10182b] text-cyan-200 shadow-2xl lg:hidden">
+        <button id="friend-dock-launch" type="button" onClick={() => setOpen(true)} aria-label="친구 채팅 열기" className="fixed z-[65] grid h-12 w-12 place-items-center border-0 bg-transparent text-cyan-200 shadow-none lg:hidden">
         <UserRoundCheck size={21} />
       </button>
 

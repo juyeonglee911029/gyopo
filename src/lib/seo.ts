@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export function resolveSiteUrl(value?: string): string {
-  if (!value?.trim()) return 'https://gyopo.pages.dev';
+  if (!value?.trim()) return 'https://gyopo.kr';
   let url: URL;
   try {
     url = new URL(value.trim());
@@ -11,6 +11,9 @@ export function resolveSiteUrl(value?: string): string {
   if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw new Error('NEXT_PUBLIC_SITE_URL must be an HTTP(S) origin without credentials, path, query, or fragment');
   }
+  // The Pages alias and www host redirect to the primary domain. Never emit
+  // either host as a canonical URL even if an old deployment variable remains.
+  if (['https://gyopo.pages.dev', 'https://www.gyopo.kr'].includes(url.origin)) return 'https://gyopo.kr';
   return url.origin;
 }
 
@@ -35,15 +38,16 @@ export function seoExcerpt(text: string, limit = 160): string {
   return plain.length > limit ? `${plain.slice(0, limit - 3).trimEnd()}...` : plain;
 }
 
-export function pageMetadata(title: string, description: string, path: string, index = true): Metadata {
-  const url = canonicalUrl(path);
+export function pageMetadata(title: string, description: string, path: string, index = true, canonicalPath = path): Metadata {
+  const url = canonicalUrl(canonicalPath);
+  const image = canonicalUrl('/og-image.svg');
   return {
     title: { absolute: `${title} | GYOPO` },
     description,
     alternates: { canonical: url },
     robots: index ? { index: true, follow: true, googleBot: { index: true, follow: true } } : NOINDEX_FOLLOW,
-    openGraph: { title, description, url, siteName: 'GYOPO', type: 'website' },
-    twitter: { card: 'summary', title, description },
+    openGraph: { title, description, url, siteName: 'GYOPO', type: 'website', images: [{ url: image, alt: 'GYOPO 글로벌 한인 교민 네트워크' }] },
+    twitter: { card: 'summary_large_image', title, description, images: [image] },
   };
 }
 
