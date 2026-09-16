@@ -16,7 +16,7 @@ const links = [
   ['/music', 'K-pop 음악', 'K-pop Music'],
   ['/watch', '빈 화면', 'Watch'],
   ['/theater', '극장', 'Theater'],
-  ['/assistant', 'AI 검색', 'AI Search'],
+  ['/assistant', '검색', 'Search'],
 ] as const;
 
 export default function PortalTextRail() {

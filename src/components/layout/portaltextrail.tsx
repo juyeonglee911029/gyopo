@@ -3,10 +3,9 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
-import { Gamepad2, Languages, Search, Sparkles, Video } from 'lucide-react';
+import { Gamepad2, Languages, Search, Video } from 'lucide-react';
 import MarketTicker from '@/components/layout/MarketTicker';
 import { useGlobalStore } from '@/store/useGlobalStore';
-import { handleNavigationClick } from '@/lib/navigation';
 import { REGIONS, regionLabel } from '@/lib/regions';
 import { resolvePortalSearch } from '@/lib/searchRouting';
 import { trackSearch } from '@/lib/searchTracking';
@@ -27,7 +26,7 @@ const links = [
   ['/music', 'MUSIC VIDEO', 'MUSIC VIDEO'],
    ['/watch', 'Watch', 'Watch'],
    ['/theater', 'LIVE ROOM', 'LIVE ROOM'],
-  ['/assistant', 'AI 검색', 'AI Search'],
+  ['/assistant', '검색', 'Search'],
 ] as const;
 
 export default function PortalTextRail() {
@@ -59,9 +58,9 @@ export default function PortalTextRail() {
       <MarketTicker />
       <div className="portal-rail-card">
         <form onSubmit={submitSearch} className="portal-rail-search" role="search">
-          <label><Sparkles size={12} /> {language === 'ko' ? 'AI 검색' : 'AI Search'}</label>
-          <div><Search size={14} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={language === 'ko' ? '질문 또는 핫키워드' : 'Question or keyword'} aria-label="AI 또는 포털 검색" /><button type="submit" aria-label="검색"><Search size={12} /></button></div>
-          <small>{language === 'ko' ? '질문은 AI로, 핫키워드는 메뉴로 이동합니다.' : 'Questions open AI; hot keywords open portal pages.'}</small>
+          <label><Search size={12} /> {language === 'ko' ? '검색' : 'Search'}</label>
+          <div><Search size={14} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={language === 'ko' ? '질문 또는 핫키워드' : 'Question or keyword'} aria-label="포털 검색" /><button type="submit" aria-label="검색"><Search size={12} /></button></div>
+          <small>{language === 'ko' ? '질문은 답변으로, 핫키워드는 해당 메뉴로 이동합니다.' : 'Questions open answers; hot keywords open portal pages.'}</small>
         </form>
         <div className="portal-text-rail-label">EXPLORE / LIVE</div>
         <nav className="portal-text-rail-nav">
@@ -69,8 +68,8 @@ export default function PortalTextRail() {
                const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
                const linkClass = ['portal-text-link', active ? 'portal-text-link-active' : '', href === '/' ? 'portal-text-link-home' : '', href === '/music' ? 'portal-text-link-music' : ''].filter(Boolean).join(' ');
                const Icon = href === '/games' ? Gamepad2 : href === '/webrtc' ? Video : null;
-               if (href === '/assistant') return <button key={href} type="button" onClick={(event) => { const phase = handleNavigationClick(event, href, '/assistant'); if (phase !== 'blank') window.dispatchEvent(new CustomEvent('gyopo-assistant-open')); }} className={`${linkClass} portal-text-link-button`}>{language === 'ko' ? label : english}</button>;
-               return <Link key={href} href={href} onClick={(event) => handleNavigationClick(event, href, pathname)} className={linkClass}>{Icon && <Icon size={14} aria-hidden="true" />}{language === 'ko' ? label : english}</Link>;
+                if (href === '/assistant') return <button key={href} type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-assistant-open'))} className={`${linkClass} portal-text-link-button`}>{language === 'ko' ? label : english}</button>;
+                return <Link key={href} href={href} className={linkClass}>{Icon && <Icon size={14} aria-hidden="true" />}{language === 'ko' ? label : english}</Link>;
              })}
            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gyopo-friends-open'))} className="portal-text-link portal-text-link-button portal-friends-link"><span>{language === 'ko' ? '친구 채팅·통화' : 'Friends Chat / Call'}</span></button>
             </nav>
