@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useGlobalStore } from '@/store/useGlobalStore';
 import { createDocument, getDocument, getFreshSessionToken, isMasterUser, MASTER_DEPOSIT_ADDRESS, queryDocuments, queryDocumentsWhere, refreshStoredUser, saveProfile, sendUserTransfer, USDT_NETWORK, type WalletLedgerEntry } from '@/lib/firebase';
 import { isValidTronAddress, sendUsdtWithTronLink } from '@/lib/tron';
-import { Wallet, Copy, History, Send, AlertCircle, Download, LockKeyhole, ShieldCheck, RefreshCw, Sparkles } from 'lucide-react';
+import { Wallet, Copy, History, Send, AlertCircle, Download, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
 
 const configuredDepositAddress = process.env.NEXT_PUBLIC_USDT_DEPOSIT_ADDRESS || MASTER_DEPOSIT_ADDRESS;
 
@@ -397,7 +397,7 @@ export default function WalletPage() {
         <section className="wallet-service-panel overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-white/10 p-5 sm:p-6"><div><h2 className="flex items-center gap-2 text-lg font-black"><History size={18} className="text-cyan-300" /> 최근 이용 내역</h2><p className="mt-1 text-xs text-slate-500">서비스 잔액과 관련된 최근 기록입니다.</p></div><button type="button" onClick={exportLedger} disabled={!serviceRows.length} className="inline-flex items-center gap-1.5 border border-white/10 px-2.5 py-2 text-xs font-black text-slate-300 disabled:opacity-40"><Download size={13} /> CSV</button></div>
           {ledgerError && <p className="m-4 border border-amber-300/20 bg-amber-300/10 p-3 text-xs font-bold text-amber-100">{ledgerError}</p>}
-          {ledgerLoading && !ledger.length ? <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-400"><RefreshCw size={16} className="animate-spin" /> 기록을 불러오는 중...</div> : !serviceRows.length ? <div className="p-12 text-center text-sm text-slate-500">아직 서비스 이용 기록이 없습니다.</div> : <div>{serviceRows.slice(0, 8).map((row) => <article key={row.id} className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-bold text-white">{row.memo || '서비스 이용'}</p><p className="mt-1 text-[11px] text-slate-500">{String(row.createdAt)} · {row.status}</p></div><strong className={`whitespace-nowrap text-sm ${row.direction === 'IN' ? 'text-emerald-300' : 'text-rose-300'}`}>{row.direction === 'IN' ? '+' : '-'}${formatUsd(Number(row.amount || 0))}</strong></article>)}</div>}
+          {ledgerLoading && !ledger.length ? <div className="min-h-20" aria-busy="true" /> : !serviceRows.length ? <div className="p-12 text-center text-sm text-slate-500">아직 서비스 이용 기록이 없습니다.</div> : <div>{serviceRows.slice(0, 8).map((row) => <article key={row.id} className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-bold text-white">{row.memo || '서비스 이용'}</p><p className="mt-1 text-[11px] text-slate-500">{String(row.createdAt)} · {row.status}</p></div><strong className={`whitespace-nowrap text-sm ${row.direction === 'IN' ? 'text-emerald-300' : 'text-rose-300'}`}>{row.direction === 'IN' ? '+' : '-'}${formatUsd(Number(row.amount || 0))}</strong></article>)}</div>}
           <div className="border-t border-white/10 p-4"><Link href="/wallet/history" className="text-xs font-black text-cyan-200 hover:text-white">전체 거래 내역 보기 →</Link></div>
         </section>
       </div>
