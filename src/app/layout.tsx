@@ -9,9 +9,7 @@ import PortalTextRail from '@/components/layout/portaltextrail';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
-import PageTransition from '@/components/layout/PageTransition';
 import AssistantDock from '@/components/layout/AssistantDock';
-import NavigationFX from '@/components/layout/NavigationFX';
 import GoogleTranslate from '@/components/layout/GoogleTranslate';
 import { AdSenseScript } from '@/components/ads/AdSense';
 import { SITE_URL } from '@/lib/seo';
@@ -70,16 +68,15 @@ export default function RootLayout({
               <Header />
               <PortalTextRail />
            <MobileBottomNav />
-             <GlobalChat />
-             <FriendDock />
-             <AssistantDock />
-             <NavigationFX />
-          </div>
+              <GlobalChat />
+              <FriendDock />
+              <AssistantDock />
+           </div>
 
-          <PortalFrame>
-            <main className="min-w-0 flex-grow">
-              <PageTransition>{children}</PageTransition>
-            </main>
+           <PortalFrame>
+             <main className="min-w-0 flex-grow">
+               {children}
+             </main>
             <Footer />
           </PortalFrame>
         </AppRuntime>

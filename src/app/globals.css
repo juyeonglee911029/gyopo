@@ -1382,7 +1382,7 @@ dialog.session-loading-dialog {
 }
 dialog.session-loading-dialog::backdrop { background: #02040b; }
 .app-session-loading { display: grid; min-height: 100vh; place-items: center; align-content: center; gap: .45rem; color: #f8fafc; text-align: center; }
-.app-session-loading-mark, .startup-experience-mark, .navigation-experience-mark { display: grid; place-items: center; color: #06111d; background: linear-gradient(145deg, #2dd4bf, #38bdf8); box-shadow: 0 0 42px rgba(45, 212, 191, .34); }
+.app-session-loading-mark, .startup-experience-mark { display: grid; place-items: center; color: #06111d; background: linear-gradient(145deg, #2dd4bf, #38bdf8); box-shadow: 0 0 42px rgba(45, 212, 191, .34); }
 .app-session-loading-mark { height: 4.5rem; width: 4.5rem; animation: gyopo-logo-pulse 1.8s ease-in-out infinite; }
 .app-session-loading strong { margin-top: .8rem; font-family: var(--font-display); font-size: 1.15rem; letter-spacing: .28em; }
 .app-session-loading > span { color: rgba(165, 243, 252, .62); font-size: .5rem; font-weight: 800; letter-spacing: .28em; }
@@ -1395,15 +1395,12 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
 .startup-experience-reveal { animation: startup-experience-reveal 2.2s cubic-bezier(.76, 0, .24, 1) both; }
 .startup-experience-reveal::after { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .95), rgba(103, 232, 249, .25) 13%, transparent 48%); content: ''; opacity: 0; animation: startup-experience-flash 2.2s ease-out both; }
 .startup-experience-reveal .startup-experience-logo { animation: startup-logo-exit 1.4s ease-out both; }
-.navigation-experience { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(2, 4, 11, .98); pointer-events: none; animation: navigation-experience-in .76s cubic-bezier(.76, 0, .24, 1) both; }
-.navigation-experience-mark { height: 3.2rem; width: 3.2rem; animation: gyopo-logo-pulse .76s ease-out both; }
 @keyframes gyopo-logo-pulse { 0%, 100% { transform: scale(.94); box-shadow: 0 0 24px rgba(45, 212, 191, .22); } 50% { transform: scale(1.05); box-shadow: 0 0 54px rgba(56, 189, 248, .54); } }
 @keyframes gyopo-loader-line { 0%, 100% { transform: scaleX(.2); opacity: .25; } 50% { transform: scaleX(1); opacity: 1; } }
 @keyframes gyopo-startup-logo { 0%, 100% { opacity: .68; transform: scale(.96); filter: blur(.2px); } 50% { opacity: 1; transform: scale(1.04); filter: blur(0); } }
 @keyframes startup-experience-reveal { 0% { opacity: 1; filter: brightness(1); } 46% { opacity: 1; filter: brightness(.42); } 67% { opacity: 1; filter: brightness(2.8); } 100% { opacity: 0; filter: brightness(1); } }
 @keyframes startup-experience-flash { 0%, 54% { opacity: 0; transform: scale(.7); } 68% { opacity: 1; transform: scale(1.15); } 100% { opacity: 0; transform: scale(1.6); } }
 @keyframes startup-logo-exit { 0% { opacity: 1; transform: scale(1); } 60% { opacity: .1; transform: scale(1.14); } 100% { opacity: 0; transform: scale(1.22); } }
-@keyframes navigation-experience-in { 0% { opacity: 0; } 16% { opacity: 1; } 72% { opacity: 1; } 100% { opacity: 0; } }
 
 /* GYOPO AI is a draggable, borderless utility window like the friend dock. */
 .assistant-dock, .assistant-dock-tab { position: fixed; z-index: 275; }
@@ -1455,10 +1452,6 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .webrtc-grid > section { min-width: 0 !important; }
 }
 
-/* Navigation keeps the chrome visible while the selected page minimizes to the video background. */
-.navigation-minimized .portal-frame > main,
-.navigation-minimized .portal-frame > footer { visibility: hidden; opacity: 0; pointer-events: none; }
-
 /* Friend calls expand the dock instead of replacing the current page. */
 #friend-dock.friend-dock-call-active { width: min(90vw, 1200px) !important; max-height: calc(100dvh - 2rem); }
 #friend-dock.friend-dock-call-active .friend-call-video { height: min(70dvh, 680px); aspect-ratio: auto !important; }
@@ -1479,9 +1472,10 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
   .tetris-modern-shell > .grid > section { padding-right: 0 !important; padding-left: 0 !important; border-right: 0 !important; border-left: 0 !important; }
   .tetris-modern-shell .tetris-board-stage { padding-right: 0 !important; padding-left: 0 !important; border-right: 0 !important; border-left: 0 !important; }
   .tetris-modern-shell .tetris-board-shell { width: min(68vw, 19rem) !important; max-width: none !important; }
-  .tetris-call-workspace { display: block !important; overflow: hidden !important; }
-  .tetris-local-panel { height: 100% !important; width: 100% !important; }
-  .tetris-video-pane { display: none !important; }
+   .tetris-call-workspace { display: flex !important; min-height: 0 !important; flex-direction: column !important; overflow-y: auto !important; overflow-x: hidden !important; }
+   .tetris-local-panel { height: auto !important; min-height: 0 !important; width: 100% !important; }
+   .tetris-video-pane { display: grid !important; height: auto !important; width: 100% !important; max-width: none !important; min-height: 0 !important; }
+   .tetris-video-pane > div:nth-child(2) { height: auto !important; min-height: 11rem !important; aspect-ratio: 16 / 9; }
   .tetris-local-boards { grid-template-columns: minmax(0, 1fr) 5.8rem; }
   .tetris-board-shell { width: min(68vw, 19rem) !important; aspect-ratio: 1 / 2; }
   #friend-dock.friend-dock-call-active { right: .25rem !important; bottom: .25rem !important; left: .25rem !important; width: auto !important; max-height: calc(100dvh - .5rem); }
@@ -1513,10 +1507,12 @@ dialog.session-loading-dialog::backdrop { background: #02040b; }
 #global-lounge .global-lounge-messages > div > div:last-child { border: 0 !important; border-left: 2px solid rgba(45, 212, 191, .24) !important; border-radius: 0 !important; background: rgba(255, 255, 255, .045) !important; }
 #global-lounge .global-lounge-composer { padding: .6rem .4rem !important; }
 
-/* Route changes stay on the current page surface instead of showing a black logo curtain. */
-.navigation-experience { display: none !important; }
-.navigation-minimized .portal-frame > main,
-.navigation-minimized .portal-frame > footer { visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; }
+body.gyopo-translation-controlled .goog-te-banner-frame,
+body.gyopo-translation-controlled .goog-te-balloon-frame,
+body.gyopo-translation-controlled .goog-tooltip,
+body.gyopo-translation-controlled .goog-te-spinner-pos { display: none !important; }
+body.gyopo-translation-controlled { top: 0 !important; }
+.google-translate-root { position: absolute; height: 0; width: 0; overflow: hidden; }
 
 /* Restore the earlier header/player separation while keeping the chrome measurable. */
 .portal-music-row { position: relative; z-index: 60; padding-top: 4rem; }

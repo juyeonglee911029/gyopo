@@ -9,7 +9,6 @@ import SiteBackgroundVideo from '@/components/layout/sitebackgroundvideo';
 import PortalTextRail from '@/components/layout/portaltextrail';
 import AppRuntime from '@/components/layout/AppRuntime';
 import FriendDock from '@/components/layout/FriendDock';
-import PageTransition from '@/components/layout/PageTransition';
 import { AdSenseScript } from '@/components/ads/AdSense';
 import { SITE_URL } from '@/lib/seo';
 
@@ -70,7 +69,7 @@ export default function RootLayout({
 
           <PortalFrame>
             <main className="min-w-0 flex-grow">
-              <PageTransition>{children}</PageTransition>
+              {children}
             </main>
             <Footer />
           </PortalFrame>

@@ -94,20 +94,11 @@ export default function Home() {
         <div className="home-lead-grid relative overflow-hidden rounded-[30px] border border-white/10 p-5 sm:p-8 lg:p-10">
           <div className="home-grid pointer-events-none absolute inset-0 opacity-30" />
           <div className="relative z-10 min-w-0">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="home-kicker"><MapPin size={12} />{regionName} 기준</span>
-              <span className="text-xs font-bold text-slate-400">GYOPO GLOBAL NETWORK</span>
-            </div>
-            <h1 className="mt-5 max-w-3xl text-[2.45rem] font-black leading-[1.05] tracking-[-.06em] text-white sm:text-5xl lg:text-6xl">내가 있는 곳에서,<span className="block bg-gradient-to-r from-teal-200 via-cyan-300 to-violet-300 bg-clip-text text-transparent">필요한 답을 찾습니다.</span></h1>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">지역을 먼저 선택하고, 일자리부터 생활 정보까지 한 번에 찾아보세요. 모르는 것은 GYOPO Smart Search에 바로 물어볼 수 있습니다.</p>
-            <form onSubmit={submitSmartSearch} className="home-smart-search mt-7 flex max-w-2xl items-center gap-3 rounded-2xl border border-teal-200/20 bg-slate-950/45 p-2 shadow-[0_18px_50px_rgba(2,8,23,.24)] backdrop-blur-xl">
+            <form onSubmit={submitSmartSearch} className="home-smart-search flex max-w-2xl items-center gap-3 rounded-2xl border border-teal-200/20 bg-slate-950/45 p-2 shadow-[0_18px_50px_rgba(2,8,23,.24)] backdrop-blur-xl">
               <Search size={19} className="ml-2 shrink-0 text-teal-200" />
               <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} aria-label="Smart Search" placeholder="지역, 일자리, 업소, 생활정보를 검색하세요" className="min-w-0 flex-1 bg-transparent px-1 py-3 text-sm text-white outline-none placeholder:text-slate-500" />
               <button type="submit" className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-teal-300 px-4 py-3 text-xs font-black text-slate-950 transition hover:bg-teal-200"><Sparkles size={14} />검색</button>
             </form>
-            <div className="mt-4 flex flex-wrap gap-2" aria-label="빠른 검색">
-              {['구인', '업소록', '주거', '생활 가이드', '지역 뉴스'].map((query) => <button type="button" key={query} onClick={() => { setSearchQuery(query); submitSearchQuery(query); }} className="home-search-chip">{query}</button>)}
-            </div>
           </div>
           <aside className="home-context-card relative z-10 rounded-3xl border border-white/10 bg-white/[.06] p-5 sm:p-6">
             <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">Location context</p><h2 className="mt-2 text-2xl font-black text-white">{regionName}</h2><p className="mt-2 text-xs leading-5 text-slate-400">현재 선택한 지역을 기준으로 콘텐츠와 검색 결과를 연결합니다.</p></div><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200"><MapPin size={19} /></span></div>
